@@ -362,8 +362,8 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
         
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-6 max-w-md px-6">
-            <div className="heading-lg text-lantern-400 lantern-text-glow mb-6">Green Lantern</div>
-            <h2 className="heading-md text-neutral-100">Welcome to Green Lantern</h2>
+            <div className="heading-lg text-nerdplexity-400 nerdplexity-text-glow mb-6">Nerdplexity</div>
+            <h2 className="heading-md text-neutral-100">Welcome to Nerdplexity</h2>
             <p className="body text-neutral-400">
               Your local-only AI assistant with the power of will. Bring your own API keys and chat with confidence.
             </p>
@@ -390,7 +390,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
             </div>
             
             {!hasValidKey && (
-              <div className="mt-6 panel bg-amber-900/20 border-amber-700 lantern-glow">
+              <div className="mt-6 panel bg-amber-900/20 border-amber-700 nerdplexity-glow">
                 <div className="p-4">
                   <p className="body-sm text-amber-200">
                     <strong>Notice:</strong> No API key configured. Configure your API keys to start chatting.
@@ -464,10 +464,10 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
       </div>
 
       {/* Composer */}
-      <div className="border-t border-neutral-700 p-6 lantern-border">
+      <div className="border-t border-neutral-700 p-6 nerdplexity-border">
         <div className="max-w-4xl mx-auto">
           {!hasValidKey ? (
-            <div className="panel bg-amber-900/20 border-amber-700 text-center lantern-glow">
+            <div className="panel bg-amber-900/20 border-amber-700 text-center nerdplexity-glow">
               <div className="p-6">
                 <p className="body-sm text-amber-200 mb-4">
                   <strong>Notice:</strong> No API key configured for {conversationProvider}
@@ -490,7 +490,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                   onClick={() => setWebSearchEnabled(!webSearchEnabled)}
                   variant={webSearchEnabled ? 'primary' : 'secondary'}
                   size="sm"
-                  className={webSearchEnabled ? 'bg-lantern-600 hover:bg-lantern-700 lantern-glow' : 'btn-lantern-secondary'}
+                  className={webSearchEnabled ? 'bg-nerdplexity-600 hover:bg-nerdplexity-700 nerdplexity-glow' : 'btn-nerdplexity-secondary'}
                 >
                   <Globe size={16} />
                   Web Search
@@ -501,7 +501,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                   onClick={() => setReasoningEnabled(!reasoningEnabled)}
                   variant={reasoningEnabled ? 'primary' : 'secondary'}
                   size="sm"
-                  className={reasoningEnabled ? 'bg-lantern-600 hover:bg-lantern-700 lantern-glow' : 'btn-lantern-secondary'}
+                  className={reasoningEnabled ? 'bg-nerdplexity-600 hover:bg-nerdplexity-700 nerdplexity-glow' : 'btn-nerdplexity-secondary'}
                 >
                   <Brain size={16} />
                   Show Reasoning
@@ -528,7 +528,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={`Message ${conversationProvider}${webSearchEnabled || reasoningEnabled ? ' (' : ''}${webSearchEnabled ? 'web search' : ''}${webSearchEnabled && reasoningEnabled ? ' + ' : ''}${reasoningEnabled ? 'reasoning' : ''}${webSearchEnabled || reasoningEnabled ? ')' : ''}...`}
-                    className="w-full p-4 pr-14 bg-neutral-800 text-neutral-100 border border-neutral-700 rounded-2xl resize-none focus-ring text-lg placeholder-neutral-400 lantern-border lantern-glow"
+                    className="w-full p-4 pr-14 bg-neutral-800 text-neutral-100 border border-neutral-700 rounded-2xl resize-none focus-ring text-lg placeholder-neutral-400 nerdplexity-border nerdplexity-glow"
                     rows={1}
                     disabled={isLoading}
                   />

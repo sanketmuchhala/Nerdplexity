@@ -59,7 +59,7 @@ export default function EventsPage() {
     return (
       <div className="mx-auto max-w-screen-2xl p-6 bg-neutral-950 text-neutral-200 font-sans">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lantern-400 lantern-glow"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nerdplexity-400 nerdplexity-glow"></div>
           <span className="ml-3 text-neutral-400">Loading events...</span>
         </div>
       </div>
@@ -80,17 +80,17 @@ export default function EventsPage() {
         <div className="flex gap-6 mt-4">
           <div className="text-sm">
             <span className="text-neutral-400">Total Events:</span>{' '}
-            <span className="text-lantern-300 font-semibold">{rows.length}</span>
+            <span className="text-nerdplexity-300 font-semibold">{rows.length}</span>
           </div>
           <div className="text-sm">
             <span className="text-neutral-400">Success Rate:</span>{' '}
-            <span className="text-lantern-300 font-semibold">
+            <span className="text-nerdplexity-300 font-semibold">
               {rows.length ? Math.round(((rows.filter(e => e.result?.status !== "error").length) / rows.length) * 100) : 0}%
             </span>
           </div>
           <div className="text-sm">
             <span className="text-neutral-400">Avg Latency:</span>{' '}
-            <span className="text-lantern-300 font-semibold">
+            <span className="text-nerdplexity-300 font-semibold">
               {rows.length ? Math.round(rows.reduce((sum, e) => sum + (Number(e.timing?.latency_ms) || 0), 0) / rows.length) : 0}ms
             </span>
           </div>
@@ -98,10 +98,10 @@ export default function EventsPage() {
       </header>
 
       {/* Events Table */}
-      <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden">
+      <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-lantern-300">Event Details</h2>
+            <h2 className="text-xl font-semibold text-nerdplexity-300">Event Details</h2>
             <div className="text-sm text-neutral-400">
               Showing all {rows.length} events
             </div>

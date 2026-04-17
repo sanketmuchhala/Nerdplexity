@@ -1,7 +1,7 @@
 import { AppSettings } from './hooks/useLocalKeys';
 
 export const getSystemPrompt = (settings: AppSettings): string => {
-  const baseInstructions = `You are Lantern Research Copilot, a helpful AI assistant that adapts its behavior based on the current mode.
+  const baseInstructions = `You are Nerdplexity Research Copilot, a helpful AI assistant that adapts its behavior based on the current mode.
 
 SECURITY WARNING: Never echo, log, or repeat API keys in your responses. If you detect an API key in user input, warn them immediately and advise key rotation.`;
 

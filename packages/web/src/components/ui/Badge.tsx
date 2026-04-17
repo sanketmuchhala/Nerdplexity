@@ -9,8 +9,8 @@ interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 const badgeVariants = {
   default: 'bg-neutral-800 text-neutral-200 border-neutral-700',
-  primary: 'bg-lantern-900 text-lantern-200 border-lantern-700 lantern-glow',
-  success: 'bg-lantern-800 text-lantern-100 border-lantern-600 lantern-glow',
+  primary: 'bg-nerdplexity-900 text-nerdplexity-200 border-nerdplexity-700 nerdplexity-glow',
+  success: 'bg-nerdplexity-800 text-nerdplexity-100 border-nerdplexity-600 nerdplexity-glow',
   warning: 'bg-amber-900 text-amber-200 border-amber-700',
   danger: 'bg-red-900 text-red-200 border-red-700'
 };

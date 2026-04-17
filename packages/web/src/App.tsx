@@ -61,8 +61,8 @@ function App() {
     return (
       <div className="flex items-center justify-center h-screen bg-neutral-950 text-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lantern-400 mx-auto mb-4 lantern-glow"></div>
-          <p>Initializing Green Lantern...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nerdplexity-400 mx-auto mb-4 nerdplexity-glow"></div>
+          <p>Initializing Nerdplexity...</p>
         </div>
       </div>
     );
@@ -103,7 +103,7 @@ function App() {
       <div className="fixed top-4 right-4 z-10">
         <Link
           to="/promptops"
-          className="text-neutral-300 hover:text-lantern-300 px-4 py-2 bg-neutral-900 border border-neutral-700 rounded-lg transition-all hover:bg-neutral-800 hover:border-lantern-600 lantern-glow text-sm font-medium"
+          className="text-neutral-300 hover:text-nerdplexity-300 px-4 py-2 bg-neutral-900 border border-neutral-700 rounded-lg transition-all hover:bg-neutral-800 hover:border-nerdplexity-600 nerdplexity-glow text-sm font-medium"
         >
           PromptOps
         </Link>

@@ -8,9 +8,9 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const buttonVariants = {
-  primary: 'bg-lantern-600 hover:bg-lantern-700 text-white border-transparent lantern-glow hover:lantern-glow-strong',
-  secondary: 'bg-neutral-800 hover:bg-neutral-700 text-lantern-300 border-lantern-600 hover:border-lantern-500',
-  ghost: 'bg-transparent hover:bg-neutral-800 text-lantern-400 hover:text-lantern-300 border-transparent hover:lantern-glow',
+  primary: 'bg-nerdplexity-600 hover:bg-nerdplexity-700 text-white border-transparent nerdplexity-glow hover:nerdplexity-glow-strong',
+  secondary: 'bg-neutral-800 hover:bg-neutral-700 text-nerdplexity-300 border-nerdplexity-600 hover:border-nerdplexity-500',
+  ghost: 'bg-transparent hover:bg-neutral-800 text-nerdplexity-400 hover:text-nerdplexity-300 border-transparent hover:nerdplexity-glow',
   destructive: 'bg-red-600 hover:bg-red-700 text-white border-transparent'
 };
 
@@ -32,7 +32,7 @@ export const Button: React.FC<ButtonProps> = ({
     <button
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-2xl border font-medium',
-        'transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-lantern-400 focus:ring-offset-2 focus:ring-offset-neutral-950',
+        'transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-nerdplexity-400 focus:ring-offset-2 focus:ring-offset-neutral-950',
         'disabled:opacity-50 disabled:pointer-events-none',
         buttonVariants[variant],
         buttonSizes[size],

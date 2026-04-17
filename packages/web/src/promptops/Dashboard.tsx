@@ -104,7 +104,7 @@ export default function PromptAnalyticsDashboard() {
 
       <header className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-lantern-600 lantern-glow-strong flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-nerdplexity-600 nerdplexity-glow-strong flex items-center justify-center">
             <span className="text-white font-bold text-lg">LEGACY</span>
           </div>
           <h1 className="text-2xl font-bold text-white">Legacy Analytics View</h1>
@@ -116,8 +116,8 @@ export default function PromptAnalyticsDashboard() {
             onClick={() => setActiveView('dashboard')}
             className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${
               activeView === 'dashboard'
-                ? 'bg-lantern-600 text-white lantern-glow-strong'
-                : 'text-neutral-300 hover:text-lantern-300 hover:bg-neutral-800 hover:border-lantern-600'
+                ? 'bg-nerdplexity-600 text-white nerdplexity-glow-strong'
+                : 'text-neutral-300 hover:text-nerdplexity-300 hover:bg-neutral-800 hover:border-nerdplexity-600'
             }`}
           >
             Legacy Dashboard
@@ -126,8 +126,8 @@ export default function PromptAnalyticsDashboard() {
             onClick={() => setActiveView('events')}
             className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${
               activeView === 'events'
-                ? 'bg-lantern-600 text-white lantern-glow-strong'
-                : 'text-neutral-300 hover:text-lantern-300 hover:bg-neutral-800 hover:border-lantern-600'
+                ? 'bg-nerdplexity-600 text-white nerdplexity-glow-strong'
+                : 'text-neutral-300 hover:text-nerdplexity-300 hover:bg-neutral-800 hover:border-nerdplexity-600'
             }`}
           >
             Legacy Events

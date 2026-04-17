@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Green Lantern themed color palette
+        // Nerdplexity themed color palette
         neutral: {
           950: '#0a0a0a', // deep space black - base background
           900: '#0d1b0d', // dark green-black - panel background
@@ -23,8 +23,8 @@ export default {
           100: '#eaf5ea', // pale green - bright text
           50: '#f5faf5'   // brightest green tint
         },
-        // Green Lantern signature colors
-        lantern: {
+        // Nerdplexity signature colors
+        nerdplexity: {
           50: '#f0fdf4',   // palest green
           100: '#dcfce7',  // very light green
           200: '#bbf7d0',  // light green

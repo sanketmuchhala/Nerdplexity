@@ -50,7 +50,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     return (
       <div className="border-b border-neutral-700 p-4">
         <div className="flex items-center justify-between">
-          <div className="heading-sm">Lantern</div>
+          <div className="heading-sm">Nerdplexity</div>
           <Button
             variant="ghost"
             size="sm"

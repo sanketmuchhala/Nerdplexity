@@ -19,7 +19,7 @@
 }
 
 @layer components {
-  /* Green Lantern Typography utilities */
+  /* Nerdplexity Typography utilities */
   .heading-sm {
     @apply text-xl font-semibold leading-7 text-neutral-100;
   }
@@ -53,7 +53,7 @@
     @apply text-xs text-neutral-400 leading-4;
   }
 
-  /* Green Lantern Layout utilities */
+  /* Nerdplexity Layout utilities */
   .panel {
     @apply bg-neutral-900 border border-neutral-700 rounded-2xl shadow-lg p-6;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(34, 197, 94, 0.1);
@@ -74,21 +74,21 @@
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(34, 197, 94, 0.1);
   }
 
-  /* Green Lantern special effects */
-  .lantern-glow {
+  /* Nerdplexity special effects */
+  .nerdplexity-glow {
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
   }
 
-  .lantern-glow-strong {
+  .nerdplexity-glow-strong {
     box-shadow: 0 0 30px rgba(34, 197, 94, 0.5), 0 0 60px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(34, 197, 94, 0.2);
   }
 
-  .lantern-border {
+  .nerdplexity-border {
     border: 1px solid rgba(34, 197, 94, 0.3);
     box-shadow: inset 0 1px 0 rgba(34, 197, 94, 0.1);
   }
 
-  .lantern-text-glow {
+  .nerdplexity-text-glow {
     color: #22c55e;
     text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
   }
@@ -102,36 +102,36 @@
     @apply mt-8;
   }
 
-  /* Green Lantern Focus utilities */
+  /* Nerdplexity Focus utilities */
   .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-lantern-400 focus:ring-offset-2 focus:ring-offset-neutral-950;
+    @apply focus:outline-none focus:ring-2 focus:ring-nerdplexity-400 focus:ring-offset-2 focus:ring-offset-neutral-950;
     box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.5), 0 0 10px rgba(34, 197, 94, 0.3);
   }
 
-  /* Green Lantern Button styles */
-  .btn-lantern {
-    @apply bg-lantern-600 hover:bg-lantern-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200;
+  /* Nerdplexity Button styles */
+  .btn-nerdplexity {
+    @apply bg-nerdplexity-600 hover:bg-nerdplexity-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200;
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
-  .btn-lantern:hover {
+  .btn-nerdplexity:hover {
     box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transform: translateY(-1px);
   }
 
-  .btn-lantern-secondary {
-    @apply bg-neutral-800 hover:bg-neutral-700 text-lantern-300 border border-lantern-600 font-medium px-4 py-2 rounded-lg transition-all duration-200;
+  .btn-nerdplexity-secondary {
+    @apply bg-neutral-800 hover:bg-neutral-700 text-nerdplexity-300 border border-nerdplexity-600 font-medium px-4 py-2 rounded-lg transition-all duration-200;
     box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
   }
 
-  .btn-lantern-secondary:hover {
+  .btn-nerdplexity-secondary:hover {
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
     border-color: rgba(34, 197, 94, 0.8);
   }
 }
 
 @layer utilities {
-  /* Green Lantern themed scrollbar */
+  /* Nerdplexity themed scrollbar */
   .scrollbar-thin::-webkit-scrollbar {
     @apply w-1.5;
   }
@@ -152,7 +152,7 @@
     box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
   }
 
-  /* Global Green Lantern scrollbar */
+  /* Global Nerdplexity scrollbar */
   ::-webkit-scrollbar {
     @apply w-1.5;
   }

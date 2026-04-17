@@ -25,7 +25,7 @@ interface KPICardProps {
 }
 
 const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subtitle }) => (
-  <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-6 hover:border-lantern-600 transition-all duration-200 lantern-glow">
+  <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-6 hover:border-nerdplexity-600 transition-all duration-200 nerdplexity-glow">
     <div className="flex items-start justify-between mb-3">
       <h3 className="text-sm font-medium text-neutral-400 uppercase tracking-wide">{label}</h3>
       {trend && (
@@ -39,7 +39,7 @@ const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subti
       )}
     </div>
     <div className="flex items-baseline gap-2">
-      <span className="text-3xl font-bold text-lantern-300 lantern-text-glow">{value}</span>
+      <span className="text-3xl font-bold text-nerdplexity-300 nerdplexity-text-glow">{value}</span>
       {unit && <span className="text-lg text-neutral-400">{unit}</span>}
     </div>
     {subtitle && <p className="text-xs text-neutral-500 mt-2">{subtitle}</p>}
@@ -205,7 +205,7 @@ export default function MetricsDashboard() {
 
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Green Lantern Analytics</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Nerdplexity Analytics</h1>
         <p className="text-neutral-400 text-lg">Performance metrics and insights for your AI assistant</p>
       </header>
 
@@ -230,9 +230,9 @@ export default function MetricsDashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Primary Chart - Event Latency (spans 3 columns) */}
           <div className="xl:col-span-3">
-            <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden">
+            <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden">
               <div className="p-6 border-b border-neutral-800">
-                <h3 className="text-lg font-semibold text-lantern-300">Event Latency Timeline</h3>
+                <h3 className="text-lg font-semibold text-nerdplexity-300">Event Latency Timeline</h3>
                 <p className="text-sm text-neutral-500 mt-1">Real-time performance monitoring</p>
               </div>
               <div className="p-6">
@@ -245,9 +245,9 @@ export default function MetricsDashboard() {
 
           {/* Risk Distribution (1 column) */}
           <div className="xl:col-span-1">
-            <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border h-full overflow-hidden">
+            <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border h-full overflow-hidden">
               <div className="p-6 border-b border-neutral-800">
-                <h3 className="text-lg font-semibold text-lantern-300">Risk Distribution</h3>
+                <h3 className="text-lg font-semibold text-nerdplexity-300">Risk Distribution</h3>
                 <p className="text-sm text-neutral-500 mt-1">Security assessment</p>
               </div>
               <div className="p-6">
@@ -262,9 +262,9 @@ export default function MetricsDashboard() {
         {/* Secondary Row - Analysis & Performance */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Model Performance */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Model Performance</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Model Performance</h3>
               <p className="text-xs text-neutral-500 mt-1">Quality vs Cost analysis</p>
             </div>
             <div className="p-3">
@@ -284,9 +284,9 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Request Outcomes */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Request Outcomes</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Request Outcomes</h3>
               <p className="text-xs text-neutral-500 mt-1">Success & failure rates</p>
             </div>
             <div className="p-3">
@@ -297,9 +297,9 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Context Efficiency */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Context Efficiency</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Context Efficiency</h3>
               <p className="text-xs text-neutral-500 mt-1">Token usage optimization</p>
             </div>
             <div className="p-3">
@@ -313,9 +313,9 @@ export default function MetricsDashboard() {
         {/* Tertiary Row - System Metrics & Trends */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* System Health */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">System Health</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">System Health</h3>
               <p className="text-xs text-neutral-500 mt-1">Resource utilization</p>
             </div>
             <div className="p-3">
@@ -326,9 +326,9 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Latency Trends */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Latency Trends</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Latency Trends</h3>
               <p className="text-xs text-neutral-500 mt-1">Response time patterns</p>
             </div>
             <div className="p-3">
@@ -345,9 +345,9 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Token Usage */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Token Usage</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Token Usage</h3>
               <p className="text-xs text-neutral-500 mt-1">Daily consumption trends</p>
             </div>
             <div className="p-3">
@@ -367,9 +367,9 @@ export default function MetricsDashboard() {
         {/* Bottom Row - Performance Analysis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Performance Split */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Performance Breakdown</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Performance Breakdown</h3>
               <p className="text-xs text-neutral-500 mt-1">Detailed performance analysis</p>
             </div>
             <div className="p-3">
@@ -380,15 +380,15 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Future Insights Placeholder */}
-          <div className="bg-neutral-900 rounded-xl border border-neutral-700 lantern-border overflow-hidden max-h-[350px]">
+          <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden max-h-[350px]">
             <div className="p-3 border-b border-neutral-800">
-              <h3 className="text-base font-semibold text-lantern-300">Advanced Analytics</h3>
+              <h3 className="text-base font-semibold text-nerdplexity-300">Advanced Analytics</h3>
               <p className="text-xs text-neutral-500 mt-1">Coming soon</p>
             </div>
             <div className="p-3 flex items-center justify-center h-[200px]">
               <div className="text-center text-neutral-500">
                 <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <span className="text-xl text-lantern-400 font-bold">AI</span>
+                  <span className="text-xl text-nerdplexity-400 font-bold">AI</span>
                 </div>
                 <p className="text-base font-medium text-neutral-400 mb-1">More Insights Coming</p>
                 <p className="text-xs text-neutral-600">Advanced ML-powered analytics</p>

@@ -58,18 +58,18 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         className={cn(
           'relative w-full rounded-2xl bg-neutral-900 text-neutral-100 shadow-2xl',
-          'border border-neutral-700 lantern-border lantern-glow-strong',
+          'border border-neutral-700 nerdplexity-border nerdplexity-glow-strong',
           modalSizes[size]
         )}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between p-6 border-b border-neutral-700 lantern-border">
-            <h2 className="text-lg font-semibold text-lantern-300">{title}</h2>
+          <div className="flex items-center justify-between p-6 border-b border-neutral-700 nerdplexity-border">
+            <h2 className="text-lg font-semibold text-nerdplexity-300">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1 hover:bg-neutral-800 rounded-lg transition-colors text-lantern-400 hover:text-lantern-300 hover:lantern-glow"
+              className="p-1 hover:bg-neutral-800 rounded-lg transition-colors text-nerdplexity-400 hover:text-nerdplexity-300 hover:nerdplexity-glow"
               aria-label="Close modal"
             >
               <X size={20} />

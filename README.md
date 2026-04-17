@@ -1,7 +1,7 @@
-# Lantern
+# Nerdplexity
 ### *Master Your AI Conversations with Intelligent Analytics*
 
-> **Stop shooting in the dark with AI prompts.** Lantern gives you X-ray vision into your conversations, real-time performance insights, and data-driven optimization recommendations.
+> **Stop shooting in the dark with AI prompts.** Nerdplexity gives you X-ray vision into your conversations, real-time performance insights, and data-driven optimization recommendations.
 
 **Finally understand what makes your prompts work — and what doesn't.**
 
@@ -22,12 +22,12 @@
 
 <details>
 <summary><b>Analytics Dashboard - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Lantern Analytics Dashboard showing real-time prompt performance metrics, latency patterns, and quality analysis" src="https://github.com/user-attachments/assets/914cfd84-2f4a-42c6-8f26-dc93cb1d7ba5" />
+<img width="1680" height="1050" alt="Nerdplexity Analytics Dashboard showing real-time prompt performance metrics, latency patterns, and quality analysis" src="https://github.com/user-attachments/assets/914cfd84-2f4a-42c6-8f26-dc93cb1d7ba5" />
 </details>
 
 <details>
 <summary><b>Clean Chat Interface - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Lantern's distraction-free chat interface with intelligent prompt engineering features" src="https://github.com/user-attachments/assets/53aa45b1-b9c9-4c29-8f9b-875065061b3d" />
+<img width="1680" height="1050" alt="Nerdplexity's distraction-free chat interface with intelligent prompt engineering features" src="https://github.com/user-attachments/assets/53aa45b1-b9c9-4c29-8f9b-875065061b3d" />
 </details>
 
 <details>
@@ -48,7 +48,7 @@ Most developers and researchers waste **thousands of dollars** and **countless h
 - **Miss** performance bottlenecks that slow down their workflow
 - **Overspend** on premium models when cheaper ones would work
 
-## The Lantern Solution
+## The Nerdplexity Solution
 
 **Turn AI experimentation into a data-driven science.** Get real-time insights that tell you exactly what's working, what's not, and how to optimize everything.
 
@@ -74,7 +74,7 @@ Historical Trends    → Learn from weeks of conversation data
 | **Local + Cloud Hybrid** | Privacy + performance | Best of both worlds |
 | **Performance Profiling** | CPU/Memory optimization | 10x faster local inference |
 
-## Why Lantern?
+## Why Nerdplexity?
 
 ### Thoughtful Design
 - **Minimal, fast UI** — Clean dark interface that gets out of your way
@@ -224,7 +224,7 @@ Visit `/promptscope` in the app to access your **Prompt Analytics Dashboard**:
 ```mermaid
 %%{init: {'theme':'dark', 'themeVariables': { 'primaryColor': '#0b0b0b', 'primaryTextColor': '#e5e5e5', 'lineColor': '#666' }}}%%
 flowchart LR
-  A[User] --> B[Lantern UI]
+  A[User] --> B[Nerdplexity UI]
   B -->|/v1/chat| C[Smart Router]
   C -->|Cloud keys| D[(Cloud Providers)]
   C -->|Local HTTP| E[(Ollama)]
@@ -284,7 +284,7 @@ pnpm test
 
 ### Project Structure
 ```
-lantern/
+nerdplexity/
 ├── packages/
 │   ├── web/                 # React frontend
 │   │   ├── src/
@@ -335,7 +335,7 @@ git clone https://github.com/sanketmuchhala/Project-Green-Lantern.git
 cd Project-Green-Lantern && pnpm install && pnpm run dev
 
 # Start measuring what actually works
-# Join thousands of developers already using Lantern
+# Join thousands of developers already using Nerdplexity
 ```
 
 <p align="center">

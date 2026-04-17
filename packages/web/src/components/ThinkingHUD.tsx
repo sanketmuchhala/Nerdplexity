@@ -109,7 +109,7 @@ export default function ThinkingHUD({
   };
 
   return (
-    <div className="rounded-xl bg-neutral-900 border border-lantern-700 p-4 mb-3 lantern-glow">
+    <div className="rounded-xl bg-neutral-900 border border-nerdplexity-700 p-4 mb-3 nerdplexity-glow">
       {/* Main thinking header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
@@ -142,8 +142,8 @@ export default function ThinkingHUD({
             <>
               <div className="text-neutral-500">•</div>
               <div className="flex items-center gap-1">
-                <div className="w-1 h-1 rounded-full bg-lantern-400 animate-pulse"></div>
-                <span className="text-lantern-300 text-sm font-mono">
+                <div className="w-1 h-1 rounded-full bg-nerdplexity-400 animate-pulse"></div>
+                <span className="text-nerdplexity-300 text-sm font-mono">
                   {tokensPerSec.toFixed(1)} tok/s
                 </span>
               </div>
@@ -155,7 +155,7 @@ export default function ThinkingHUD({
         {summary && (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-lantern-300 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-800"
+            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-nerdplexity-300 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-800"
           >
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <span>Details</span>
@@ -186,7 +186,7 @@ export default function ThinkingHUD({
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="w-1 h-3 bg-lantern-500 rounded-full animate-bounce opacity-60"
+              className="w-1 h-3 bg-nerdplexity-500 rounded-full animate-bounce opacity-60"
               style={{
                 animationDelay: `${i * 0.15}s`,
                 animationDuration: '1s'

@@ -157,9 +157,9 @@ const BenchmarkPage: React.FC = () => {
         <button
           onClick={runAllBenchmarks}
           disabled={isRunning}
-          className="flex items-center gap-3 bg-lantern-600 hover:bg-lantern-700 disabled:bg-neutral-700
+          className="flex items-center gap-3 bg-nerdplexity-600 hover:bg-nerdplexity-700 disabled:bg-neutral-700
                      text-white font-medium px-6 py-3 rounded-lg transition-all duration-200
-                     lantern-glow disabled:cursor-not-allowed"
+                     nerdplexity-glow disabled:cursor-not-allowed"
         >
           {isRunning ? (
             <>
@@ -179,27 +179,27 @@ const BenchmarkPage: React.FC = () => {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{formatMs(stats.ttft_p50)}</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{formatMs(stats.ttft_p50)}</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">TTFT p50</div>
           </div>
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{formatMs(stats.ttft_p95)}</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{formatMs(stats.ttft_p95)}</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">TTFT p95</div>
           </div>
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{formatMs(stats.latency_p50)}</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{formatMs(stats.latency_p50)}</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">Latency p50</div>
           </div>
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{formatMs(stats.latency_p95)}</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{formatMs(stats.latency_p95)}</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">Latency p95</div>
           </div>
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{Math.round(stats.success_rate)}%</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{Math.round(stats.success_rate)}%</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">Success Rate</div>
           </div>
           <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-lantern-300">{Math.round(stats.avg_tokens)}</div>
+            <div className="text-2xl font-bold text-nerdplexity-300">{Math.round(stats.avg_tokens)}</div>
             <div className="text-xs text-neutral-400 uppercase tracking-wide">Avg Tokens</div>
           </div>
         </div>
@@ -209,11 +209,11 @@ const BenchmarkPage: React.FC = () => {
       {results.length > 0 && (
         <div className="bg-neutral-900 border border-neutral-700 rounded-xl overflow-hidden">
           <div className="p-4 border-b border-neutral-800">
-            <h3 className="text-lg font-semibold text-lantern-300">Benchmark Results</h3>
+            <h3 className="text-lg font-semibold text-nerdplexity-300">Benchmark Results</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-neutral-800 text-lantern-300">
+              <thead className="bg-neutral-800 text-nerdplexity-300">
                 <tr>
                   <th className="text-left py-3 px-4 font-semibold">Status</th>
                   <th className="text-left py-3 px-4 font-semibold">Prompt</th>
@@ -254,10 +254,10 @@ const BenchmarkPage: React.FC = () => {
 
       {/* Instructions */}
       <div className="mt-8 bg-neutral-900 border border-neutral-700 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-lantern-300 mb-4">Performance Tips</h3>
+        <h3 className="text-lg font-semibold text-nerdplexity-300 mb-4">Performance Tips</h3>
         <div className="space-y-2 text-neutral-400">
-          <p>• Ensure <code className="text-lantern-300">OLLAMA_NUM_PARALLEL=1</code> is set</p>
-          <p>• Start Ollama with <code className="text-lantern-300">ollama serve</code></p>
+          <p>• Ensure <code className="text-nerdplexity-300">OLLAMA_NUM_PARALLEL=1</code> is set</p>
+          <p>• Start Ollama with <code className="text-nerdplexity-300">ollama serve</code></p>
           <p>• Target: TTFT &lt; 1500ms, Latency &lt; 3500ms for optimal performance</p>
           <p>• Close other heavy applications for best results</p>
         </div>

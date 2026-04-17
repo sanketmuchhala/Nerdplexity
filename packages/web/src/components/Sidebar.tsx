@@ -3,8 +3,8 @@ import { Plus, Trash2, Settings, Edit2, Check, X } from 'lucide-react';
 import { Conversation } from '../lib/db';
 import { sanitizeDisplayText } from '../lib/stripEmojis';
 
-// Green Lantern Logo Component
-const GreenLanternLogo: React.FC<{ size?: number; className?: string }> = ({ size = 20, className = "" }) => (
+// Nerdplexity Logo Component
+const NerdplexityLogo: React.FC<{ size?: number; className?: string }> = ({ size = 20, className = "" }) => (
   <svg
     width={size}
     height={size}
@@ -12,11 +12,11 @@ const GreenLanternLogo: React.FC<{ size?: number; className?: string }> = ({ siz
     fill="none"
     className={className}
   >
-    {/* Green Lantern symbol - outer circle with lantern symbol */}
+    {/* Nerdplexity symbol - outer circle with nerdplexity symbol */}
     <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="1.5" fill="none"/>
     <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1" fill="none"/>
 
-    {/* Lantern symbol */}
+    {/* Nerdplexity symbol */}
     <path
       d="M12 4 L16 8 L16 16 L8 16 L8 8 Z M10 8 L14 8 M8 20 L16 20 M12 16 L12 20"
       stroke="currentColor"
@@ -89,11 +89,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setEditTitle('');
   };
   return (
-    <div className="w-64 border-r flex flex-col h-screen bg-neutral-900 border-neutral-700 lantern-glow">
-      <div className="p-4 border-b border-neutral-700 lantern-border">
+    <div className="w-64 border-r flex flex-col h-screen bg-neutral-900 border-neutral-700 nerdplexity-glow">
+      <div className="p-4 border-b border-neutral-700 nerdplexity-border">
         <div className="flex items-center gap-2 mb-3">
-          <GreenLanternLogo size={24} className="text-lantern-400 lantern-text-glow" />
-          <span className="font-semibold text-white">Green Lantern</span>
+          <NerdplexityLogo size={24} className="text-nerdplexity-400 nerdplexity-text-glow" />
+          <span className="font-semibold text-white">Nerdplexity</span>
         </div>
 
         <button
@@ -101,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             console.log('New Chat clicked!');
             onNewChat();
           }}
-          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg font-medium bg-lantern-600 hover:bg-lantern-700 text-white transition-all duration-200 border-none outline-none cursor-pointer lantern-glow"
+          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg font-medium bg-nerdplexity-600 hover:bg-nerdplexity-700 text-white transition-all duration-200 border-none outline-none cursor-pointer nerdplexity-glow"
         >
           <Plus size={16} />
           New Chat
@@ -122,12 +122,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={conv.id}
                 className={`group flex items-center gap-2 p-2 rounded cursor-pointer transition-all duration-200 ${
                   activeConversationId === conv.id
-                    ? 'bg-neutral-800 lantern-border lantern-glow'
-                    : 'hover:bg-neutral-800 hover:bg-opacity-50 hover:border hover:border-lantern-700'
+                    ? 'bg-neutral-800 nerdplexity-border nerdplexity-glow'
+                    : 'hover:bg-neutral-800 hover:bg-opacity-50 hover:border hover:border-nerdplexity-700'
                 }`}
                 onClick={() => editingId !== conv.id && onLoadChat(conv.id)}
               >
-                <MessageIcon size={14} className="text-lantern-300 flex-shrink-0" />
+                <MessageIcon size={14} className="text-nerdplexity-300 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   {editingId === conv.id ? (
                     <div className="flex items-center gap-1">
@@ -135,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="flex-1 text-sm bg-neutral-800 text-white px-2 py-1 rounded lantern-border focus-ring"
+                        className="flex-1 text-sm bg-neutral-800 text-white px-2 py-1 rounded nerdplexity-border focus-ring"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleSaveEdit();
                           if (e.key === 'Escape') handleCancelEdit();
@@ -148,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           e.stopPropagation();
                           handleSaveEdit();
                         }}
-                        className="p-1 text-lantern-400 hover:bg-neutral-700 hover:text-lantern-300 rounded transition-colors"
+                        className="p-1 text-nerdplexity-400 hover:bg-neutral-700 hover:text-nerdplexity-300 rounded transition-colors"
                       >
                         <Check size={12} />
                       </button>
@@ -178,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         handleStartEdit(conv);
                       }}
-                      className="p-1 text-lantern-400 hover:bg-neutral-700 hover:text-lantern-300 rounded transition-all"
+                      className="p-1 text-nerdplexity-400 hover:bg-neutral-700 hover:text-nerdplexity-300 rounded transition-all"
                     >
                       <Edit2 size={12} />
                     </button>
@@ -201,18 +201,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
       
-      <div className="p-4 border-t border-neutral-700 lantern-border">
+      <div className="p-4 border-t border-neutral-700 nerdplexity-border">
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 p-2 hover:bg-neutral-800 rounded transition-all duration-200 text-left hover:lantern-glow"
+          className="w-full flex items-center gap-2 p-2 hover:bg-neutral-800 rounded transition-all duration-200 text-left hover:nerdplexity-glow"
         >
-          <Settings size={16} className="text-lantern-400" />
+          <Settings size={16} className="text-nerdplexity-400" />
           <span className="text-sm text-white">Keys & Settings</span>
         </button>
 
         <div className="mt-3 text-xs text-neutral-400">
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-lantern-500 rounded-full lantern-glow-strong"></div>
+            <div className="w-2 h-2 bg-nerdplexity-500 rounded-full nerdplexity-glow-strong"></div>
             <span>Push disabled (local-only)</span>
           </div>
         </div>
