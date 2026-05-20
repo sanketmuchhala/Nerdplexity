@@ -71,9 +71,9 @@ export default function Landing() {
             className="w-7 h-7 rounded-lg flex items-center justify-center"
             style={{ background: 'var(--blue)', boxShadow: '0 0 16px rgba(78,107,255,.4)' }}
           >
-            <span className="text-xs font-bold text-white" style={{ fontFamily: 'Syne, sans-serif' }}>N</span>
+            <span className="text-xs font-bold text-white" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</span>
           </div>
-          <span className="text-base font-semibold text-[var(--t1)]" style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '-0.01em' }}>
+          <span className="text-base font-semibold text-[var(--t1)]" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.01em' }}>
             Nerdplexity
           </span>
         </div>
@@ -117,7 +117,7 @@ export default function Landing() {
         <h1
           className="mb-6"
           style={{
-            fontFamily: 'Syne, sans-serif',
+            fontFamily: 'Bricolage Grotesque, sans-serif',
             fontWeight: 800,
             fontSize: 'clamp(40px, 6vw, 72px)',
             lineHeight: 1.08,
@@ -290,7 +290,7 @@ export default function Landing() {
         <div className="text-center mb-12">
           <h2
             className="text-3xl mb-3"
-            style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
+            style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
           >
             Everything you need
           </h2>
@@ -323,7 +323,7 @@ export default function Landing() {
               </div>
               <h3
                 className="text-sm font-semibold text-[var(--t1)] mb-1.5"
-                style={{ fontFamily: 'Syne, sans-serif' }}
+                style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}
               >
                 {title}
               </h3>
@@ -345,7 +345,7 @@ export default function Landing() {
         >
           <h2
             className="text-2xl mb-3"
-            style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
+            style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
           >
             Ready to take control?
           </h2>
@@ -364,7 +364,7 @@ export default function Landing() {
         className="relative z-10 border-t px-8 py-6 max-w-6xl mx-auto flex items-center justify-between"
         style={{ borderColor: 'var(--b)' }}
       >
-        <span className="text-xs text-[var(--t3)]" style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600 }}>
+        <span className="text-xs text-[var(--t3)]" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 600 }}>
           NERDPLEXITY
         </span>
         <span className="text-xs text-[var(--t3)]">Local-first. Private by design.</span>

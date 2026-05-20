@@ -48,7 +48,7 @@ export default function PromptOpsLanding() {
           </Link>
           <span
             className="text-xs font-semibold"
-            style={{ color: 'var(--t3)', fontFamily: 'Syne, sans-serif', letterSpacing: '0.08em' }}
+            style={{ color: 'var(--t3)', fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '0.08em' }}
           >
             PROMPTOPS
           </span>
@@ -71,7 +71,7 @@ export default function PromptOpsLanding() {
           </div>
           <h1
             className="text-3xl font-bold mb-3"
-            style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '-0.025em', color: 'var(--t1)' }}
+            style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em', color: 'var(--t1)' }}
           >
             PromptOps
           </h1>
@@ -109,7 +109,7 @@ export default function PromptOpsLanding() {
 
               <h2
                 className="text-base font-semibold mb-2"
-                style={{ fontFamily: 'Syne, sans-serif', color: 'var(--t1)' }}
+                style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}
               >
                 {label}
               </h2>
@@ -120,7 +120,7 @@ export default function PromptOpsLanding() {
               <div className="flex gap-5 mt-5 pt-4" style={{ borderTop: '1px solid var(--b)' }}>
                 {stats.map(s => (
                   <div key={s.l}>
-                    <div className="text-xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Syne, sans-serif' }}>
+                    <div className="text-xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
                       {s.v}
                     </div>
                     <div className="t-label mt-1">{s.l}</div>
@@ -158,7 +158,7 @@ export default function PromptOpsLanding() {
                 <div>
                   <h4
                     className="text-sm font-semibold mb-1"
-                    style={{ color: 'var(--t1)', fontFamily: 'Syne, sans-serif' }}
+                    style={{ color: 'var(--t1)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
                   >
                     {title}
                   </h4>

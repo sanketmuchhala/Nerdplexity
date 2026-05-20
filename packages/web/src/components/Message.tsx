@@ -60,7 +60,7 @@ export const Message: React.FC<MessageProps> = ({ message }) => {
           >
             <span
               className="text-[9px] font-bold text-white"
-              style={{ fontFamily: 'Syne, sans-serif' }}
+              style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}
             >N</span>
           </div>
           <span

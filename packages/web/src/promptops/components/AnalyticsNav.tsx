@@ -27,7 +27,7 @@ const AnalyticsNav: React.FC<{ title: string }> = ({ title }) => {
             PromptOps
           </Link>
           <span className="text-xs" style={{ color: 'var(--t4)' }}>›</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--t1)', fontFamily: 'Syne, sans-serif' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--t1)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
             {title}
           </span>
         </div>

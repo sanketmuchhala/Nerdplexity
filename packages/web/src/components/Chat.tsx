@@ -362,9 +362,9 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
               className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5"
               style={{ background: 'var(--blue)', boxShadow: '0 0 24px rgba(78,107,255,.35)' }}
             >
-              <span className="text-lg font-bold text-white" style={{ fontFamily: 'Syne, sans-serif' }}>N</span>
+              <span className="text-lg font-bold text-white" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</span>
             </div>
-            <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--t1)' }}>
+            <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}>
               Nerdplexity
             </h2>
             <p className="text-sm mb-7 leading-relaxed" style={{ color: 'var(--t3)' }}>

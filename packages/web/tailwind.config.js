@@ -51,7 +51,7 @@ export default {
         },
       },
       fontFamily: {
-        display: ['Syne', 'system-ui', 'sans-serif'],
+        display: ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
         sans: ['DM Sans', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['DM Mono', 'JetBrains Mono', 'Fira Code', 'monospace'],
       },

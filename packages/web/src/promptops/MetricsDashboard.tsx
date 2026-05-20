@@ -50,7 +50,7 @@ const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subti
       )}
     </div>
     <div className="flex items-baseline gap-1">
-      <span className="text-2xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Syne, sans-serif' }}>
+      <span className="text-2xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
         {value}
       </span>
       {unit && <span className="text-sm" style={{ color: 'var(--t3)' }}>{unit}</span>}

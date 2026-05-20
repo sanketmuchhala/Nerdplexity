@@ -66,12 +66,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <span
                 className="text-xs font-bold text-white"
-                style={{ fontFamily: 'Syne, sans-serif' }}
+                style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}
               >N</span>
             </div>
             <span
               className="text-sm font-semibold text-[var(--t1)] group-hover:text-white transition-colors"
-              style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '-0.01em' }}
+              style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.01em' }}
             >
               Nerdplexity
             </span>

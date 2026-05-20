@@ -105,7 +105,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   if (!conversation) {
     return (
       <div className="flex items-center justify-between h-12 px-5 flex-shrink-0" style={{ borderBottom: '1px solid var(--b)' }}>
-        <span className="text-xs font-semibold text-[var(--t3)]" style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '0.02em' }}>
+        <span className="text-xs font-semibold text-[var(--t3)]" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '0.02em' }}>
           NERDPLEXITY
         </span>
         {iconBtn}
