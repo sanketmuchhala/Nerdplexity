@@ -1,4 +1,4 @@
-import React from 'react';
+import _React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, BarChart3, List, Zap, ArrowRight } from 'lucide-react';
 
@@ -7,157 +7,168 @@ const cards = [
     to: '/dashboard',
     icon: BarChart3,
     label: 'Metrics Dashboard',
-    description: 'Latency percentiles, token usage, cost per 100 chats, error rates, and model performance at a glance.',
-    stat1: { v: '13', l: 'KPIs tracked' },
-    stat2: { v: '8', l: 'Charts' },
-    cta: 'View Dashboard',
+    desc: 'Latency percentiles, token usage, cost, error rates, and model quality at a glance.',
+    stats: [{ v: '13', l: 'KPIs' }, { v: '8', l: 'Charts' }],
+    cta: 'Open Dashboard',
   },
   {
     to: '/events',
     icon: List,
     label: 'All Events',
-    description: 'Full log of every LLM interaction — latency, tokens, risk score, cost estimate, safety flags.',
-    stat1: { v: '19', l: 'Columns' },
-    stat2: { v: '∞', l: 'History' },
+    desc: 'Full log of every LLM call — latency, tokens, risk score, safety flags, cost.',
+    stats: [{ v: '19', l: 'Columns' }, { v: '∞', l: 'History' }],
     cta: 'Browse Events',
   },
   {
     to: '/benchmark',
     icon: Zap,
     label: 'Performance Benchmark',
-    description: 'Measure TTFT and latency across your local Ollama models. p50/p95 stats, quick comparison runs.',
-    stat1: { v: '3', l: 'Test prompts' },
-    stat2: { v: 'p95', l: 'Percentiles' },
+    desc: 'Measure TTFT and latency for local Ollama models. Get p50/p95 statistics.',
+    stats: [{ v: '3', l: 'Prompts' }, { v: 'p95', l: 'Stats' }],
     cta: 'Run Benchmark',
   },
 ];
 
-const PromptOpsLanding: React.FC = () => (
-  <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}>
+export default function PromptOpsLanding() {
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--t1)' }}>
 
-    {/* Top bar */}
-    <div className="px-8 py-5" style={{ borderBottom: '1px solid var(--border)' }}>
-      <div className="max-w-5xl mx-auto flex items-center justify-between">
-        <Link
-          to="/"
-          className="flex items-center gap-2 text-[12px] text-neutral-600 hover:text-neutral-300 transition-colors"
-        >
-          <ArrowLeft size={13} />
-          Back to chat
-        </Link>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-5 h-5 rounded flex items-center justify-center"
-            style={{ background: 'rgba(244,63,94,.12)', border: '1px solid rgba(244,63,94,.22)' }}
+      {/* Top bar */}
+      <div className="px-8 py-4" style={{ borderBottom: '1px solid var(--b)' }}>
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <Link
+            to="/app"
+            className="flex items-center gap-2 text-xs transition-colors"
+            style={{ color: 'var(--t3)' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--t1)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--t3)'}
           >
-            <span className="text-[9px] font-bold text-nerdplexity-400">N</span>
-          </div>
-          <span className="text-[12px] font-semibold text-neutral-400">PromptOps</span>
+            <ArrowLeft size={13} />
+            Back to chat
+          </Link>
+          <span
+            className="text-xs font-semibold"
+            style={{ color: 'var(--t3)', fontFamily: 'Syne, sans-serif', letterSpacing: '0.08em' }}
+          >
+            PROMPTOPS
+          </span>
         </div>
       </div>
-    </div>
 
-    {/* Hero */}
-    <div className="max-w-5xl mx-auto px-8 pt-16 pb-12">
-      <div className="mb-2">
-        <span
-          className="inline-block text-[10px] font-semibold uppercase tracking-[.12em] px-2.5 py-1 rounded-full"
-          style={{ background: 'rgba(244,63,94,.1)', color: '#fb7185', border: '1px solid rgba(244,63,94,.2)' }}
-        >
-          Analytics
-        </span>
-      </div>
-      <h1
-        className="text-[32px] font-bold tracking-tight mb-3 mt-3"
-        style={{ letterSpacing: '-0.02em' }}
-      >
-        PromptOps
-      </h1>
-      <p className="text-[14px] text-neutral-500 max-w-lg leading-relaxed">
-        Monitor, debug, and optimize every AI interaction. Full observability for your local-first setup.
-      </p>
-    </div>
-
-    {/* Cards */}
-    <div className="max-w-5xl mx-auto px-8 pb-20">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {cards.map(({ to, icon: Icon, label, description, stat1, stat2, cta }) => (
-          <Link
-            key={to}
-            to={to}
-            className="group flex flex-col p-6 rounded-2xl transition-all duration-200"
+      <div className="max-w-5xl mx-auto px-8">
+        {/* Hero */}
+        <div className="pt-14 pb-12">
+          <div
+            className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full mb-6"
             style={{
-              background: 'var(--surface-1)',
-              border: '1px solid var(--border)',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,.25)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 1px rgba(244,63,94,.08), 0 8px 32px rgba(0,0,0,.4)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)';
-              (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+              background: 'rgba(78,107,255,.1)',
+              border: '1px solid rgba(78,107,255,.25)',
+              color: '#8fa5ff',
+              fontWeight: 500,
             }}
           >
-            {/* Icon */}
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center mb-5"
-              style={{ background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.18)' }}
+            Analytics Suite
+          </div>
+          <h1
+            className="text-3xl font-bold mb-3"
+            style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '-0.025em', color: 'var(--t1)' }}
+          >
+            PromptOps
+          </h1>
+          <p className="text-sm max-w-lg leading-relaxed" style={{ color: 'var(--t2)' }}>
+            Full observability over every AI interaction. Monitor performance, debug issues,
+            and optimize costs — all from your local data.
+          </p>
+        </div>
+
+        {/* Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pb-16">
+          {cards.map(({ to, icon: Icon, label, desc, stats, cta }) => (
+            <Link
+              key={to}
+              to={to}
+              className="group flex flex-col p-6 rounded-2xl transition-all duration-200"
+              style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = 'rgba(78,107,255,.3)';
+                el.style.boxShadow = '0 0 0 1px rgba(78,107,255,.08), 0 8px 32px rgba(0,0,0,.5)';
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = 'var(--b)';
+                el.style.boxShadow = 'none';
+              }}
             >
-              <Icon size={17} className="text-nerdplexity-400" />
-            </div>
-
-            {/* Label + description */}
-            <h2 className="text-[15px] font-semibold text-neutral-100 mb-2 tracking-tight">{label}</h2>
-            <p className="text-[12px] text-neutral-500 leading-relaxed flex-1">{description}</p>
-
-            {/* Stats */}
-            <div className="flex gap-4 mt-5 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <div>
-                <div className="text-[18px] font-bold text-nerdplexity-400 leading-none">{stat1.v}</div>
-                <div className="text-[10px] text-neutral-600 mt-1 uppercase tracking-wide">{stat1.l}</div>
-              </div>
-              <div>
-                <div className="text-[18px] font-bold text-nerdplexity-400 leading-none">{stat2.v}</div>
-                <div className="text-[10px] text-neutral-600 mt-1 uppercase tracking-wide">{stat2.l}</div>
-              </div>
-            </div>
-
-            {/* CTA */}
-            <div className="flex items-center gap-1.5 mt-4 text-[12px] text-neutral-600 group-hover:text-nerdplexity-400 transition-colors">
-              <span>{cta}</span>
-              <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Feature grid */}
-      <div className="mt-16 pt-10" style={{ borderTop: '1px solid var(--border)' }}>
-        <h3 className="text-[10px] font-semibold uppercase tracking-[.12em] text-neutral-700 mb-8">What you can monitor</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { tag: 'PERF', title: 'Performance', desc: 'Latency percentiles, TTFT, throughput, and SLA breach detection.' },
-            { tag: 'COST', title: 'Cost', desc: 'Token consumption, estimated cost per 100 chats, and budget tracking.' },
-            { tag: 'QUAL', title: 'Quality', desc: 'Error rates, refusal rates, judge scores, and groundedness metrics.' },
-          ].map(({ tag, title, desc }) => (
-            <div key={tag} className="flex gap-4">
               <div
-                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-bold text-nerdplexity-500"
-                style={{ background: 'rgba(244,63,94,.07)', border: '1px solid rgba(244,63,94,.12)' }}
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-5"
+                style={{ background: 'rgba(78,107,255,.1)', border: '1px solid rgba(78,107,255,.2)' }}
               >
-                {tag}
+                <Icon size={18} style={{ color: 'var(--blue-hi)' }} />
               </div>
-              <div>
-                <h4 className="text-[13px] font-semibold text-neutral-200 mb-1">{title}</h4>
-                <p className="text-[11px] text-neutral-600 leading-relaxed">{desc}</p>
+
+              <h2
+                className="text-base font-semibold mb-2"
+                style={{ fontFamily: 'Syne, sans-serif', color: 'var(--t1)' }}
+              >
+                {label}
+              </h2>
+              <p className="text-xs leading-relaxed flex-1" style={{ color: 'var(--t3)' }}>
+                {desc}
+              </p>
+
+              <div className="flex gap-5 mt-5 pt-4" style={{ borderTop: '1px solid var(--b)' }}>
+                {stats.map(s => (
+                  <div key={s.l}>
+                    <div className="text-xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Syne, sans-serif' }}>
+                      {s.v}
+                    </div>
+                    <div className="t-label mt-1">{s.l}</div>
+                  </div>
+                ))}
               </div>
-            </div>
+
+              <div
+                className="flex items-center gap-1.5 mt-4 text-xs font-medium transition-colors"
+                style={{ color: 'var(--t3)' }}
+              >
+                {cta}
+                <ArrowRight size={12} className="transition-transform group-hover:translate-x-0.5" />
+              </div>
+            </Link>
           ))}
         </div>
+
+        {/* Footer features */}
+        <div className="pb-16 pt-8" style={{ borderTop: '1px solid var(--b)' }}>
+          <div className="t-label mb-8">What you can monitor</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { tag: 'PERF', title: 'Performance', desc: 'Latency (p50/p95/p99), TTFT, throughput, SLA breaches.' },
+              { tag: 'COST', title: 'Cost',        desc: 'Token consumption, estimated cost per 100 chats, budget trends.' },
+              { tag: 'QUAL', title: 'Quality',     desc: 'Error rates, refusal rates, judge scores, groundedness.' },
+            ].map(({ tag, title, desc }) => (
+              <div key={tag} className="flex gap-4">
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-[9px] font-bold"
+                  style={{ background: 'rgba(78,107,255,.08)', border: '1px solid rgba(78,107,255,.15)', color: 'var(--blue-hi)' }}
+                >
+                  {tag}
+                </div>
+                <div>
+                  <h4
+                    className="text-sm font-semibold mb-1"
+                    style={{ color: 'var(--t1)', fontFamily: 'Syne, sans-serif' }}
+                  >
+                    {title}
+                  </h4>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--t3)' }}>{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
-
-export default PromptOpsLanding;
+  );
+}

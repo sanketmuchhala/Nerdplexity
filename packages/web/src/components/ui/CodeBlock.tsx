@@ -8,11 +8,7 @@ interface CodeBlockProps {
   className?: string;
 }
 
-export const CodeBlock: React.FC<CodeBlockProps> = ({ 
-  code, 
-  language, 
-  className 
-}) => {
+export const CodeBlock: React.FC<CodeBlockProps> = ({ code, language, className }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -20,41 +16,43 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy code:', err);
-    }
+    } catch { /* noop */ }
   };
 
   return (
-    <div className={cn('relative group rounded-xl overflow-hidden border border-neutral-700/80', className)}>
+    <div
+      className={cn('rounded-xl overflow-hidden', className)}
+      style={{ border: '1px solid var(--b-hi)' }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-neutral-850 border-b border-neutral-700/60">
-        <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">
+      <div
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{ background: 'var(--s3)', borderBottom: '1px solid var(--b)' }}
+      >
+        <span
+          className="text-[10px] font-semibold uppercase tracking-widest"
+          style={{ color: 'var(--t3)' }}
+        >
           {language || 'code'}
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 transition-all"
-          title="Copy"
-          aria-label="Copy code"
+          className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-all"
+          style={{ color: copied ? '#8fa5ff' : 'var(--t3)' }}
+          onMouseEnter={e => { if (!copied) (e.currentTarget as HTMLElement).style.background = 'var(--s4)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
         >
-          {copied ? (
-            <>
-              <Check size={12} className="text-nerdplexity-400" />
-              <span className="text-nerdplexity-400">Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy size={12} />
-              <span>Copy</span>
-            </>
-          )}
+          {copied ? <Check size={11} /> : <Copy size={11} />}
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
       {/* Code */}
-      <pre className="bg-neutral-900 overflow-x-auto max-h-96 overflow-y-auto">
-        <code className="block p-4 text-sm font-mono text-neutral-200 leading-relaxed whitespace-pre">
+      <pre style={{ background: 'var(--s2)', margin: 0, overflowX: 'auto', maxHeight: '380px' }}>
+        <code
+          className="block p-4 text-sm font-mono leading-relaxed whitespace-pre"
+          style={{ color: 'var(--t1)', fontFamily: "'DM Mono', 'JetBrains Mono', monospace" }}
+        >
           {code}
         </code>
       </pre>

@@ -12,7 +12,7 @@ interface ChatHeaderProps {
   availableProviders?: string[];
 }
 
-function SelectPill<T extends string>({
+function Pill<T extends string>({
   value, options, displayMap, onChange, disabled,
 }: {
   value: T;
@@ -28,7 +28,9 @@ function SelectPill<T extends string>({
 
   useEffect(() => {
     if (!open) return;
-    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener('mousedown', fn);
     return () => document.removeEventListener('mousedown', fn);
   }, [open]);
@@ -38,44 +40,43 @@ function SelectPill<T extends string>({
       <button
         disabled={!canOpen}
         onClick={() => canOpen && setOpen(o => !o)}
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[12px] font-medium text-neutral-500 transition-all duration-100"
+        className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg transition-all"
         style={{
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border)',
+          background: 'var(--s3)',
+          border: '1px solid var(--b)',
+          color: 'var(--t2)',
           cursor: canOpen ? 'pointer' : 'default',
         }}
-        onMouseEnter={e => { if (canOpen) (e.currentTarget as HTMLElement).style.color = '#e4e4e7'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
+        onMouseEnter={e => { if (canOpen) (e.currentTarget as HTMLElement).style.borderColor = 'rgba(78,107,255,.3)'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--b)'; }}
       >
         <span className="max-w-[140px] truncate">{label}</span>
-        {canOpen && (
-          <ChevronDown size={10} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-        )}
+        {canOpen && <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}
       </button>
 
       {open && (
         <div
           className="absolute top-full left-0 mt-1.5 z-50 min-w-[160px] rounded-xl overflow-hidden animate-fade-in"
           style={{
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border-hi)',
-            boxShadow: '0 8px 32px rgba(0,0,0,.6)',
+            background: 'var(--s1)',
+            border: '1px solid var(--b-hi)',
+            boxShadow: '0 8px 32px rgba(0,0,0,.7)',
           }}
         >
           {options.map(opt => {
-            const isActive = opt === value;
-            const optLabel = displayMap ? (displayMap[opt] ?? opt) : opt;
+            const active = opt === value;
+            const lbl = displayMap ? (displayMap[opt] ?? opt) : opt;
             return (
               <button
                 key={opt}
                 onClick={() => { onChange(opt); setOpen(false); }}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[12px] transition-colors text-left"
-                style={{ color: isActive ? '#fb7185' : 'var(--text-2)' }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'; }}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-xs text-left transition-colors"
+                style={{ color: active ? 'var(--blue-hi)' : 'var(--t2)' }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--s2)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                <span className="truncate">{optLabel}</span>
-                {isActive && <Check size={11} className="flex-shrink-0 text-nerdplexity-400" />}
+                <span className="truncate">{lbl}</span>
+                {active && <Check size={11} style={{ color: 'var(--blue)' }} />}
               </button>
             );
           })}
@@ -87,63 +88,59 @@ function SelectPill<T extends string>({
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
   conversation, onOpenSettings,
-  onProviderChange, onModelChange,
-  availableProviders = [],
+  onProviderChange, onModelChange, availableProviders = [],
 }) => {
+  const iconBtn = (
+    <button
+      onClick={onOpenSettings}
+      className="p-2 rounded-lg transition-all"
+      style={{ color: 'var(--t3)' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--t1)'; (e.currentTarget as HTMLElement).style.background = 'var(--s2)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--t3)'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+    >
+      <Settings size={15} />
+    </button>
+  );
+
   if (!conversation) {
     return (
-      <div
-        className="flex items-center justify-between h-12 px-5 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <span className="text-[12px] font-semibold text-neutral-700 tracking-tight">Nerdplexity</span>
-        <button
-          onClick={onOpenSettings}
-          className="p-1.5 rounded-lg text-neutral-700 hover:text-neutral-300 transition-colors"
-        >
-          <Settings size={15} />
-        </button>
+      <div className="flex items-center justify-between h-12 px-5 flex-shrink-0" style={{ borderBottom: '1px solid var(--b)' }}>
+        <span className="text-xs font-semibold text-[var(--t3)]" style={{ fontFamily: 'Syne, sans-serif', letterSpacing: '0.02em' }}>
+          NERDPLEXITY
+        </span>
+        {iconBtn}
       </div>
     );
   }
 
-  const availableModels = getModelsForProvider(conversation.provider);
+  const models = getModelsForProvider(conversation.provider);
 
   return (
     <div
-      className="flex items-center h-12 px-5 gap-3 flex-shrink-0"
-      style={{ borderBottom: '1px solid var(--border)' }}
+      className="flex items-center gap-3 h-12 px-5 flex-shrink-0"
+      style={{ borderBottom: '1px solid var(--b)' }}
     >
-      {/* Thread title */}
-      <h1 className="text-[13px] font-medium text-neutral-400 truncate flex-1 min-w-0">
+      <h1 className="text-sm font-medium text-[var(--t2)] truncate flex-1 min-w-0">
         {sanitizeDisplayText(conversation.title)}
       </h1>
 
-      {/* Provider + model pills */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <SelectPill
+        <Pill
           value={conversation.provider}
           options={availableProviders as Provider[]}
           displayMap={PROVIDER_NAMES as Record<string, string>}
           onChange={p => onProviderChange?.(p as Provider)}
           disabled={availableProviders.length <= 1}
         />
-        <SelectPill
+        <Pill
           value={conversation.model}
-          options={availableModels}
+          options={models}
           onChange={m => onModelChange?.(m)}
-          disabled={availableModels.length <= 1}
+          disabled={models.length <= 1}
         />
       </div>
 
-      {/* Settings */}
-      <button
-        onClick={onOpenSettings}
-        className="flex-shrink-0 p-1.5 rounded-lg text-neutral-700 hover:text-neutral-300 transition-colors"
-        aria-label="Settings"
-      >
-        <Settings size={15} />
-      </button>
+      {iconBtn}
     </div>
   );
 };

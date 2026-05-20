@@ -15,7 +15,8 @@ import {
   helpfulRate, slaBreaches, avgCostPer100, avgTTFT, avgTotalTokens
 } from "./metrics";
 
-// KPI Card Component
+import React from "react";
+
 interface KPICardProps {
   label: string;
   value: string | number;
@@ -24,35 +25,37 @@ interface KPICardProps {
   subtitle?: string;
 }
 
-const trendStyle = {
-  up:      { background: 'rgba(244,63,94,.1)',  color: '#fb7185',  label: '↑' },
-  down:    { background: 'rgba(239,68,68,.1)',   color: '#f87171',  label: '↓' },
-  neutral: { background: 'rgba(82,82,91,.2)',    color: '#71717a',  label: '—' },
+const trends = {
+  up:      { bg: 'rgba(78,107,255,.1)', color: '#8fa5ff', label: '↑' },
+  down:    { bg: 'rgba(239,68,68,.1)', color: '#fca5a5', label: '↓' },
+  neutral: { bg: 'var(--s4)', color: 'var(--t3)', label: '—' },
 };
 
 const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subtitle }) => (
   <div
-    className="rounded-xl p-5 transition-all duration-200"
-    style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}
-    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(244,63,94,.2)'; }}
-    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+    className="rounded-xl p-4 transition-all duration-150"
+    style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}
+    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(78,107,255,.25)'; }}
+    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--b)'; }}
   >
-    <div className="flex items-center justify-between mb-3">
-      <span className="text-[10px] font-semibold uppercase tracking-[.1em] text-neutral-600">{label}</span>
+    <div className="flex items-center justify-between mb-2.5">
+      <span className="t-label">{label}</span>
       {trend && (
         <span
           className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-          style={trendStyle[trend]}
+          style={{ background: trends[trend].bg, color: trends[trend].color }}
         >
-          {trendStyle[trend].label}
+          {trends[trend].label}
         </span>
       )}
     </div>
-    <div className="flex items-baseline gap-1.5">
-      <span className="text-[26px] font-bold leading-none" style={{ color: '#fb7185' }}>{value}</span>
-      {unit && <span className="text-[13px] text-neutral-500">{unit}</span>}
+    <div className="flex items-baseline gap-1">
+      <span className="text-2xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Syne, sans-serif' }}>
+        {value}
+      </span>
+      {unit && <span className="text-sm" style={{ color: 'var(--t3)' }}>{unit}</span>}
     </div>
-    {subtitle && <p className="text-[11px] text-neutral-600 mt-2 leading-snug">{subtitle}</p>}
+    {subtitle && <p className="text-[11px] mt-1.5 leading-snug" style={{ color: 'var(--t4)' }}>{subtitle}</p>}
   </div>
 );
 
@@ -202,7 +205,7 @@ export default function MetricsDashboard() {
   const modelCompareData = useMemo(() => modelRollup(rows), [rows]);
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: "var(--bg)", color: "var(--text-1)" }}><div className="max-w-6xl mx-auto px-6 py-6">
+    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--t1)', fontFamily: "'DM Sans', sans-serif" }}><div className="max-w-6xl mx-auto px-6 py-6">
       <AnalyticsNav title="Metrics Dashboard" />
 
       <header className="mb-8">
@@ -232,7 +235,7 @@ export default function MetricsDashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Primary Chart - Event Latency (spans 3 columns) */}
           <div className="xl:col-span-3">
-            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
               <div className="p-6 border-b border-neutral-800">
                 <h3 className="text-lg font-semibold text-nerdplexity-300">Event Latency Timeline</h3>
                 <p className="text-sm text-neutral-500 mt-1">Real-time performance monitoring</p>
@@ -247,7 +250,7 @@ export default function MetricsDashboard() {
 
           {/* Risk Distribution (1 column) */}
           <div className="xl:col-span-1">
-            <div className="rounded-xl h-full overflow-hidden" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+            <div className="rounded-xl h-full overflow-hidden" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
               <div className="p-6 border-b border-neutral-800">
                 <h3 className="text-lg font-semibold text-nerdplexity-300">Risk Distribution</h3>
                 <p className="text-sm text-neutral-500 mt-1">Security assessment</p>
@@ -264,7 +267,7 @@ export default function MetricsDashboard() {
         {/* Secondary Row - Analysis & Performance */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* Model Performance */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Model Performance</h3>
               <p className="text-xs text-neutral-500 mt-1">Quality vs Cost analysis</p>
@@ -286,7 +289,7 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Request Outcomes */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Request Outcomes</h3>
               <p className="text-xs text-neutral-500 mt-1">Success & failure rates</p>
@@ -299,7 +302,7 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Context Efficiency */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Context Efficiency</h3>
               <p className="text-xs text-neutral-500 mt-1">Token usage optimization</p>
@@ -315,7 +318,7 @@ export default function MetricsDashboard() {
         {/* Tertiary Row - System Metrics & Trends */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {/* System Health */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">System Health</h3>
               <p className="text-xs text-neutral-500 mt-1">Resource utilization</p>
@@ -328,7 +331,7 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Latency Trends */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Latency Trends</h3>
               <p className="text-xs text-neutral-500 mt-1">Response time patterns</p>
@@ -347,7 +350,7 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Token Usage */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Token Usage</h3>
               <p className="text-xs text-neutral-500 mt-1">Daily consumption trends</p>
@@ -369,7 +372,7 @@ export default function MetricsDashboard() {
         {/* Bottom Row - Performance Analysis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Performance Split */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Performance Breakdown</h3>
               <p className="text-xs text-neutral-500 mt-1">Detailed performance analysis</p>
@@ -382,7 +385,7 @@ export default function MetricsDashboard() {
           </div>
 
           {/* Future Insights Placeholder */}
-          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+          <div className="rounded-xl overflow-hidden max-h-[350px]" style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}>
             <div className="p-3 border-b border-neutral-800">
               <h3 className="text-base font-semibold text-nerdplexity-300">Advanced Analytics</h3>
               <p className="text-xs text-neutral-500 mt-1">Coming soon</p>
@@ -392,7 +395,7 @@ export default function MetricsDashboard() {
                 <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center mx-auto mb-3">
                   <span className="text-xl text-nerdplexity-400 font-bold">AI</span>
                 </div>
-                <p className="text-base font-medium text-neutral-400 mb-1">More Insights Coming</p>
+                <p className="text-base font-medium style-removed mb-1">More Insights Coming</p>
                 <p className="text-xs text-neutral-600">Advanced ML-powered analytics</p>
               </div>
             </div>

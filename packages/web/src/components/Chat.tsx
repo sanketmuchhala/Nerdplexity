@@ -351,57 +351,47 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
     }
   };
 
-  /* ── No conversation selected ─────────────────────────── */
+  /* ── No conversation ── */
   if (!conversation) {
     return (
       <div className="flex-1 flex flex-col" style={{ background: 'var(--bg)' }}>
         <ChatHeader conversation={null} onOpenSettings={onOpenSettings} />
-        <div className="flex-1 flex flex-col items-center justify-center gap-8 px-4">
-          {/* Logo mark */}
-          <div className="text-center">
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center max-w-sm">
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.2)' }}
+              className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5"
+              style={{ background: 'var(--blue)', boxShadow: '0 0 24px rgba(78,107,255,.35)' }}
             >
-              <span className="text-lg font-bold text-nerdplexity-400">N</span>
+              <span className="text-lg font-bold text-white" style={{ fontFamily: 'Syne, sans-serif' }}>N</span>
             </div>
-            <h2 className="text-[16px] font-semibold text-neutral-200 mb-1">Nerdplexity</h2>
-            <p className="text-[13px] text-neutral-600 leading-relaxed max-w-[260px]">
-              Bring your own keys — local-first, private by default.
+            <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--t1)' }}>
+              Nerdplexity
+            </h2>
+            <p className="text-sm mb-7 leading-relaxed" style={{ color: 'var(--t3)' }}>
+              Bring your own keys. Local-first, private by default.
             </p>
+            <div className="flex flex-col gap-2.5">
+              <button onClick={() => newConversation()} className="btn-primary w-full justify-center">
+                New Thread
+              </button>
+              <button onClick={onOpenSettings} className="btn-ghost w-full justify-center">
+                Configure API Keys
+              </button>
+            </div>
+            {!hasValidKey && (
+              <p className="mt-4 text-xs" style={{ color: '#fbbf24' }}>
+                No API key configured — add one in settings.
+              </p>
+            )}
           </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2.5 w-full max-w-[260px]">
-            <button
-              onClick={() => newConversation()}
-              className="w-full py-2.5 text-white text-[13px] font-medium rounded-xl transition-all"
-              style={{ background: 'var(--accent)' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#e11d48'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent)'; }}
-            >
-              New Thread
-            </button>
-            <button
-              onClick={onOpenSettings}
-              className="w-full py-2.5 text-neutral-400 hover:text-neutral-200 text-[13px] font-medium rounded-xl transition-all"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border-hi)' }}
-            >
-              Configure API Keys
-            </button>
-          </div>
-
-          {!hasValidKey && (
-            <p className="text-[11px] text-amber-500">No API key configured — add one in settings.</p>
-          )}
         </div>
       </div>
     );
   }
 
-  /* ── Active conversation ───────────────────────────────── */
+  /* ── Active conversation ── */
   return (
-    <div className="flex-1 flex flex-col min-w-0" style={{ background: 'var(--bg)' }}>
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
       <ChatHeader
         conversation={conversation}
         onOpenSettings={onOpenSettings}
@@ -410,49 +400,35 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
         availableProviders={availableProviders}
       />
 
-      {/* ── Message thread ── */}
+      {/* Message thread */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {conversation.messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center">
-            <p className="text-[13px] text-neutral-700">
-              {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
-            </p>
-            <p className="text-[11px] text-neutral-800 mt-1">Send a message to begin</p>
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-sm mb-1" style={{ color: 'var(--t4)' }}>
+                {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
+              </p>
+              <p className="text-xs" style={{ color: 'var(--t4)' }}>Send a message to begin</p>
+            </div>
           </div>
         ) : (
-          <div ref={messagesContainerRef} className="py-4">
-            {conversation.messages.map((message, index) => {
-              const isLast = index === conversation.messages.length - 1;
+          <div ref={messagesContainerRef} className="py-2">
+            {conversation.messages.map((msg, idx) => {
+              const isLast = idx === conversation.messages.length - 1;
               return (
-                <div
-                  key={message.id}
-                  ref={isLast ? markMessageAnchor : undefined}
-                  data-last-message={isLast ? 'true' : undefined}
-                >
-                  <Message
-                    message={{
-                      role: message.role,
-                      content: message.content,
-                      timestamp: message.createdAt,
-                      id: message.id,
-                      metadata: message.metadata,
-                    }}
-                  />
+                <div key={msg.id} ref={isLast ? markMessageAnchor : undefined} data-last-message={isLast ? 'true' : undefined}>
+                  <Message message={{ role: msg.role, content: msg.content, timestamp: msg.createdAt, id: msg.id, metadata: msg.metadata }} />
                 </div>
               );
             })}
 
             {isLoading && thinkingStartTime && (
-              <div className="px-4 w-full">
+              <div className="px-4">
                 <div className="max-w-[680px] mx-auto">
                   <ThinkingHUD
                     running={isLoading}
                     elapsedMs={Date.now() - thinkingStartTime}
-                    tokensPerSec={
-                      tokensReceived > 0
-                        ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000)
-                        : undefined
-                    }
+                    tokensPerSec={tokensReceived > 0 ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000) : undefined}
                     phase={thinkingPhase}
                     summary={reasoningSummary}
                   />
@@ -464,34 +440,24 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Composer ── */}
-      <div
-        className="flex-shrink-0 px-4 pb-5 pt-3"
-        style={{ borderTop: '1px solid var(--border)' }}
-      >
-        {/* Composer constrained to same 680px column as messages */}
+      {/* Composer */}
+      <div className="flex-shrink-0 px-4 pb-5 pt-3" style={{ borderTop: '1px solid var(--b)' }}>
         <div className="max-w-[680px] mx-auto w-full">
           {!hasValidKey ? (
             <div className="px-4 py-3 rounded-xl text-center" style={{ background: 'rgba(251,191,36,.05)', border: '1px solid rgba(251,191,36,.15)' }}>
-              <p className="text-[11px] text-amber-400 mb-2.5">No API key for {conversationProvider}</p>
-              <button
-                onClick={onOpenSettings}
-                className="px-3 py-1.5 text-white text-[12px] font-medium rounded-lg transition-all"
-                style={{ background: 'var(--accent)' }}
-              >
-                Configure Keys
-              </button>
+              <p className="text-xs mb-2.5" style={{ color: '#fbbf24' }}>No API key for {conversationProvider}</p>
+              <button onClick={onOpenSettings} className="btn-primary text-xs px-4 py-1.5">Configure Keys</button>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
+              {/* Input box */}
               <div
-                id="composer"
-                className="rounded-2xl overflow-hidden transition-all duration-200"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border-hi)' }}
+                id="nerd-composer"
+                className="rounded-2xl overflow-hidden transition-all duration-150"
+                style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)' }}
               >
-                <style>{`#composer:focus-within{border-color:rgba(244,63,94,.45)!important;box-shadow:0 0 0 3px rgba(244,63,94,.07)}`}</style>
+                <style>{`#nerd-composer:focus-within{border-color:rgba(78,107,255,.5)!important;box-shadow:0 0 0 3px rgba(78,107,255,.08),0 0 24px rgba(78,107,255,.06)}`}</style>
 
-                {/* Text area */}
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -500,50 +466,43 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                   placeholder="Ask anything…"
                   rows={1}
                   disabled={isLoading}
-                  className="block w-full px-4 pt-4 pb-2 bg-transparent text-[14px] text-neutral-100 placeholder:text-neutral-700 resize-none outline-none leading-[1.65]"
+                  className="block w-full px-4 pt-4 pb-2 bg-transparent text-sm resize-none outline-none leading-relaxed"
+                  style={{ color: 'var(--t1)' }}
                 />
 
-                {/* Bottom action row */}
                 <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                  {/* Feature pills */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setWebSearchEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-150"
-                      style={webSearchEnabled
-                        ? { background: 'rgba(244,63,94,.1)', borderColor: 'rgba(244,63,94,.35)', color: '#fb7185' }
-                        : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-3)' }}
-                    >
-                      <Globe size={11} />
-                      Web
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setReasoningEnabled(v => !v)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-150"
-                      style={reasoningEnabled
-                        ? { background: 'rgba(244,63,94,.1)', borderColor: 'rgba(244,63,94,.35)', color: '#fb7185' }
-                        : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-3)' }}
-                    >
-                      <Brain size={11} />
-                      Reason
-                    </button>
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { key: 'web', active: webSearchEnabled, toggle: () => setWebSearchEnabled(v => !v), icon: Globe, label: 'Web' },
+                      { key: 'reason', active: reasoningEnabled, toggle: () => setReasoningEnabled(v => !v), icon: Brain, label: 'Reason' },
+                    ].map(({ key, active, toggle, icon: Icon, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={toggle}
+                        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all duration-150"
+                        style={active
+                          ? { background: 'rgba(78,107,255,.12)', borderColor: 'rgba(78,107,255,.4)', color: '#8fa5ff' }
+                          : { background: 'transparent', borderColor: 'var(--b)', color: 'var(--t3)' }}
+                      >
+                        <Icon size={11} />
+                        {label}
+                      </button>
+                    ))}
                   </div>
 
-                  {/* Send */}
                   <button
                     type="submit"
                     disabled={!input.trim() || isLoading}
                     className="flex items-center justify-center w-8 h-8 rounded-xl text-white transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                    style={{ background: 'var(--accent)' }}
+                    style={{ background: 'var(--blue)' }}
                   >
                     {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
                 </div>
               </div>
 
-              <p className="mt-2 text-center text-[10px] text-neutral-800">
+              <p className="mt-2 text-center text-[10px]" style={{ color: 'var(--t4)' }}>
                 Enter to send · Shift+Enter new line · ⌘K settings
               </p>
             </form>
