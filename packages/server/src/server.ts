@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
 import { ChatRequest, WebSearchResult } from './types.js';
 import { openaiProvider } from './providers/openai.js';
 import { anthropicProvider } from './providers/anthropic.js';
@@ -391,13 +392,30 @@ Show your work and explain your reasoning clearly.`;
 });
 
 // Error handling middleware
-app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((error: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', error);
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ── Serve built web frontend ──────────────────────────────
+// In production (Vercel), the web package is built to packages/web/dist
+// The server dist is at packages/server/dist, so web dist is two levels up + web/dist
+const webDist = path.resolve(__dirname, '../../web/dist');
+app.use(express.static(webDist));
+
+// SPA catch-all — any unmatched GET serves index.html so React Router works
+app.get('*', (_req, res) => {
+  const index = path.join(webDist, 'index.html');
+  res.sendFile(index, (err) => {
+    if (err) {
+      // If web dist doesn't exist (local dev without frontend build), send a simple message
+      res.status(200).json({ status: 'API server running', note: 'Frontend not built — run: pnpm --filter @app/web build' });
+    }
+  });
+});
+
 app.listen(PORT, () => {
-  console.log(`[SERVER] BYOK Research Copilot Server running on http://localhost:${PORT}`);
+  console.log(`[SERVER] Nerdplexity server running on http://localhost:${PORT}`);
   console.log(`[SECURITY] Local-only mode. API keys are never logged or stored.`);
-  console.log(`[READY] Proxy ready for OpenAI, Anthropic, DeepSeek, and Gemini`);
+  console.log(`[READY] Serving frontend from: ${webDist}`);
 });
