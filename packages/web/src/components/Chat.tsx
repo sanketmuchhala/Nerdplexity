@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Plus, Globe, Brain } from 'lucide-react';
 import { Message } from './Message';
 import { ChatHeader } from './layout/ChatHeader';
-import { Button } from './ui';
+
 import useChat from '../state/chatStore';
 import { PROVIDER_NAMES, getDefaultModelForProvider } from '../constants/models';
 import type { Provider } from '../lib/db';
@@ -351,51 +351,51 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
     }
   };
 
-  // Empty state when no conversation is selected
+  // ── No conversation selected ──────────────────────────────
   if (!conversation) {
     return (
       <div className="flex-1 flex flex-col bg-neutral-950">
-        <ChatHeader
-          conversation={null}
-          onOpenSettings={onOpenSettings}
-        />
-        
+        <ChatHeader conversation={null} onOpenSettings={onOpenSettings} />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-6 max-w-md px-6">
-            <div className="heading-lg text-nerdplexity-400 nerdplexity-text-glow mb-6">Nerdplexity</div>
-            <h2 className="heading-md text-neutral-100">Welcome to Nerdplexity</h2>
-            <p className="body text-neutral-400">
-              Your local-only AI assistant with the power of will. Bring your own API keys and chat with confidence.
+          <div className="text-center max-w-sm px-6 animate-fade-in">
+            <div className="w-12 h-12 rounded-2xl bg-nerdplexity-600/20 border border-nerdplexity-500/30 flex items-center justify-center mx-auto mb-6">
+              <span className="text-xl text-nerdplexity-400 font-bold">N</span>
+            </div>
+            <h2 className="text-lg font-semibold text-neutral-100 mb-2">Nerdplexity</h2>
+            <p className="text-sm text-neutral-500 mb-8 leading-relaxed">
+              Bring your own keys. Ask anything. Local-first, private by default.
             </p>
-            
-            <div className="space-y-4 pt-4">
-              <Button
+            <div className="flex flex-col gap-3">
+              <button
                 onClick={() => newConversation()}
-                variant="primary"
-                size="lg"
-                className="w-full"
+                className="
+                  flex items-center justify-center gap-2 w-full px-4 py-2.5
+                  bg-nerdplexity-600 hover:bg-nerdplexity-500
+                  text-white text-sm font-medium rounded-xl
+                  transition-all duration-150
+                "
               >
-                <Plus size={18} />
-                Start New Chat
-              </Button>
-              
-              <Button
+                <Plus size={16} />
+                New Thread
+              </button>
+              <button
                 onClick={onOpenSettings}
-                variant="secondary"
-                size="lg"
-                className="w-full"
+                className="
+                  flex items-center justify-center gap-2 w-full px-4 py-2.5
+                  bg-neutral-800 hover:bg-neutral-750
+                  text-neutral-300 hover:text-neutral-100
+                  text-sm font-medium rounded-xl border border-neutral-700
+                  transition-all duration-150
+                "
               >
                 Configure API Keys
-              </Button>
+              </button>
             </div>
-            
             {!hasValidKey && (
-              <div className="mt-6 panel bg-amber-900/20 border-amber-700 nerdplexity-glow">
-                <div className="p-4">
-                  <p className="body-sm text-amber-200">
-                    <strong>Notice:</strong> No API key configured. Configure your API keys to start chatting.
-                  </p>
-                </div>
+              <div className="mt-5 px-4 py-3 bg-amber-900/20 border border-amber-800/60 rounded-xl">
+                <p className="text-xs text-amber-300">
+                  No API key configured. Add one in settings to start chatting.
+                </p>
               </div>
             )}
           </div>
@@ -404,8 +404,9 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
     );
   }
 
+  // ── Active conversation ────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col bg-neutral-950">
+    <div className="flex-1 flex flex-col bg-neutral-950 min-w-0">
       <ChatHeader
         conversation={conversation}
         onOpenSettings={onOpenSettings}
@@ -416,148 +417,162 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="max-w-4xl mx-auto">
-          {conversation.messages.length === 0 ? (
-            <div className="text-center py-18 px-6">
-              <div className="heading-lg text-neutral-400 mb-4">Ready to Chat</div>
-              <h3 className="heading-sm text-neutral-200 mb-3">Start your conversation</h3>
-              <p className="body text-neutral-400">
-                Ask me anything. I'll use {conversationProvider} to help you.
+        {conversation.messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center px-6 animate-fade-in">
+              <p className="text-sm text-neutral-600 mb-1">
+                Using {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
               </p>
+              <p className="text-xs text-neutral-700">Ask anything to begin</p>
             </div>
-          ) : (
-            <div ref={messagesContainerRef}>
-              {conversation.messages.map((message, index) => {
-                const isLast = index === conversation.messages.length - 1;
-                return (
-                  <div 
-                    key={message.id}
-                    ref={isLast ? markMessageAnchor : undefined}
-                    data-last-message={isLast ? "true" : undefined}
-                  >
-                    <Message message={{
+          </div>
+        ) : (
+          <div ref={messagesContainerRef} className="pb-4">
+            {conversation.messages.map((message, index) => {
+              const isLast = index === conversation.messages.length - 1;
+              return (
+                <div
+                  key={message.id}
+                  ref={isLast ? markMessageAnchor : undefined}
+                  data-last-message={isLast ? 'true' : undefined}
+                >
+                  <Message
+                    message={{
                       role: message.role,
                       content: message.content,
                       timestamp: message.createdAt,
                       id: message.id,
-                      metadata: message.metadata
-                    }} />
-                  </div>
-                );
-              })}
-              
-              {isLoading && thinkingStartTime && (
-                <div className="px-6">
-                  <ThinkingHUD
-                    running={isLoading}
-                    elapsedMs={Date.now() - thinkingStartTime}
-                    tokensPerSec={tokensReceived > 0 ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000) : undefined}
-                    phase={thinkingPhase}
-                    summary={reasoningSummary}
+                      metadata: message.metadata,
+                    }}
                   />
                 </div>
-              )}
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+              );
+            })}
+
+            {isLoading && thinkingStartTime && (
+              <div className="px-6 max-w-3xl mx-auto">
+                <ThinkingHUD
+                  running={isLoading}
+                  elapsedMs={Date.now() - thinkingStartTime}
+                  tokensPerSec={
+                    tokensReceived > 0
+                      ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000)
+                      : undefined
+                  }
+                  phase={thinkingPhase}
+                  summary={reasoningSummary}
+                />
+              </div>
+            )}
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Composer */}
-      <div className="border-t border-neutral-700 p-6 nerdplexity-border">
-        <div className="max-w-4xl mx-auto">
+      {/* ── Composer ─────────────────────────────────────────── */}
+      <div className="px-4 pb-5 pt-3">
+        <div className="max-w-3xl mx-auto">
           {!hasValidKey ? (
-            <div className="panel bg-amber-900/20 border-amber-700 text-center nerdplexity-glow">
-              <div className="p-6">
-                <p className="body-sm text-amber-200 mb-4">
-                  <strong>Notice:</strong> No API key configured for {conversationProvider}
-                </p>
-                <Button
-                  onClick={onOpenSettings}
-                  variant="primary"
-                  size="md"
-                >
-                  Configure API Keys
-                </Button>
-              </div>
+            <div className="px-4 py-3 bg-amber-900/20 border border-amber-800/60 rounded-xl text-center">
+              <p className="text-xs text-amber-300 mb-3">
+                No API key configured for {conversationProvider}
+              </p>
+              <button
+                onClick={onOpenSettings}
+                className="px-3 py-1.5 bg-nerdplexity-600 hover:bg-nerdplexity-500 text-white text-xs font-medium rounded-lg transition-all"
+              >
+                Configure API Keys
+              </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Advanced Features Toggles */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <Button
-                  type="button"
-                  onClick={() => setWebSearchEnabled(!webSearchEnabled)}
-                  variant={webSearchEnabled ? 'primary' : 'secondary'}
-                  size="sm"
-                  className={webSearchEnabled ? 'bg-nerdplexity-600 hover:bg-nerdplexity-700 nerdplexity-glow' : 'btn-nerdplexity-secondary'}
-                >
-                  <Globe size={16} />
-                  Web Search
-                </Button>
-                
-                <Button
-                  type="button"
-                  onClick={() => setReasoningEnabled(!reasoningEnabled)}
-                  variant={reasoningEnabled ? 'primary' : 'secondary'}
-                  size="sm"
-                  className={reasoningEnabled ? 'bg-nerdplexity-600 hover:bg-nerdplexity-700 nerdplexity-glow' : 'btn-nerdplexity-secondary'}
-                >
-                  <Brain size={16} />
-                  Show Reasoning
-                </Button>
-                
-                {(webSearchEnabled || reasoningEnabled) && (
-                  <span className="muted">
-                    {webSearchEnabled && reasoningEnabled 
-                      ? 'Web search + reasoning enabled' 
-                      : webSearchEnabled 
-                        ? 'Will search the web for current information'
-                        : 'Will show AI thought process'
-                    }
-                  </span>
-                )}
-              </div>
-              
-              {/* Message Input */}
-              <div className="flex gap-4">
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={`Message ${conversationProvider}${webSearchEnabled || reasoningEnabled ? ' (' : ''}${webSearchEnabled ? 'web search' : ''}${webSearchEnabled && reasoningEnabled ? ' + ' : ''}${reasoningEnabled ? 'reasoning' : ''}${webSearchEnabled || reasoningEnabled ? ')' : ''}...`}
-                    className="w-full p-4 pr-14 bg-neutral-800 text-neutral-100 border border-neutral-700 rounded-2xl resize-none focus-ring text-lg placeholder-neutral-400 nerdplexity-border nerdplexity-glow"
-                    rows={1}
-                    disabled={isLoading}
-                  />
-                  <Button
+            <form onSubmit={handleSubmit}>
+              {/* Input container */}
+              <div
+                className="
+                  relative border border-neutral-700 rounded-2xl bg-neutral-900
+                  transition-all duration-200
+                  focus-within:border-nerdplexity-500/50
+                  focus-within:[box-shadow:0_0_0_3px_rgba(139,92,246,0.08),0_0_20px_rgba(139,92,246,0.06)]
+                "
+              >
+                {/* Textarea */}
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything…"
+                  rows={1}
+                  disabled={isLoading}
+                  className="
+                    w-full px-4 pt-4 pb-2
+                    bg-transparent text-sm text-neutral-100
+                    placeholder:text-neutral-600
+                    resize-none outline-none
+                    leading-relaxed
+                  "
+                />
+
+                {/* Bottom bar: toggles + send */}
+                <div className="flex items-center justify-between px-3 pb-3 pt-1 gap-2">
+                  {/* Feature toggles */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setWebSearchEnabled(v => !v)}
+                      className={`
+                        flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                        border transition-all duration-150
+                        ${webSearchEnabled
+                          ? 'bg-nerdplexity-600/20 border-nerdplexity-500/50 text-nerdplexity-300'
+                          : 'border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600'}
+                      `}
+                    >
+                      <Globe size={12} />
+                      Web
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReasoningEnabled(v => !v)}
+                      className={`
+                        flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                        border transition-all duration-150
+                        ${reasoningEnabled
+                          ? 'bg-nerdplexity-600/20 border-nerdplexity-500/50 text-nerdplexity-300'
+                          : 'border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600'}
+                      `}
+                    >
+                      <Brain size={12} />
+                      Reason
+                    </button>
+                  </div>
+
+                  {/* Send button */}
+                  <button
                     type="submit"
                     disabled={!input.trim() || isLoading}
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 disabled:opacity-50"
+                    className="
+                      flex items-center justify-center w-8 h-8 rounded-lg
+                      bg-nerdplexity-600 hover:bg-nerdplexity-500
+                      text-white transition-all duration-150
+                      disabled:opacity-30 disabled:cursor-not-allowed
+                    "
                   >
-                    {isLoading ? (
-                      <Loader2 size={20} className="animate-spin" />
-                    ) : (
-                      <Send size={20} />
-                    )}
-                  </Button>
+                    {isLoading
+                      ? <Loader2 size={14} className="animate-spin" />
+                      : <Send size={14} />}
+                  </button>
                 </div>
               </div>
+
+              {/* Hint */}
+              <p className="mt-2 text-center text-[10px] text-neutral-700">
+                Enter to send · Shift+Enter for new line · ⌘K settings
+              </p>
             </form>
           )}
-          
-          <div className="mt-3 muted text-center">
-            Press Enter to send, Shift+Enter for new line • Cmd+N for new chat • Cmd+K for settings
-          </div>
         </div>
       </div>
-
-      {/* Optimized Prompt Panel - if needed */}
-      {/* <OptimizedPrompt /> */}
     </div>
   );
 };

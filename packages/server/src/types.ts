@@ -1,7 +1,9 @@
 export interface ChatMessage {
+  id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
+  metadata?: MessageMetadata;
 }
 
 export interface ChatRequest {
@@ -14,6 +16,7 @@ export interface ChatRequest {
   api_key: string;
   web_search?: boolean;
   show_reasoning?: boolean;
+  orchestration?: PromptOrchestration;
   // Local Ollama specific fields
   baseURL?: string;
   num_ctx?: number;
@@ -34,6 +37,23 @@ export interface ChatResponse {
   };
   webSearchResults?: WebSearchResult[];
   reasoning?: string;
+  assumptions?: string[];
+  confidence?: ConfidenceLevel;
+  followUps?: string[];
+  reportCard?: ReportCardItem[];
+}
+
+export type TaskType = 'direct' | 'research' | 'write' | 'code' | 'math' | 'critique';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+export interface MessageMetadata {
+  webSearchResults?: WebSearchResult[];
+  reasoning?: string;
+  assumptions?: string[];
+  confidence?: ConfidenceLevel;
+  followUps?: string[];
+  reportCard?: ReportCardItem[];
+  contextUsed?: MemoryItem[];
 }
 
 export interface WebSearchResult {
@@ -86,10 +106,19 @@ export interface Citation {
 }
 
 export interface PromptOrchestration {
-  mode: 'direct' | 'research' | 'coach';
-  domain: string[];
-  time_sensitivity: 'low' | 'medium' | 'high';
-  answer_style: 'concise' | 'structured' | 'stepwise' | 'code-first';
+  originalQuery?: string;
+  rewrittenQuery?: string;
+  assumptions?: string[];
+  taskType?: TaskType;
+  reasoningPlan?: string[];
+  sourcePlan?: string[];
+  confidence?: ConfidenceLevel;
+  webSearchEnabled?: boolean;
+  reasoningEnabled?: boolean;
+  mode?: 'direct' | 'research' | 'coach';
+  domain?: string[];
+  time_sensitivity?: 'low' | 'medium' | 'high';
+  answer_style?: 'concise' | 'structured' | 'stepwise' | 'code-first';
   plan?: string[];
   context_used?: MemoryItem[];
   report_card?: ReportCardItem[];
@@ -106,7 +135,7 @@ export interface MemoryItem {
 }
 
 export interface ReportCardItem {
-  category: 'correctness' | 'completeness' | 'evidence' | 'safety' | 'clarity';
+  category: 'correctness' | 'completeness' | 'evidence' | 'safety' | 'clarity' | 'actionability';
   status: 'pass' | 'warning';
   note?: string;
 }

@@ -5,7 +5,7 @@
  * Inner reasoning stays private; only contracts/outputs are exposed.
  */
 
-import { TaskType, ConfidenceLevel } from '@app/types';
+import { TaskType, ConfidenceLevel, ReportCardItem } from '../types.js';
 
 export const ORCHESTRATOR_SYSTEM_PROMPT = `You are an advanced research assistant with Perplexity++ capabilities. Follow this precise 9-layer orchestration:
 
@@ -176,7 +176,7 @@ export function extractFollowUps(response: string): string[] {
     .filter(line => line.length > 0 && !line.startsWith('**'));
 }
 
-export function extractReportCard(response: string) {
+export function extractReportCard(response: string): ReportCardItem[] | null {
   const reportCardMatch = response.match(/\*\*Report Card:\*\*\s*(.+?)$/s);
   if (!reportCardMatch) return null;
   
@@ -185,7 +185,7 @@ export function extractReportCard(response: string) {
   
   return categories.map(category => ({
     category: category.toLowerCase() as any,
-    status: cardText.includes(`PASS ${category}`) ? 'pass' : 'warning' as const,
+    status: cardText.includes(`PASS ${category}`) ? 'pass' as const : 'warning' as const,
     note: cardText.includes(`WARN ${category}`) ? 'See response for details' : undefined
   }));
 }

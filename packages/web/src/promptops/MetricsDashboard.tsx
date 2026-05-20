@@ -189,13 +189,6 @@ export default function MetricsDashboard() {
     return { labels: ["OK", "Refusal", "Error"], values: [ok, ref, err] };
   }, [rows]);
 
-  const riskBands = useMemo(() => {
-      const low = rows.filter(e => (e as any)._riskBand === "Low").length;
-      const med = rows.filter(e => (e as any)._riskBand === "Medium").length;
-      const high = rows.filter(e => (e as any)._riskBand === "High").length;
-      return { low, med, high, total: rows.length };
-  }, [rows]);
-
   const modelCompareData = useMemo(() => modelRollup(rows), [rows]);
 
   return (

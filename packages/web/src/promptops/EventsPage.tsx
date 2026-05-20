@@ -5,6 +5,12 @@ import { hallucinationRisk } from "./hallucination";
 import { estimateCost } from "./pricing";
 import AnalyticsNav from "./components/AnalyticsNav";
 
+type EventColumn = {
+  key: string;
+  label: string;
+  fmt?: (value: any, row: any) => string;
+};
+
 export default function EventsPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +39,7 @@ export default function EventsPage() {
     })();
   }, []);
 
-  const columns = [
+  const columns: EventColumn[] = [
     { key: "ts", label: "Time" },
     { key: "provider", label: "Provider" },
     { key: "model", label: "Model" },

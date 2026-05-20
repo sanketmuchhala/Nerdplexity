@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { ChatRequest, WebSearchResult } from '@app/types';
+import { ChatRequest, WebSearchResult } from './types.js';
 import { openaiProvider } from './providers/openai.js';
 import { anthropicProvider } from './providers/anthropic.js';
 import { deepseekProvider } from './providers/deepseek.js';

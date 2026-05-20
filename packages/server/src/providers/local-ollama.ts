@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse } from '../types.js';
+import { ChatRequest, ChatResponse, ProviderAdapter } from '../types.js';
 import http from 'http';
 import https from 'https';
 
@@ -21,6 +21,10 @@ function agentFor(url: string) {
   return url.startsWith('https') ? httpsAgent : httpAgent;
 }
 
+type NodeFetchInit = RequestInit & {
+  agent?: http.Agent | https.Agent;
+};
+
 // Enhanced gemma2 detection
 function isGemma2(model?: string): boolean {
   return !!(model && /^gemma2/i.test(model));
@@ -35,7 +39,7 @@ async function prewarm(baseURL: string, model: string): Promise<void> {
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 5000);
 
-    await fetch(`${baseURL}/api/chat`, {
+    const init: NodeFetchInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -46,7 +50,9 @@ async function prewarm(baseURL: string, model: string): Promise<void> {
       }),
       agent: agentFor(baseURL),
       signal: ac.signal
-    }).catch(() => {}); // Ignore errors during prewarming
+    };
+
+    await fetch(`${baseURL}/api/chat`, init).catch(() => {}); // Ignore errors during prewarming
 
     clearTimeout(timeout);
     prewarmed = true;
@@ -71,6 +77,8 @@ const GEMMA2_PERFORMANCE_DEFAULTS = {
   low_vram: true,
   flash_attention: true
 };
+
+type OllamaPerformanceDefaults = Partial<typeof GEMMA2_PERFORMANCE_DEFAULTS>;
 
 export type OllamaConfig = {
   baseURL?: string;
@@ -128,7 +136,7 @@ export async function chatWithOllama(opts: {
   await prewarm(baseURL, opts.config.model);
 
   // Use performance defaults for gemma2, fallback to existing logic
-  const baseDefaults = isGemmaModel && pm ? GEMMA2_PERFORMANCE_DEFAULTS : {};
+  const baseDefaults: OllamaPerformanceDefaults = isGemmaModel && pm ? GEMMA2_PERFORMANCE_DEFAULTS : {};
 
   const options: any = {
     temperature: opts.config.temperature ?? baseDefaults.temperature ?? 0.7,
@@ -169,13 +177,14 @@ export async function chatWithOllama(opts: {
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 30_000);
     try {
-      const res = await fetch(`${baseURL}/api/chat`, {
+      const init: NodeFetchInit = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
         agent: agentFor(baseURL),
         signal: opts.signal || ac.signal
-      });
+      };
+      const res = await fetch(`${baseURL}/api/chat`, init);
       clearTimeout(timeout);
       
       if (!res.ok) {
@@ -239,7 +248,7 @@ export async function chatWithOllama(opts: {
 }
 
 // Legacy adapter for existing ChatRequest interface
-export const localOllamaProvider = {
+export const localOllamaProvider: ProviderAdapter = {
   name: 'Local (Ollama)',
   
   async chat(request: ChatRequest): Promise<ChatResponse> {
@@ -277,7 +286,8 @@ export const localOllamaProvider = {
       return {
         message: {
           role: 'assistant',
-          content: result.text
+          content: result.text,
+          timestamp: Date.now()
         },
         usage: result.usage || undefined
       };

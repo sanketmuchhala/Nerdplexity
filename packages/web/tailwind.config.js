@@ -8,79 +8,83 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Nerdplexity themed color palette
+        // Pure dark neutrals — no green tint
         neutral: {
-          950: '#0a0a0a', // deep space black - base background
-          900: '#0d1b0d', // dark green-black - panel background
-          850: '#1a2e1a', // forest green-black - card/input background
-          800: '#2a4a2a', // darker forest green - hover states
-          750: '#3a5a3a', // medium forest green - border states
-          700: '#4a6a4a', // forest green - borders
-          600: '#6a8a6a', // muted green-gray - disabled text
-          400: '#8ab48a', // soft green-gray - muted text
-          300: '#aed4ae', // light green-gray - secondary text
-          200: '#d4ead4', // very light green - primary text
-          100: '#eaf5ea', // pale green - bright text
-          50: '#f5faf5'   // brightest green tint
+          950: '#09090b',  // void black
+          900: '#0f0f13',  // surface
+          850: '#141419',  // card
+          800: '#1a1a22',  // elevated / hover
+          750: '#1e1e28',  // border hover
+          700: '#27272a',  // border
+          600: '#3f3f46',  // disabled
+          500: '#52525b',  // very muted text
+          400: '#71717a',  // muted text
+          300: '#a1a1aa',  // secondary text
+          200: '#d4d4d8',  // body text
+          100: '#f4f4f5',  // emphasized
+          50:  '#fafafa',  // near white
         },
-        // Nerdplexity signature colors
+        // Electric violet — primary accent
         nerdplexity: {
-          50: '#f0fdf4',   // palest green
-          100: '#dcfce7',  // very light green
-          200: '#bbf7d0',  // light green
-          300: '#86efac',  // medium-light green
-          400: '#4ade80',  // bright green
-          500: '#22c55e',  // core green
-          600: '#16a34a',  // darker green
-          700: '#15803d',  // forest green
-          800: '#166534',  // dark forest green
-          900: '#14532d',  // darkest green
-          950: '#052e16'   // black-green
+          50:  '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#6d28d9',
+          800: '#5b21b6',
+          900: '#4c1d95',
+          950: '#2e1065',
         },
-        // Glowing effects
         glow: {
-          50: '#f0fff4',
-          100: '#dcfce7',
-          200: '#bbf7d0',
-          300: '#4ade80',  // primary glow
-          400: '#22c55e',  // secondary glow
-          500: '#16a34a'   // accent glow
-        }
+          300: '#a78bfa',
+          400: '#8b5cf6',
+          500: '#7c3aed',
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif']
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       fontSize: {
-        'xs': ['12px', { lineHeight: '16px' }],    // meta text
-        'sm': ['14px', { lineHeight: '20px' }],    // body text  
-        'base': ['15px', { lineHeight: '24px' }],  // default body
-        'lg': ['16px', { lineHeight: '24px' }],    // inputs
-        'xl': ['18px', { lineHeight: '28px' }],    // heading-sm
-        '2xl': ['20px', { lineHeight: '32px' }],   // heading-md
-        '3xl': ['24px', { lineHeight: '36px' }]    // heading-lg
+        'xs':   ['11px', { lineHeight: '16px' }],
+        'sm':   ['13px', { lineHeight: '20px' }],
+        'base': ['14px', { lineHeight: '22px' }],
+        'lg':   ['15px', { lineHeight: '24px' }],
+        'xl':   ['17px', { lineHeight: '26px' }],
+        '2xl':  ['19px', { lineHeight: '28px' }],
+        '3xl':  ['24px', { lineHeight: '32px' }],
       },
       borderRadius: {
-        'xl': '12px',
-        '2xl': '16px'
+        'xl':  '10px',
+        '2xl': '14px',
+        '3xl': '20px',
       },
       spacing: {
-        '18': '4.5rem' // 72px for better spacing options
+        '18': '4.5rem',
       },
       animation: {
-        'spin-slow': 'spin 3s linear infinite',
-        'fade-in': 'fadeIn 0.5s ease-in-out',
-        'slideDown': 'slideDown 0.5s ease-in-out',
+        'spin-slow':   'spin 3s linear infinite',
+        'fade-in':     'fadeIn 0.3s ease-out',
+        'message-in':  'messageIn 0.25s ease-out',
+        'slideDown':   'slideDown 0.25s ease-out',
+        'pulse-slow':  'pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: 0 },
-          '100%': { opacity: 1 },
+          '0%':   { opacity: '0', transform: 'translateY(3px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        messageIn: {
+          '0%':   { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         slideDown: {
-          '0%': { transform: 'translateY(-20px)', opacity: 0 },
-          '100%': { transform: 'translateY(0)', opacity: 1 },
+          '0%':   { opacity: '0', transform: 'translateY(-6px)', maxHeight: '0' },
+          '100%': { opacity: '1', transform: 'translateY(0)', maxHeight: '300px' },
         },
-      }
+      },
     },
   },
   plugins: [],

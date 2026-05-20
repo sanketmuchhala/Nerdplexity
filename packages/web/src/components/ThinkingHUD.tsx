@@ -83,33 +83,33 @@ export default function ThinkingHUD({
 
   const getPhaseIcon = () => {
     switch (phase) {
-      case "Planning": return <Brain className="w-4 h-4 text-blue-400" />;
-      case "Drafting": return <Zap className="w-4 h-4 text-yellow-400" />;
-      case "Refining": return <Target className="w-4 h-4 text-green-400" />;
-      default: return <Brain className="w-4 h-4 text-blue-400" />;
+      case "Planning": return <Brain className="w-4 h-4 text-nerdplexity-400" />;
+      case "Drafting": return <Zap className="w-4 h-4 text-nerdplexity-300" />;
+      case "Refining": return <Target className="w-4 h-4 text-nerdplexity-200" />;
+      default: return <Brain className="w-4 h-4 text-nerdplexity-400" />;
     }
   };
 
   const getPhaseColor = () => {
     switch (phase) {
-      case "Planning": return "text-blue-400";
-      case "Drafting": return "text-yellow-400";
-      case "Refining": return "text-green-400";
-      default: return "text-blue-400";
+      case "Planning": return "text-nerdplexity-400";
+      case "Drafting": return "text-nerdplexity-300";
+      case "Refining": return "text-nerdplexity-200";
+      default: return "text-nerdplexity-400";
     }
   };
 
   const getProgressBarColor = () => {
     switch (phase) {
-      case "Planning": return "bg-blue-500";
-      case "Drafting": return "bg-yellow-500";
-      case "Refining": return "bg-green-500";
-      default: return "bg-blue-500";
+      case "Planning": return "bg-nerdplexity-600";
+      case "Drafting": return "bg-nerdplexity-500";
+      case "Refining": return "bg-nerdplexity-400";
+      default: return "bg-nerdplexity-600";
     }
   };
 
   return (
-    <div className="rounded-xl bg-neutral-900 border border-nerdplexity-700 p-4 mb-3 nerdplexity-glow">
+    <div className="rounded-xl bg-neutral-900 border border-neutral-700 p-4 mb-3 nerdplexity-glow">
       {/* Main thinking header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
@@ -142,8 +142,8 @@ export default function ThinkingHUD({
             <>
               <div className="text-neutral-500">•</div>
               <div className="flex items-center gap-1">
-                <div className="w-1 h-1 rounded-full bg-nerdplexity-400 animate-pulse"></div>
-                <span className="text-nerdplexity-300 text-sm font-mono">
+                <div className="w-1 h-1 rounded-full bg-nerdplexity-500 animate-pulse"></div>
+                <span className="text-nerdplexity-400 text-sm font-mono">
                   {tokensPerSec.toFixed(1)} tok/s
                 </span>
               </div>

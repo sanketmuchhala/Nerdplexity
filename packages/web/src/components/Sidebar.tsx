@@ -1,46 +1,13 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Settings, Edit2, Check, X } from 'lucide-react';
+import { Plus, Trash2, Settings, Edit2, Check, X, MessageSquare } from 'lucide-react';
 import { Conversation } from '../lib/db';
 import { sanitizeDisplayText } from '../lib/stripEmojis';
 
-// Nerdplexity Logo Component
-const NerdplexityLogo: React.FC<{ size?: number; className?: string }> = ({ size = 20, className = "" }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    className={className}
-  >
-    {/* Nerdplexity symbol - outer circle with nerdplexity symbol */}
-    <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-    <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1" fill="none"/>
-
-    {/* Nerdplexity symbol */}
+const Logo: React.FC = () => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="flex-shrink-0">
+    <rect x="1" y="1" width="18" height="18" rx="5" stroke="currentColor" strokeWidth="1.5" fill="none" />
     <path
-      d="M12 4 L16 8 L16 16 L8 16 L8 8 Z M10 8 L14 8 M8 20 L16 20 M12 16 L12 20"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-
-    {/* Center glow dot */}
-    <circle cx="12" cy="12" r="1" fill="currentColor" className="opacity-80"/>
-  </svg>
-);
-
-const MessageIcon: React.FC<{ size?: number; className?: string }> = ({ size = 14, className = "" }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    className={className}
-  >
-    <path
-      d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z"
+      d="M6 6h3l2 4 2-4h1M6 14h8M10 10v4"
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"
@@ -48,6 +15,30 @@ const MessageIcon: React.FC<{ size?: number; className?: string }> = ({ size = 1
     />
   </svg>
 );
+
+const groupByDate = (conversations: Conversation[]) => {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfYesterday = startOfToday - 86_400_000;
+  const startOfWeek = startOfToday - 6 * 86_400_000;
+
+  const groups: { label: string; items: Conversation[] }[] = [
+    { label: 'Today',     items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'This week', items: [] },
+    { label: 'Older',     items: [] },
+  ];
+
+  for (const conv of conversations) {
+    const t = new Date(conv.updatedAt).getTime();
+    if (t >= startOfToday)     groups[0].items.push(conv);
+    else if (t >= startOfYesterday) groups[1].items.push(conv);
+    else if (t >= startOfWeek) groups[2].items.push(conv);
+    else                       groups[3].items.push(conv);
+  }
+
+  return groups.filter(g => g.items.length > 0);
+};
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -66,156 +57,174 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLoadChat,
   onDeleteChat,
   onRenameChat,
-  onOpenSettings
+  onOpenSettings,
 }) => {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  
+  const [editingId, setEditingId]   = useState<string | null>(null);
+  const [editTitle, setEditTitle]   = useState('');
+
   const handleStartEdit = (conv: Conversation) => {
     setEditingId(conv.id);
     setEditTitle(conv.title);
   };
-  
+
   const handleSaveEdit = () => {
-    if (editingId && editTitle.trim()) {
-      onRenameChat(editingId, editTitle.trim());
-    }
+    if (editingId && editTitle.trim()) onRenameChat(editingId, editTitle.trim());
     setEditingId(null);
     setEditTitle('');
   };
-  
+
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditTitle('');
   };
+
+  const groups = groupByDate(conversations);
+
   return (
-    <div className="w-64 border-r flex flex-col h-screen bg-neutral-900 border-neutral-700 nerdplexity-glow">
-      <div className="p-4 border-b border-neutral-700 nerdplexity-border">
-        <div className="flex items-center gap-2 mb-3">
-          <NerdplexityLogo size={24} className="text-nerdplexity-400 nerdplexity-text-glow" />
-          <span className="font-semibold text-white">Nerdplexity</span>
+    <div
+      className="flex flex-col h-screen bg-neutral-950 border-r border-neutral-700/60"
+      style={{ width: 240, minWidth: 240 }}
+    >
+      {/* Header */}
+      <div className="px-4 pt-5 pb-3">
+        <div className="flex items-center gap-2.5 mb-4">
+          <span className="text-nerdplexity-400">
+            <Logo />
+          </span>
+          <span className="text-sm font-semibold tracking-tight text-neutral-100">
+            Nerdplexity
+          </span>
         </div>
 
         <button
-          onClick={() => {
-            console.log('New Chat clicked!');
-            onNewChat();
-          }}
-          className="w-full flex items-center justify-center gap-2 p-3 rounded-lg font-medium bg-nerdplexity-600 hover:bg-nerdplexity-700 text-white transition-all duration-200 border-none outline-none cursor-pointer nerdplexity-glow"
+          onClick={onNewChat}
+          className="
+            w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
+            text-neutral-300 border border-neutral-700 hover:border-nerdplexity-500/40
+            hover:text-neutral-100 hover:bg-neutral-800/60
+            transition-all duration-150 cursor-pointer
+          "
         >
-          <Plus size={16} />
-          New Chat
+          <Plus size={14} className="text-nerdplexity-400" />
+          New Thread
         </button>
       </div>
-      
-      <div className="flex-1 overflow-y-auto p-2">
+
+      {/* Conversations */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-2 py-1">
         {conversations.length === 0 ? (
-          <div className="text-center text-sm py-8 text-neutral-400">
-            No chat history yet.
-            <br />
-            Start a new conversation!
+          <div className="px-2 py-8 text-center">
+            <MessageSquare size={20} className="text-neutral-700 mx-auto mb-2" />
+            <p className="text-xs text-neutral-600">No threads yet</p>
           </div>
         ) : (
-          <div className="space-y-1">
-            {conversations.map((conv) => (
-              <div
-                key={conv.id}
-                className={`group flex items-center gap-2 p-2 rounded cursor-pointer transition-all duration-200 ${
-                  activeConversationId === conv.id
-                    ? 'bg-neutral-800 nerdplexity-border nerdplexity-glow'
-                    : 'hover:bg-neutral-800 hover:bg-opacity-50 hover:border hover:border-nerdplexity-700'
-                }`}
-                onClick={() => editingId !== conv.id && onLoadChat(conv.id)}
-              >
-                <MessageIcon size={14} className="text-nerdplexity-300 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {editingId === conv.id ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="flex-1 text-sm bg-neutral-800 text-white px-2 py-1 rounded nerdplexity-border focus-ring"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit();
-                          if (e.key === 'Escape') handleCancelEdit();
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        autoFocus
-                      />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSaveEdit();
-                        }}
-                        className="p-1 text-nerdplexity-400 hover:bg-neutral-700 hover:text-nerdplexity-300 rounded transition-colors"
-                      >
-                        <Check size={12} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCancelEdit();
-                        }}
-                        className="p-1 text-red-400 hover:bg-neutral-700 hover:text-red-300 rounded transition-colors"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-sm font-medium truncate text-white">{sanitizeDisplayText(conv.title)}</div>
-                      <div className="text-xs text-neutral-400">
-                        {new Date(conv.updatedAt).toLocaleDateString()}
-                      </div>
-                    </>
-                  )}
+          <div className="space-y-4">
+            {groups.map(group => (
+              <div key={group.label}>
+                <div className="px-2 mb-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-600">
+                    {group.label}
+                  </span>
                 </div>
-                {editingId !== conv.id && (
-                  <div className="opacity-0 group-hover:opacity-100 flex gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartEdit(conv);
-                      }}
-                      className="p-1 text-nerdplexity-400 hover:bg-neutral-700 hover:text-nerdplexity-300 rounded transition-all"
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm('Are you sure you want to delete this conversation?')) {
-                          onDeleteChat(conv.id);
-                        }
-                      }}
-                      className="p-1 text-red-400 hover:bg-neutral-700 hover:text-red-300 rounded transition-all"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                )}
+
+                <div className="space-y-0.5">
+                  {group.items.map(conv => {
+                    const isActive  = activeConversationId === conv.id;
+                    const isEditing = editingId === conv.id;
+
+                    return (
+                      <div
+                        key={conv.id}
+                        onClick={() => !isEditing && onLoadChat(conv.id)}
+                        className={`
+                          group relative flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer
+                          transition-all duration-100
+                          ${isActive
+                            ? 'bg-neutral-800/70 border-l-2 border-nerdplexity-500'
+                            : 'border-l-2 border-transparent hover:bg-neutral-800/40'}
+                        `}
+                      >
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={editTitle}
+                              onChange={e => setEditTitle(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleSaveEdit();
+                                if (e.key === 'Escape') handleCancelEdit();
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              autoFocus
+                              className="
+                                flex-1 min-w-0 text-sm bg-neutral-800 text-neutral-100
+                                border border-neutral-600 rounded px-2 py-0.5
+                                focus:outline-none focus:border-nerdplexity-500/60
+                              "
+                            />
+                            <button
+                              onClick={e => { e.stopPropagation(); handleSaveEdit(); }}
+                              className="p-1 text-nerdplexity-400 hover:text-nerdplexity-300 rounded"
+                            >
+                              <Check size={11} />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleCancelEdit(); }}
+                              className="p-1 text-neutral-500 hover:text-neutral-300 rounded"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-sm truncate leading-snug ${isActive ? 'text-neutral-100' : 'text-neutral-400 group-hover:text-neutral-200'}`}>
+                                {sanitizeDisplayText(conv.title)}
+                              </div>
+                            </div>
+
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 flex-shrink-0 transition-opacity">
+                              <button
+                                onClick={e => { e.stopPropagation(); handleStartEdit(conv); }}
+                                className="p-1 text-neutral-600 hover:text-neutral-300 rounded transition-colors"
+                              >
+                                <Edit2 size={11} />
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (confirm('Delete this conversation?')) onDeleteChat(conv.id);
+                                }}
+                                className="p-1 text-neutral-600 hover:text-red-400 rounded transition-colors"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
-      
-      <div className="p-4 border-t border-neutral-700 nerdplexity-border">
+
+      {/* Footer */}
+      <div className="px-3 py-4 border-t border-neutral-700/60">
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 p-2 hover:bg-neutral-800 rounded transition-all duration-200 text-left hover:nerdplexity-glow"
+          className="
+            w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm
+            text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50
+            transition-all duration-150
+          "
         >
-          <Settings size={16} className="text-nerdplexity-400" />
-          <span className="text-sm text-white">Keys & Settings</span>
+          <Settings size={14} />
+          <span>Settings</span>
         </button>
-
-        <div className="mt-3 text-xs text-neutral-400">
-          <div className="flex items-center gap-1">
-            <div className="w-2 h-2 bg-nerdplexity-500 rounded-full nerdplexity-glow-strong"></div>
-            <span>Push disabled (local-only)</span>
-          </div>
-        </div>
       </div>
     </div>
   );

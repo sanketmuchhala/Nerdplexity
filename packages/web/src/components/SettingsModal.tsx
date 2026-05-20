@@ -378,7 +378,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 </Button>
                 
                 {testResult && (
-                  <div className={`flex items-center gap-2 body-sm ${testResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+                  <div className={`flex items-center gap-2 body-sm ${testResult.ok ? 'text-nerdplexity-400' : 'text-red-400'}`}>
                     {testResult.ok ? <CheckCircle size={16} /> : <XCircle size={16} />}
                     <span>{testResult.message}</span>
                   </div>
@@ -391,7 +391,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           <div className="space-y-4">
             <h3 className="heading-sm text-neutral-100 flex items-center gap-2">
               Local Models
-              <span className="text-xs bg-green-900/30 text-green-400 px-2 py-1 rounded-full">Ollama</span>
+              <span className="text-xs bg-nerdplexity-950/40 text-nerdplexity-400 px-2 py-1 rounded-full">Ollama</span>
             </h3>
             
             <div className="p-6 bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 rounded-xl border border-neutral-600">
@@ -590,7 +590,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                   </Button>
                   
                   {testResult && (
-                    <div className={`flex items-center gap-2 body-sm ${testResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`flex items-center gap-2 body-sm ${testResult.ok ? 'text-nerdplexity-400' : 'text-red-400'}`}>
                       {testResult.ok ? <CheckCircle size={16} /> : <XCircle size={16} />}
                       <span>{testResult.message || (testResult.ok ? 'Ollama server connected successfully' : 'Failed to connect to Ollama server')}</span>
                     </div>

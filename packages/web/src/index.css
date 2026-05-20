@@ -3,238 +3,161 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply box-border;
+  :root {
+    --color-bg:        #09090b;
+    --color-surface:   #0f0f13;
+    --color-card:      #141419;
+    --color-border:    #27272a;
+    --color-accent:    #8b5cf6;
+    --color-accent-hi: #a78bfa;
+    --color-text:      #fafafa;
+    --color-muted:     #71717a;
   }
-  
-  html {
-    @apply antialiased;
-  }
-  
+
+  * { @apply box-border; }
+
+  html { @apply antialiased; }
+
   body {
-    @apply m-0 bg-neutral-950 text-neutral-100 font-sans;
+    @apply m-0 font-sans;
+    background: var(--color-bg);
+    color: var(--color-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @layer components {
-  /* Nerdplexity Typography utilities */
-  .heading-sm {
-    @apply text-xl font-semibold leading-7 text-neutral-100;
-  }
+  /* ─── Typography ─── */
+  .heading-sm  { @apply text-xl  font-semibold leading-7 text-neutral-100; }
+  .heading-md  { @apply text-2xl font-semibold leading-8 text-neutral-100; }
+  .heading-lg  { @apply text-3xl font-semibold leading-9 text-neutral-100; }
+  .body        { @apply text-base leading-6 text-neutral-300; }
+  .body-sm     { @apply text-sm  leading-5 text-neutral-300; }
+  .muted       { @apply text-xs  text-neutral-500 leading-4; }
+  .label       { @apply text-sm  font-medium text-neutral-400; }
+  .caption     { @apply text-xs  text-neutral-500 leading-4; }
 
-  .heading-md {
-    @apply text-2xl font-semibold leading-8 text-neutral-100;
-  }
-
-  .heading-lg {
-    @apply text-3xl font-semibold leading-9 text-neutral-100;
-    text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
-  }
-
-  .body {
-    @apply text-base leading-6 text-neutral-200;
-  }
-
-  .body-sm {
-    @apply text-sm leading-5 text-neutral-200;
-  }
-
-  .muted {
-    @apply text-xs text-neutral-400 leading-4;
-  }
-
-  .label {
-    @apply text-sm font-medium text-neutral-300;
-  }
-
-  .caption {
-    @apply text-xs text-neutral-400 leading-4;
-  }
-
-  /* Nerdplexity Layout utilities */
+  /* ─── Surface containers ─── */
   .panel {
-    @apply bg-neutral-900 border border-neutral-700 rounded-2xl shadow-lg p-6;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(34, 197, 94, 0.1);
+    @apply bg-neutral-900 border border-neutral-700 rounded-2xl shadow-lg;
   }
-
   .panel-compact {
-    @apply bg-neutral-900 border border-neutral-700 rounded-2xl shadow-lg p-4;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(34, 197, 94, 0.1);
+    @apply bg-neutral-900 border border-neutral-700 rounded-xl shadow-md;
   }
-
   .card {
-    @apply bg-neutral-800 border border-neutral-600 rounded-xl p-4;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(34, 197, 94, 0.1);
+    @apply bg-neutral-850 border border-neutral-700 rounded-xl;
   }
-
   .card-compact {
-    @apply bg-neutral-800 border border-neutral-600 rounded-xl p-3;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(34, 197, 94, 0.1);
+    @apply bg-neutral-850 border border-neutral-700 rounded-lg;
   }
 
-  /* Nerdplexity special effects */
+  /* ─── Violet glow system ─── */
   .nerdplexity-glow {
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
+    box-shadow:
+      0 0 0 1px rgba(139, 92, 246, 0.12),
+      0 0 20px rgba(139, 92, 246, 0.07);
   }
-
   .nerdplexity-glow-strong {
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.5), 0 0 60px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(34, 197, 94, 0.2);
+    box-shadow:
+      0 0 0 1px rgba(139, 92, 246, 0.3),
+      0 0 30px rgba(139, 92, 246, 0.15),
+      0 0 60px rgba(139, 92, 246, 0.05);
   }
-
   .nerdplexity-border {
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    box-shadow: inset 0 1px 0 rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.22);
   }
-
   .nerdplexity-text-glow {
-    color: #22c55e;
-    text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+    color: #a78bfa;
+    text-shadow: 0 0 14px rgba(139, 92, 246, 0.45);
   }
 
-  /* Spacing utilities */
-  .space-y-tight > * + * {
-    @apply mt-4;
-  }
-
-  .space-y-relaxed > * + * {
-    @apply mt-8;
-  }
-
-  /* Nerdplexity Focus utilities */
+  /* ─── Focus ─── */
   .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-nerdplexity-400 focus:ring-offset-2 focus:ring-offset-neutral-950;
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.5), 0 0 10px rgba(34, 197, 94, 0.3);
+    @apply focus:outline-none focus:ring-2 focus:ring-nerdplexity-500 focus:ring-offset-1 focus:ring-offset-neutral-950;
   }
 
-  /* Nerdplexity Button styles */
+  /* ─── Button helpers ─── */
   .btn-nerdplexity {
-    @apply bg-nerdplexity-600 hover:bg-nerdplexity-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200;
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    @apply bg-nerdplexity-600 hover:bg-nerdplexity-500 text-white font-medium px-4 py-2 rounded-lg transition-all duration-150;
   }
-
-  .btn-nerdplexity:hover {
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    transform: translateY(-1px);
-  }
-
   .btn-nerdplexity-secondary {
-    @apply bg-neutral-800 hover:bg-neutral-700 text-nerdplexity-300 border border-nerdplexity-600 font-medium px-4 py-2 rounded-lg transition-all duration-200;
-    box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
+    @apply bg-neutral-800 hover:bg-neutral-750 text-neutral-300 border border-neutral-700 hover:border-neutral-600 font-medium px-4 py-2 rounded-lg transition-all duration-150;
   }
 
-  .btn-nerdplexity-secondary:hover {
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
-    border-color: rgba(34, 197, 94, 0.8);
-  }
+  /* ─── Spacing helpers ─── */
+  .space-y-tight   > * + * { @apply mt-4; }
+  .space-y-relaxed > * + * { @apply mt-8; }
 }
 
 @layer utilities {
-  /* Nerdplexity themed scrollbar */
-  .scrollbar-thin::-webkit-scrollbar {
-    @apply w-1.5;
+  /* ─── Scrollbars ─── */
+  .scrollbar-thin::-webkit-scrollbar        { @apply w-1; }
+  .scrollbar-thin::-webkit-scrollbar-track  { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb  {
+    background: rgba(63, 63, 70, 0.8);
+    border-radius: 2px;
   }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-neutral-900;
-    box-shadow: inset 0 0 3px rgba(34, 197, 94, 0.1);
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-neutral-700 rounded-full;
-    background: linear-gradient(180deg, #4a6a4a 0%, #3a5a3a 100%);
-    box-shadow: 0 0 3px rgba(34, 197, 94, 0.3);
-  }
-
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+    background: rgba(139, 92, 246, 0.4);
   }
 
-  /* Global Nerdplexity scrollbar */
-  ::-webkit-scrollbar {
-    @apply w-1.5;
-  }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { scrollbar-width: none; }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-neutral-900;
-    box-shadow: inset 0 0 3px rgba(34, 197, 94, 0.1);
-  }
-
+  ::-webkit-scrollbar       { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-sm;
-    background: linear-gradient(180deg, #4a6a4a 0%, #3a5a3a 100%);
-    box-shadow: 0 0 3px rgba(34, 197, 94, 0.3);
+    background: #27272a;
+    border-radius: 2px;
   }
-
   ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+    background: rgba(139, 92, 246, 0.5);
   }
 }
 
-/* ThinkingHUD Custom Animations */
+/* ─── Keyframe animations ─── */
 @keyframes spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    max-height: 200px;
-  }
+  from { opacity: 0; transform: translateY(-8px); max-height: 0; }
+  to   { opacity: 1; transform: translateY(0);   max-height: 300px; }
 }
 
 @keyframes progress-shimmer {
-  0% {
-    background-position: -200px 0;
-  }
-  100% {
-    background-position: calc(200px + 100%) 0;
-  }
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
 }
 
-.animate-spin-slow {
-  animation: spin-slow 3s linear infinite;
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out infinite alternate;
+@keyframes blink-bar {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
-.animate-slideDown {
-  animation: slideDown 0.3s ease-out forwards;
-}
+.animate-spin-slow   { animation: spin-slow 3s linear infinite; }
+.animate-fade-in     { animation: fade-in 0.8s ease-out infinite alternate; }
+.animate-slideDown   { animation: slideDown 0.25s ease-out forwards; }
+.animate-message-in  { animation: message-in 0.22s ease-out; }
 
 .progress-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.2) 50%,
-    rgba(255, 255, 255, 0) 100%
+    transparent 0%,
+    rgba(139, 92, 246, 0.2) 50%,
+    transparent 100%
   );
   background-size: 200px 100%;
   animation: progress-shimmer 1.5s infinite;

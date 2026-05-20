@@ -1,4 +1,4 @@
-import { ChatRequest } from '../types.js';
+import { ChatRequest, ChatResponse, ProviderAdapter } from '../types.js';
 
 export interface GeminiMessage {
   role: string;
@@ -35,8 +35,10 @@ function convertMessagesToGeminiFormat(messages: Array<{ role: string; content: 
     }));
 }
 
-export const geminiProvider = {
-  async chat(request: ChatRequest) {
+export const geminiProvider: ProviderAdapter = {
+  name: 'Gemini',
+
+  async chat(request: ChatRequest): Promise<ChatResponse> {
     const baseUrl = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com';
     const model = request.model || 'gemini-1.5-flash';
     
@@ -115,7 +117,8 @@ export const geminiProvider = {
     return {
       message: {
         role: 'assistant',
-        content: content
+        content,
+        timestamp: Date.now()
       },
       usage: data.usageMetadata ? {
         prompt_tokens: data.usageMetadata.promptTokenCount,

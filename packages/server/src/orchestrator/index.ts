@@ -9,10 +9,8 @@ import {
   ChatResponse, 
   PromptOrchestration,
   WebSearchResult,
-  ReportCardItem,
-  TaskType,
-  ConfidenceLevel
-} from '@app/types';
+  TaskType
+} from '../types.js';
 
 import { 
   generateOrchestrationPrompt, 

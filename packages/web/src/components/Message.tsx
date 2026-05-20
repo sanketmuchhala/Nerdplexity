@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { User, Bot, ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
-import { Badge, CodeBlock } from './ui';
+import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
+import { CodeBlock } from './ui';
 import { ChatMessage } from '../hooks/useChat';
 import { sanitizeDisplayText } from '../lib/stripEmojis';
 import { WebSearchResult } from '../lib/db';
@@ -15,125 +15,125 @@ interface MessageProps {
 }
 
 export const Message: React.FC<MessageProps> = ({ message }) => {
-  const isUser = message.role === 'user';
+  const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
-  const [showSources, setShowSources] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
-  
-  if (isSystem) return null; // Don't render system messages in UI
-  
-  const hasWebSearchResults = message.metadata?.webSearchResults && message.metadata.webSearchResults.length > 0;
-  const hasReasoning = message.metadata?.reasoning && message.metadata.reasoning.length > 0;
 
-  return (
-    <div className={`flex gap-6 px-6 py-8 ${isUser ? 'bg-neutral-900/30' : ''}`}>
-      {/* Avatar */}
-      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-        isUser 
-          ? 'bg-blue-600 text-white' 
-          : 'bg-neutral-800 text-neutral-300'
-      }`}>
-        {isUser ? <User size={16} /> : <Bot size={16} />}
-      </div>
-      
-      <div className="flex-1 min-w-0 max-w-3xl">
-        {/* Role badge */}
-        <div className="mb-3">
-          <Badge variant={isUser ? 'primary' : 'default'} size="sm">
-            {isUser ? 'You' : 'Assistant'}
-          </Badge>
+  if (isSystem) return null;
+
+  const sources  = message.metadata?.webSearchResults ?? [];
+  const reasoning = message.metadata?.reasoning;
+
+  /* ── User bubble ── */
+  if (isUser) {
+    return (
+      <div className="flex justify-end px-6 py-3 animate-message-in">
+        <div
+          className="
+            max-w-[72%] px-4 py-3
+            bg-neutral-800 border border-neutral-700/80
+            rounded-2xl rounded-tr-sm
+            text-sm text-neutral-100 leading-relaxed
+            whitespace-pre-wrap break-words
+          "
+        >
+          {sanitizeDisplayText(message.content)}
         </div>
-        
-        {/* Message content */}
-        <div className="prose prose-invert max-w-none text-neutral-100 leading-relaxed">
+      </div>
+    );
+  }
+
+  /* ── Assistant response ── */
+  return (
+    <div className="px-6 py-5 animate-message-in">
+      <div className="max-w-3xl mx-auto">
+        {/* Label */}
+        <div className="flex items-center gap-1.5 mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-neutral-600">
+            Nerdplexity
+          </span>
+        </div>
+
+        {/* Source chips — horizontal scroll, above content */}
+        {sources.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-1 scrollbar-none">
+            <span className="flex-shrink-0 text-[10px] font-medium uppercase tracking-wider text-neutral-600">
+              Sources
+            </span>
+            {sources.map((src, i) => (
+              <a
+                key={i}
+                href={src.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={src.title}
+                className="
+                  flex-shrink-0 flex items-center gap-1.5
+                  px-2.5 py-1 rounded-full
+                  border border-neutral-700 bg-neutral-850
+                  text-[11px] text-neutral-400
+                  hover:border-nerdplexity-500/40 hover:text-neutral-200
+                  hover:bg-neutral-800 transition-all duration-100
+                "
+              >
+                <span
+                  className="
+                    flex-shrink-0 w-3.5 h-3.5 rounded-full
+                    bg-nerdplexity-600 text-white
+                    flex items-center justify-center
+                    text-[8px] font-bold
+                  "
+                >
+                  {i + 1}
+                </span>
+                <span className="max-w-[96px] truncate">
+                  {src.source ?? (() => {
+                    try { return new URL(src.url).hostname.replace('www.', ''); } catch { return src.url; }
+                  })()}
+                </span>
+                <ExternalLink size={9} className="opacity-50 flex-shrink-0" />
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* Main content */}
+        <div className="text-sm text-neutral-200 leading-relaxed">
           {formatContent(sanitizeDisplayText(message.content))}
         </div>
-        
-        {/* Web Search Results */}
-        {hasWebSearchResults && (
-          <div className="mt-6 panel">
+
+        {/* Reasoning toggle */}
+        {reasoning && (
+          <div className="mt-4 border border-neutral-700/60 rounded-xl overflow-hidden">
             <button
-              onClick={() => setShowSources(!showSources)}
-              className="w-full flex items-center justify-between p-4 body-sm text-neutral-300 hover:bg-neutral-800 transition-colors rounded-t-2xl"
+              onClick={() => setShowReasoning(s => !s)}
+              className="
+                w-full flex items-center gap-2 px-4 py-2.5
+                text-xs text-neutral-500 hover:text-neutral-300
+                hover:bg-neutral-800/40 transition-colors
+              "
             >
-              <span className="flex items-center gap-2">
-                <ExternalLink size={16} />
-                Sources ({message.metadata?.webSearchResults?.length || 0})
-              </span>
-              {showSources ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <Brain size={13} />
+              <span>Thought process</span>
+              {showReasoning
+                ? <ChevronDown size={12} className="ml-auto" />
+                : <ChevronRight size={12} className="ml-auto" />}
             </button>
-            
-            {showSources && (
-              <div className="border-t border-neutral-700 p-4 space-y-4">
-                {message.metadata?.webSearchResults?.map((result, index) => (
-                  <div key={index} className="card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <h4 className="body-sm font-medium text-neutral-100 mb-2">
-                          {result.title}
-                        </h4>
-                        <p className="muted mb-3 leading-relaxed">
-                          {result.snippet}
-                        </p>
-                        <div className="flex items-center gap-2 muted">
-                          <span>{result.source}</span>
-                          {result.publishDate && (
-                            <>
-                              <span>•</span>
-                              <span>{result.publishDate}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <a
-                        href={result.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-shrink-0 p-2 text-neutral-400 hover:text-blue-400 transition-colors rounded-lg hover:bg-neutral-700"
-                        title="Open in new tab"
-                        aria-label="Open source in new tab"
-                      >
-                        <ExternalLink size={16} />
-                      </a>
-                    </div>
-                  </div>
-                ))}
+            {showReasoning && (
+              <div className="px-4 py-3 bg-neutral-850 border-t border-neutral-700/60 animate-slideDown">
+                <p className="text-xs text-neutral-400 leading-relaxed whitespace-pre-wrap">
+                  {reasoning}
+                </p>
               </div>
             )}
           </div>
         )}
 
-        {/* AI Reasoning */}
-        {hasReasoning && !isUser && (
-          <div className="mt-6 panel">
-            <button
-              onClick={() => setShowReasoning(!showReasoning)}
-              className="w-full flex items-center justify-between p-4 body-sm text-neutral-300 hover:bg-neutral-800 transition-colors rounded-t-2xl"
-            >
-              <span className="flex items-center gap-2">
-                <Brain size={16} />
-                Thought Process
-              </span>
-              {showReasoning ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </button>
-            
-            {showReasoning && (
-              <div className="border-t border-neutral-700 p-4">
-                <div className="card p-4">
-                  <div className="body-sm text-neutral-300 leading-relaxed whitespace-pre-wrap">
-                    {message.metadata?.reasoning}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        
         {/* Timestamp */}
-        <div className="muted mt-4">
+        <div className="mt-3 text-[10px] text-neutral-600">
           {new Date(message.timestamp).toLocaleTimeString(undefined, {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
           })}
         </div>
       </div>
@@ -141,41 +141,42 @@ export const Message: React.FC<MessageProps> = ({ message }) => {
   );
 };
 
+/* ────────────────────────────────────────────────────────────
+   Markdown renderer
+──────────────────────────────────────────────────────────── */
+
 const formatContent = (content: string): React.ReactNode => {
-  const lines = content.split('\n');
+  const lines    = content.split('\n');
   const elements: React.ReactNode[] = [];
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
-    
-    // Code block detection
+
+    // Fenced code block
     if (line.trim().startsWith('```')) {
-      const language = line.trim().slice(3);
+      const language  = line.trim().slice(3).trim();
       const codeLines: string[] = [];
-      i++; // Skip the opening ```
-      
-      // Collect code lines until closing ```
+      i++;
       while (i < lines.length && !lines[i].trim().startsWith('```')) {
         codeLines.push(lines[i]);
         i++;
       }
-      
       if (codeLines.length > 0) {
         elements.push(
-          <CodeBlock 
+          <CodeBlock
             key={`code-${i}`}
-            code={codeLines.join('\n')} 
+            code={codeLines.join('\n')}
             language={language || undefined}
-            className="my-6"
+            className="my-4"
           />
         );
       }
-      i++; // Skip the closing ```
+      i++;
       continue;
     }
-    
-    // Blockquote detection
+
+    // Blockquote
     if (line.trim().startsWith('> ')) {
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith('> ')) {
@@ -183,200 +184,190 @@ const formatContent = (content: string): React.ReactNode => {
         i++;
       }
       elements.push(
-        <blockquote key={`quote-${i}`} className="border-l-4 border-blue-500 pl-4 py-2 my-4 bg-neutral-800/50 rounded-r-lg">
-          <div className="text-neutral-200 italic">
-            {quoteLines.map((quoteLine, idx) => (
-              <div key={idx} className="my-1">{formatTextLine(quoteLine)}</div>
-            ))}
-          </div>
+        <blockquote
+          key={`quote-${i}`}
+          className="border-l-2 border-nerdplexity-600/60 pl-4 py-1 my-3 bg-nerdplexity-950/20 rounded-r-lg"
+        >
+          {quoteLines.map((ql, idx) => (
+            <div key={idx} className="text-neutral-300 italic text-sm my-0.5">
+              {formatTextLine(ql)}
+            </div>
+          ))}
         </blockquote>
       );
       continue;
     }
-    
-    // Table detection (simple markdown tables)
+
+    // Table
     if (line.includes('|') && line.split('|').length >= 3) {
       const tableRows: string[][] = [];
-      let currentRow = i;
-      
-      // Collect table rows
-      while (currentRow < lines.length && lines[currentRow].includes('|')) {
-        const cells = lines[currentRow].split('|').map(cell => cell.trim()).filter(cell => cell);
-        if (cells.length > 0) {
-          tableRows.push(cells);
-        }
-        currentRow++;
+      let cur = i;
+      while (cur < lines.length && lines[cur].includes('|')) {
+        const cells = lines[cur].split('|').map(c => c.trim()).filter(Boolean);
+        if (cells.length > 0) tableRows.push(cells);
+        cur++;
       }
-      
       if (tableRows.length > 0) {
         elements.push(
-          <div key={`table-${i}`} className="my-6 overflow-x-auto">
-            <table className="min-w-full border border-neutral-700 rounded-lg overflow-hidden">
-              <thead className="bg-neutral-800">
+          <div key={`table-${i}`} className="my-4 overflow-x-auto">
+            <table className="min-w-full border border-neutral-700 rounded-xl overflow-hidden text-sm">
+              <thead className="bg-neutral-850">
                 <tr>
-                  {tableRows[0].map((header, idx) => (
-                    <th key={idx} className="px-4 py-3 text-left text-neutral-100 font-semibold border-b border-neutral-700">
-                      {formatTextLine(header)}
+                  {tableRows[0].map((h, idx) => (
+                    <th key={idx} className="px-4 py-2.5 text-left text-neutral-200 font-semibold border-b border-neutral-700 text-xs uppercase tracking-wide">
+                      {formatTextLine(h)}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {tableRows.slice(1).filter(row => !row.every(cell => cell.match(/^-+$/)) && row.length > 0).map((row, rowIdx) => (
-                  <tr key={rowIdx} className="border-b border-neutral-700 hover:bg-neutral-800/30">
-                    {row.map((cell, cellIdx) => (
-                      <td key={cellIdx} className="px-4 py-3 text-neutral-200">
-                        {formatTextLine(cell)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {tableRows.slice(1)
+                  .filter(row => !row.every(c => c.match(/^-+$/)) && row.length > 0)
+                  .map((row, ri) => (
+                    <tr key={ri} className="border-b border-neutral-700/60 hover:bg-neutral-800/30">
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-4 py-2.5 text-neutral-300">
+                          {formatTextLine(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         );
-        i = currentRow;
+        i = cur;
         continue;
       }
     }
-    
-    // Inline code detection
+
+    // Inline code line
     if (line.includes('`') && !line.includes('```')) {
       const parts = line.split('`');
-      const formatted = parts.map((part, idx) => 
-        idx % 2 === 1 ? (
-          <code key={idx} className="px-2 py-1 bg-neutral-800 text-blue-300 rounded text-sm font-mono border border-neutral-700">
-            {part}
-          </code>
-        ) : formatTextLine(part)
+      const formatted = parts.map((part, idx) =>
+        idx % 2 === 1
+          ? <code key={idx} className="px-1.5 py-0.5 bg-neutral-800 text-nerdplexity-300 rounded text-[13px] font-mono border border-neutral-700/60">{part}</code>
+          : formatTextLine(part)
       );
-      elements.push(<div key={i} className="my-2 leading-relaxed">{formatted}</div>);
+      elements.push(<div key={i} className="my-1.5 leading-relaxed">{formatted}</div>);
       i++;
       continue;
     }
-    
-    // Regular line formatting
+
     elements.push(
-      <div key={i} className="my-2 leading-relaxed">
+      <div key={i} className="my-1 leading-relaxed">
         {formatTextLine(line)}
       </div>
     );
     i++;
   }
 
-  return <div className="space-y-1">{elements}</div>;
+  return <div className="space-y-0.5">{elements}</div>;
 };
 
 const formatTextLine = (line: string): React.ReactNode => {
   if (!line.trim()) return <br />;
-  
+
   // Headers
-  if (line.trim().startsWith('# ')) {
-    return <h1 className="text-3xl font-bold text-white mt-8 mb-4 border-b border-neutral-700 pb-2">{line.trim().slice(2)}</h1>;
-  }
-  if (line.trim().startsWith('## ')) {
-    return <h2 className="text-2xl font-semibold text-white mt-6 mb-3">{line.trim().slice(3)}</h2>;
-  }
-  if (line.trim().startsWith('### ')) {
-    return <h3 className="text-xl font-medium text-white mt-5 mb-2">{line.trim().slice(4)}</h3>;
-  }
-  if (line.trim().startsWith('#### ')) {
-    return <h4 className="text-lg font-medium text-neutral-100 mt-4 mb-2">{line.trim().slice(5)}</h4>;
-  }
-  
-  // Numbered lists
-  const numberedMatch = line.match(/^(\s*)(\d+)\.\s(.+)/);
-  if (numberedMatch) {
-    const [, indent, number, content] = numberedMatch;
+  if (line.trim().startsWith('#### ')) return <h4 className="text-sm font-semibold text-neutral-100 mt-4 mb-1.5">{line.trim().slice(5)}</h4>;
+  if (line.trim().startsWith('### '))  return <h3 className="text-base font-semibold text-neutral-100 mt-5 mb-2">{line.trim().slice(4)}</h3>;
+  if (line.trim().startsWith('## '))   return <h2 className="text-lg font-semibold text-neutral-100 mt-6 mb-2">{line.trim().slice(3)}</h2>;
+  if (line.trim().startsWith('# '))    return <h1 className="text-xl font-bold text-white mt-7 mb-3 border-b border-neutral-700 pb-2">{line.trim().slice(2)}</h1>;
+
+  // Numbered list
+  const numMatch = line.match(/^(\s*)(\d+)\.\s(.+)/);
+  if (numMatch) {
+    const [, indent, number, content] = numMatch;
     const level = Math.floor(indent.length / 2);
     return (
-      <div className={`flex items-start gap-3 my-1`} style={{ marginLeft: `${level * 1.5}rem` }}>
-        <span className="flex-shrink-0 text-blue-400 font-medium min-w-[1.5rem]">{number}.</span>
-        <span className="text-neutral-100">{formatInlineText(content)}</span>
+      <div className="flex items-start gap-2.5 my-0.5" style={{ marginLeft: `${level * 1.25}rem` }}>
+        <span className="flex-shrink-0 text-nerdplexity-400 font-medium min-w-[1.25rem] text-right text-sm">{number}.</span>
+        <span className="text-neutral-200 text-sm">{formatInlineText(content)}</span>
       </div>
     );
   }
-  
-  // Bullet points
+
+  // Bullet
   if (line.trim().startsWith('- ') || line.trim().startsWith('• ') || line.trim().startsWith('* ')) {
-    const indent = line.match(/^(\s*)/)?.[1] || '';
-    const level = Math.floor(indent.length / 2);
+    const indent = line.match(/^(\s*)/)?.[1] ?? '';
+    const level  = Math.floor(indent.length / 2);
     const content = line.trim().slice(2);
     return (
-      <div className={`flex items-start gap-3 my-1`} style={{ marginLeft: `${level * 1.5}rem` }}>
-        <span className="flex-shrink-0 text-blue-400 mt-1">•</span>
-        <span className="text-neutral-100">{formatInlineText(content)}</span>
+      <div className="flex items-start gap-2.5 my-0.5" style={{ marginLeft: `${level * 1.25}rem` }}>
+        <span className="flex-shrink-0 text-nerdplexity-500 mt-1.5 w-1 h-1 rounded-full bg-current block" />
+        <span className="text-neutral-200 text-sm">{formatInlineText(content)}</span>
       </div>
     );
   }
-  
-  // Task lists
+
+  // Task list
   if (line.trim().startsWith('- [ ]') || line.trim().startsWith('- [x]') || line.trim().startsWith('- [X]')) {
     const checked = line.includes('[x]') || line.includes('[X]');
     const content = line.replace(/^(\s*)-\s*\[[xX\s]\]\s*/, '');
     return (
-      <div className="flex items-start gap-3 my-1">
-        <input 
-          type="checkbox" 
-          checked={checked} 
-          readOnly
-          className="mt-1 rounded border-neutral-600 bg-neutral-800 text-blue-500 focus:ring-blue-500" 
-        />
-        <span className={`${checked ? 'line-through text-neutral-400' : 'text-neutral-100'}`}>
+      <div className="flex items-start gap-2.5 my-0.5">
+        <input type="checkbox" checked={checked} readOnly className="mt-1 rounded border-neutral-600 bg-neutral-800 accent-nerdplexity-500" />
+        <span className={`text-sm ${checked ? 'line-through text-neutral-500' : 'text-neutral-200'}`}>
           {formatInlineText(content)}
         </span>
       </div>
     );
   }
-  
-  return <span className="text-neutral-100">{formatInlineText(line)}</span>;
+
+  return <span className="text-neutral-200 text-sm">{formatInlineText(line)}</span>;
 };
 
 const formatInlineText = (text: string): React.ReactNode => {
-  // Handle multiple formatting types in order
-  let result: React.ReactNode = text;
-  
-  // Bold text (**text**)
+  // Bold
   if (text.includes('**')) {
     const parts = text.split('**');
-    result = parts.map((part, i) => 
-      i % 2 === 1 ? <strong key={`bold-${i}`} className="font-bold text-white">{part}</strong> : part
+    const nodes = parts.map((part, i) =>
+      i % 2 === 1
+        ? <strong key={`b${i}`} className="font-semibold text-neutral-100">{part}</strong>
+        : part
     );
+    if (nodes.some(n => typeof n !== 'string')) return <>{nodes}</>;
   }
-  
-  // Italic text (*text*)
-  if (typeof result === 'string' && result.includes('*')) {
-    const parts = result.split('*');
-    result = parts.map((part, i) => 
-      i % 2 === 1 ? <em key={`italic-${i}`} className="italic text-neutral-200">{part}</em> : part
-    );
-  }
-  
-  // Links [text](url)
-  if (typeof result === 'string') {
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    const parts = result.split(linkRegex);
-    if (parts.length > 1) {
-      const linkElements: React.ReactNode[] = [];
-      for (let i = 0; i < parts.length; i += 3) {
-        if (parts[i]) linkElements.push(parts[i]);
-        if (parts[i + 1] && parts[i + 2]) {
-          linkElements.push(
-            <a 
-              key={`link-${i}`}
-              href={parts[i + 2]} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/50 hover:decoration-blue-300 transition-colors"
-            >
-              {parts[i + 1]}
-            </a>
-          );
-        }
-      }
-      result = linkElements;
+
+  // Italic
+  if (text.includes('*') && !text.includes('**')) {
+    const parts = text.split('*');
+    if (parts.length % 2 === 1) {
+      const nodes = parts.map((part, i) =>
+        i % 2 === 1
+          ? <em key={`em${i}`} className="italic text-neutral-300">{part}</em>
+          : part
+      );
+      return <>{nodes}</>;
     }
   }
-  
-  return result;
+
+  // Links
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  if (linkRegex.test(text)) {
+    const parts = text.split(/(\[[^\]]+\]\([^)]+\))/g);
+    return (
+      <>
+        {parts.map((part, i) => {
+          const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+          if (m) {
+            return (
+              <a
+                key={i}
+                href={m[2]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-nerdplexity-400 hover:text-nerdplexity-300 underline decoration-nerdplexity-500/40 underline-offset-2 transition-colors"
+              >
+                {m[1]}
+              </a>
+            );
+          }
+          return part;
+        })}
+      </>
+    );
+  }
+
+  return text;
 };
