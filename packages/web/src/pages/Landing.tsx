@@ -60,7 +60,7 @@ export default function Landing() {
         style={{
           top: '-15%', left: '50%', transform: 'translateX(-50%)',
           width: '900px', height: '700px',
-          background: 'radial-gradient(ellipse at 50% 20%, rgba(37,99,235,.15) 0%, transparent 60%)',
+          background: 'radial-gradient(ellipse at 50% 20%, rgba(30,86,222,.15) 0%, transparent 60%)',
           filter: 'blur(1px)',
         }}
       />
@@ -71,7 +71,7 @@ export default function Landing() {
           <div className="flex items-center gap-2.5">
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-              style={{ background: 'var(--blue-dark)', boxShadow: '0 0 14px rgba(37,99,235,.5)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
+              style={{ background: 'var(--blue-dark)', boxShadow: '0 0 14px rgba(30,86,222,.5)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
             >N</div>
             <span className="font-semibold text-sm" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.02em' }}>
               Nerdplexity
@@ -105,7 +105,7 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="relative z-10 pt-24 pb-20 px-6 text-center max-w-5xl mx-auto">
         <div className="inline-flex items-center gap-2 mb-8 px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: 'rgba(37,99,235,.08)', border: '1px solid rgba(59,130,246,.2)', color: 'var(--blue-bright)' }}>
+          style={{ background: 'rgba(30,86,222,.08)', border: '1px solid rgba(66,133,244,.2)', color: 'var(--blue-bright)' }}>
           <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--blue-bright)' }} />
           Private-first · Open source · Local-first
         </div>
@@ -169,7 +169,7 @@ export default function Landing() {
           style={{
             border: '1px solid var(--b-hi)',
             background: 'var(--s0)',
-            boxShadow: '0 0 0 1px rgba(59,130,246,.04), 0 40px 120px rgba(0,0,0,.9), 0 0 100px rgba(37,99,235,.05)',
+            boxShadow: '0 0 0 1px rgba(66,133,244,.04), 0 40px 120px rgba(0,0,0,.9), 0 0 100px rgba(30,86,222,.05)',
           }}
         >
           {/* Window chrome */}
@@ -202,7 +202,7 @@ export default function Landing() {
                 {['Explain transformer attention', 'Rust async patterns', 'SQL window functions', 'React Server Components'].map((t, i) => (
                   <div key={t} className="text-xs px-2.5 py-1.5 rounded-lg mb-0.5 truncate"
                     style={{
-                      background: i === 0 ? 'rgba(59,130,246,.07)' : 'transparent',
+                      background: i === 0 ? 'rgba(66,133,244,.07)' : 'transparent',
                       borderLeft: i === 0 ? '2px solid var(--blue)' : '2px solid transparent',
                       color: i === 0 ? 'var(--blue-bright)' : 'var(--t3)',
                     }}>{t}</div>
@@ -240,7 +240,7 @@ export default function Landing() {
                     <div className="flex gap-1.5 ml-1 flex-wrap">
                       {['arxiv.org', '"Attention is All You Need"', 'huggingface.co'].map((s, i) => (
                         <span key={s} className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--s2)', border: '1px solid var(--b)', color: 'var(--t3)' }}>
-                          <span className="w-3 h-3 rounded-full text-[8px] flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: 'rgba(59,130,246,.5)' }}>{i+1}</span>
+                          <span className="w-3 h-3 rounded-full text-[8px] flex items-center justify-center text-white font-bold flex-shrink-0" style={{ background: 'rgba(66,133,244,.5)' }}>{i+1}</span>
                           {s}
                         </span>
                       ))}
@@ -251,7 +251,7 @@ export default function Landing() {
                       Self-attention allows every token to attend to every other token simultaneously, computing weighted sums based on query-key dot products.
                     </p>
                     <p className="text-sm leading-relaxed" style={{ color: 'var(--t2)' }}>
-                      For each position <span className="font-mono text-xs px-1.5 rounded" style={{ background: 'rgba(59,130,246,.1)', color: 'var(--blue-bright)' }}>i</span>, the model computes Q, K, V projections and scales dot products by <span className="font-mono text-xs px-1 rounded" style={{ background: 'rgba(59,130,246,.1)', color: 'var(--blue-bright)' }}>√d_k</span>.
+                      For each position <span className="font-mono text-xs px-1.5 rounded" style={{ background: 'rgba(66,133,244,.1)', color: 'var(--blue-bright)' }}>i</span>, the model computes Q, K, V projections and scales dot products by <span className="font-mono text-xs px-1 rounded" style={{ background: 'rgba(66,133,244,.1)', color: 'var(--blue-bright)' }}>√d_k</span>.
                     </p>
                   </div>
                 </div>
@@ -332,7 +332,7 @@ export default function Landing() {
               className="p-5 rounded-xl transition-all duration-200 group cursor-default"
               style={{ background: 'var(--s0)', border: '1px solid var(--b)' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,.2)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(66,133,244,.2)';
                 (e.currentTarget as HTMLElement).style.background = 'var(--s1)';
                 (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,.6)';
               }}
@@ -343,7 +343,7 @@ export default function Landing() {
               }}
             >
               <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4 transition-all duration-200"
-                style={{ background: 'rgba(59,130,246,.07)', border: '1px solid rgba(59,130,246,.15)' }}>
+                style={{ background: 'rgba(66,133,244,.07)', border: '1px solid rgba(66,133,244,.15)' }}>
                 <Icon size={16} style={{ color: 'var(--blue-bright)' }} />
               </div>
               <h3 className="text-sm font-semibold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}>{title}</h3>
@@ -360,12 +360,12 @@ export default function Landing() {
           style={{
             background: 'var(--s0)',
             border: '1px solid var(--b)',
-            boxShadow: '0 0 60px rgba(37,99,235,.03)',
+            boxShadow: '0 0 60px rgba(30,86,222,.03)',
           }}
         >
           <div className="max-w-lg mb-12">
             <div className="inline-flex items-center gap-2 mb-5 px-3 py-1.5 rounded-full text-xs font-medium"
-              style={{ background: 'rgba(59,130,246,.07)', border: '1px solid rgba(59,130,246,.18)', color: 'var(--blue-bright)' }}>
+              style={{ background: 'rgba(66,133,244,.07)', border: '1px solid rgba(66,133,244,.18)', color: 'var(--blue-bright)' }}>
               Privacy by design
             </div>
             <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.03em' }}>
@@ -379,7 +379,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {PRIVACY_PILLARS.map(({ icon: Icon, title, desc }) => (
               <div key={title} className="flex gap-4 p-5 rounded-xl" style={{ background: 'var(--s1)', border: '1px solid var(--b-hi)' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(59,130,246,.07)', border: '1px solid rgba(59,130,246,.15)' }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(66,133,244,.07)', border: '1px solid rgba(66,133,244,.15)' }}>
                   <Icon size={15} style={{ color: 'var(--blue-bright)' }} />
                 </div>
                 <div>
@@ -442,7 +442,7 @@ export default function Landing() {
           <div className="flex items-start justify-between mb-8 gap-4">
             <div>
               <div className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-full text-xs font-medium"
-                style={{ background: 'rgba(59,130,246,.07)', border: '1px solid rgba(59,130,246,.18)', color: 'var(--blue-bright)' }}>
+                style={{ background: 'rgba(66,133,244,.07)', border: '1px solid rgba(66,133,244,.18)', color: 'var(--blue-bright)' }}>
                 PromptOps
               </div>
               <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em' }}>
@@ -473,7 +473,7 @@ export default function Landing() {
                 <div className="flex items-end justify-between gap-1">
                   <span className="text-xl font-bold leading-none" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--blue-bright)' }}>{k.value}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded font-medium mb-0.5"
-                    style={{ background: k.up ? 'rgba(59,130,246,.1)' : 'rgba(239,68,68,.08)', color: k.up ? 'var(--blue-bright)' : '#f87171' }}>
+                    style={{ background: k.up ? 'rgba(66,133,244,.1)' : 'rgba(239,68,68,.08)', color: k.up ? 'var(--blue-bright)' : '#f87171' }}>
                     {k.delta}
                   </span>
                 </div>
@@ -507,13 +507,13 @@ export default function Landing() {
           className="rounded-2xl p-12 md:p-14"
           style={{
             background: 'var(--s0)',
-            border: '1px solid rgba(59,130,246,.15)',
-            boxShadow: '0 0 80px rgba(37,99,235,.06)',
+            border: '1px solid rgba(66,133,244,.15)',
+            boxShadow: '0 0 80px rgba(30,86,222,.06)',
           }}
         >
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-6 text-xl font-bold text-white"
-            style={{ background: 'var(--blue-dark)', boxShadow: '0 0 32px rgba(37,99,235,.4)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
+            style={{ background: 'var(--blue-dark)', boxShadow: '0 0 32px rgba(30,86,222,.4)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
           >N</div>
 
           <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.03em' }}>

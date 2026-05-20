@@ -45,10 +45,10 @@ export function Sidebar({ conversations, activeConversationId, onNewChat, onLoad
   return (
     <aside
       className="flex flex-col h-screen flex-shrink-0"
-      style={{ width: 260, background: 'var(--s0)', borderRight: '1px solid var(--b)' }}
+      style={{ width: 260, background: 'var(--s1)', boxShadow: '1px 0 0 rgba(255,255,255,.05)' }}
     >
       {/* ── Logo + New thread ── */}
-      <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid var(--b)' }}>
+      <div className="px-4 pt-4 pb-3" style={{ boxShadow: '0 1px 0 rgba(255,255,255,.05)' }}>
         <Link to="/" className="flex items-center gap-2.5 mb-3 group">
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 transition-all"
@@ -103,9 +103,8 @@ export function Sidebar({ conversations, activeConversationId, onNewChat, onLoad
                         className="group relative flex items-center rounded-lg cursor-pointer transition-all duration-100"
                         style={{
                           padding: '6px 10px',
-                          background: active ? 'rgba(59,130,246,.08)' : 'transparent',
-                          borderLeft: active ? '2px solid var(--blue)' : '2px solid transparent',
-                          paddingLeft: active ? '8px' : undefined,
+                          background: active ? 'rgba(66,133,244,.08)' : 'transparent',
+                          boxShadow: active ? 'inset 2px 0 0 var(--blue)' : 'none',
                         }}
                         onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--s2)'; }}
                         onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
@@ -157,7 +156,7 @@ export function Sidebar({ conversations, activeConversationId, onNewChat, onLoad
       </div>
 
       {/* ── Footer ── */}
-      <div className="px-3 py-3" style={{ borderTop: '1px solid var(--b)' }}>
+      <div className="px-3 py-3" style={{ boxShadow: '0 -1px 0 rgba(255,255,255,.05)' }}>
         <button
           onClick={onOpenSettings}
           className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all"

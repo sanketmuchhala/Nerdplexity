@@ -168,9 +168,14 @@ export function Chat({ onOpenSettings }: Props) {
   /* ── No conversation ── */
   if (!conversation) {
     return (
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      <div className="flex-1 flex flex-col overflow-hidden relative" style={{ background: 'var(--bg)' }}>
+        {/* Nebula spotlight on empty state */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 70% 55% at 50% 62%, rgba(66,133,244,.13) 0%, rgba(66,133,244,.04) 40%, transparent 70%)', zIndex: 0 }}
+        />
         <ChatHeader conversation={null} onOpenSettings={onOpenSettings} />
-        <div className="flex-1 flex items-center justify-center px-6">
+        <div className="flex-1 flex items-center justify-center px-6" style={{ position: 'relative', zIndex: 1 }}>
           <div className="text-center max-w-sm w-full">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 text-xl font-bold text-white"
               style={{ background: 'var(--blue-dark)', boxShadow: '0 0 28px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
@@ -201,15 +206,24 @@ export function Chat({ onOpenSettings }: Props) {
 
   /* ── Active conversation ── */
   return (
-    <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div className="flex-1 flex flex-col overflow-hidden relative" style={{ background: 'var(--bg)' }}>
       <ChatHeader
         conversation={conversation} onOpenSettings={onOpenSettings}
         onProviderChange={handleProviderChange} onModelChange={handleModelChange}
         availableProviders={availableProviders}
       />
 
+      {/* Nebula spotlight — soft blue glow behind the chat canvas */}
+      <div
+        className="absolute inset-0 pointer-events-none select-none"
+        style={{
+          background: 'radial-gradient(ellipse 70% 55% at 50% 62%, rgba(66,133,244,.13) 0%, rgba(66,133,244,.04) 40%, transparent 70%)',
+          zIndex: 0,
+        }}
+      />
+
       {/* Message thread */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="flex-1 overflow-y-auto scrollbar-thin" style={{ position: 'relative', zIndex: 1 }}>
         {conversation.messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
@@ -246,7 +260,7 @@ export function Chat({ onOpenSettings }: Props) {
       </div>
 
       {/* Composer */}
-      <div className="flex-shrink-0 px-4 pb-5 pt-3" style={{ borderTop: '1px solid var(--b)' }}>
+      <div className="flex-shrink-0 px-4 pb-5 pt-3" style={{ borderTop: '1px solid var(--b)', position: 'relative', zIndex: 2 }}>
         <div className="max-w-[680px] mx-auto w-full">
           {!hasKey ? (
             <div className="px-5 py-4 rounded-xl text-center"
@@ -259,8 +273,15 @@ export function Chat({ onOpenSettings }: Props) {
           ) : (
             <form onSubmit={handleSubmit}>
               <div
-                className="composer-wrap rounded-2xl overflow-hidden transition-all duration-200"
-                style={{ background: 'var(--s1)', border: '1px solid var(--b-hi)', boxShadow: '0 4px 24px rgba(0,0,0,.4)' }}
+                className="composer-wrap overflow-hidden transition-all duration-200"
+                style={{
+                  borderRadius: '28px',
+                  background: 'rgba(30,31,34,0.85)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(255,255,255,.08)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.06) inset',
+                }}
               >
                 <textarea
                   ref={textareaRef}
