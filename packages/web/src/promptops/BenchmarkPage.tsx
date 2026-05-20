@@ -142,12 +142,12 @@ const BenchmarkPage: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-screen-xl p-6 bg-neutral-950 text-neutral-200 font-sans min-h-screen">
+    <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}><div className="max-w-4xl mx-auto px-6 py-6">
       <AnalyticsNav title="Performance Benchmark" />
 
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Performance Benchmark</h1>
-        <p className="text-neutral-400 text-lg">
+        <h1 className="text-[22px] font-bold tracking-tight text-neutral-100 mb-1">Performance Benchmark</h1>
+        <p className="text-[13px] text-neutral-600">
           Test TTFT and latency performance for local Ollama models
         </p>
       </header>
@@ -262,6 +262,7 @@ const BenchmarkPage: React.FC = () => {
           <p>• Close other heavy applications for best results</p>
         </div>
       </div>
+    </div>
     </div>
   );
 };

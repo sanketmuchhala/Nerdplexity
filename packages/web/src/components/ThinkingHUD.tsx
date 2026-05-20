@@ -177,7 +177,7 @@ export default function ThinkingHUD({
 
       {/* Dynamic processing detail */}
       <div className="flex items-center justify-between">
-        <div className="text-sm text-neutral-400 italic animate-fade-in">
+        <div className="text-sm text-neutral-400 italic animate-thinking-text">
           {showingDetail}
         </div>
 

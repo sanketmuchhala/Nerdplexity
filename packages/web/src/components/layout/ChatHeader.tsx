@@ -2,23 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Settings, ChevronDown, Check } from 'lucide-react';
 import { sanitizeDisplayText } from '../../lib/stripEmojis';
 import { PROVIDER_NAMES, getModelsForProvider } from '../../constants/models';
-import type { Provider } from '../../lib/db';
-import type { Conversation } from '../../lib/db';
+import type { Provider, Conversation } from '../../lib/db';
 
 interface ChatHeaderProps {
   conversation: Conversation | null;
   onOpenSettings: () => void;
-  onProviderChange?: (provider: Provider) => void;
-  onModelChange?: (model: string) => void;
+  onProviderChange?: (p: Provider) => void;
+  onModelChange?: (m: string) => void;
   availableProviders?: string[];
 }
 
-function Pill<T extends string>({
-  value,
-  options,
-  displayMap,
-  onChange,
-  disabled,
+function SelectPill<T extends string>({
+  value, options, displayMap, onChange, disabled,
 }: {
   value: T;
   options: readonly T[];
@@ -29,64 +24,55 @@ function Pill<T extends string>({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const canOpen = !disabled && options.length > 1;
+  const label = displayMap ? (displayMap[value] ?? value) : value;
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
   }, [open]);
-
-  const label = displayMap ? (displayMap[value] ?? value) : value;
 
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => canOpen && setOpen(o => !o)}
         disabled={!canOpen}
-        className={`
-          flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium
-          border border-neutral-700 bg-neutral-850 text-neutral-400
-          transition-all duration-100
-          ${canOpen
-            ? 'hover:border-neutral-600 hover:text-neutral-200 hover:bg-neutral-800 cursor-pointer'
-            : 'cursor-default'}
-        `}
+        onClick={() => canOpen && setOpen(o => !o)}
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[12px] font-medium text-neutral-500 transition-all duration-100"
+        style={{
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border)',
+          cursor: canOpen ? 'pointer' : 'default',
+        }}
+        onMouseEnter={e => { if (canOpen) (e.currentTarget as HTMLElement).style.color = '#e4e4e7'; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
       >
         <span className="max-w-[140px] truncate">{label}</span>
         {canOpen && (
-          <ChevronDown
-            size={10}
-            className={`transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-          />
+          <ChevronDown size={10} className={`flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
         )}
       </button>
 
       {open && (
         <div
-          className="
-            absolute top-full left-0 mt-1.5 z-50 min-w-[160px]
-            bg-neutral-900 border border-neutral-700/80 rounded-xl shadow-2xl
-            overflow-hidden animate-fade-in
-          "
-          style={{ backdropFilter: 'blur(12px)' }}
+          className="absolute top-full left-0 mt-1.5 z-50 min-w-[160px] rounded-xl overflow-hidden animate-fade-in"
+          style={{
+            background: 'var(--surface-1)',
+            border: '1px solid var(--border-hi)',
+            boxShadow: '0 8px 32px rgba(0,0,0,.6)',
+          }}
         >
           {options.map(opt => {
-            const optLabel = displayMap ? (displayMap[opt] ?? opt) : opt;
             const isActive = opt === value;
+            const optLabel = displayMap ? (displayMap[opt] ?? opt) : opt;
             return (
               <button
                 key={opt}
                 onClick={() => { onChange(opt); setOpen(false); }}
-                className={`
-                  w-full flex items-center justify-between gap-3 px-3 py-2 text-xs
-                  transition-colors duration-100
-                  ${isActive
-                    ? 'text-nerdplexity-400 bg-nerdplexity-950/40'
-                    : 'text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100'}
-                `}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[12px] transition-colors text-left"
+                style={{ color: isActive ? '#fb7185' : 'var(--text-2)' }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <span className="truncate">{optLabel}</span>
                 {isActive && <Check size={11} className="flex-shrink-0 text-nerdplexity-400" />}
@@ -100,22 +86,22 @@ function Pill<T extends string>({
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
-  conversation,
-  onOpenSettings,
-  onProviderChange,
-  onModelChange,
+  conversation, onOpenSettings,
+  onProviderChange, onModelChange,
   availableProviders = [],
 }) => {
   if (!conversation) {
     return (
-      <div className="flex items-center justify-between px-6 py-3.5 border-b border-neutral-700/60">
-        <span className="text-sm font-semibold text-neutral-500">Nerdplexity</span>
+      <div
+        className="flex items-center justify-between h-12 px-5 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <span className="text-[12px] font-semibold text-neutral-700 tracking-tight">Nerdplexity</span>
         <button
           onClick={onOpenSettings}
-          className="p-1.5 rounded-lg text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-all"
-          aria-label="Open settings"
+          className="p-1.5 rounded-lg text-neutral-700 hover:text-neutral-300 transition-colors"
         >
-          <Settings size={16} />
+          <Settings size={15} />
         </button>
       </div>
     );
@@ -124,35 +110,39 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const availableModels = getModelsForProvider(conversation.provider);
 
   return (
-    <div className="flex items-center justify-between gap-4 px-6 py-3.5 border-b border-neutral-700/60">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <h1 className="text-sm font-medium text-neutral-300 truncate">
-          {sanitizeDisplayText(conversation.title)}
-        </h1>
+    <div
+      className="flex items-center h-12 px-5 gap-3 flex-shrink-0"
+      style={{ borderBottom: '1px solid var(--border)' }}
+    >
+      {/* Thread title */}
+      <h1 className="text-[13px] font-medium text-neutral-400 truncate flex-1 min-w-0">
+        {sanitizeDisplayText(conversation.title)}
+      </h1>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Pill
-            value={conversation.provider}
-            options={availableProviders as Provider[]}
-            displayMap={PROVIDER_NAMES as Record<string, string>}
-            onChange={p => onProviderChange?.(p as Provider)}
-            disabled={availableProviders.length <= 1}
-          />
-          <Pill
-            value={conversation.model}
-            options={availableModels}
-            onChange={m => onModelChange?.(m)}
-            disabled={availableModels.length <= 1}
-          />
-        </div>
+      {/* Provider + model pills */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <SelectPill
+          value={conversation.provider}
+          options={availableProviders as Provider[]}
+          displayMap={PROVIDER_NAMES as Record<string, string>}
+          onChange={p => onProviderChange?.(p as Provider)}
+          disabled={availableProviders.length <= 1}
+        />
+        <SelectPill
+          value={conversation.model}
+          options={availableModels}
+          onChange={m => onModelChange?.(m)}
+          disabled={availableModels.length <= 1}
+        />
       </div>
 
+      {/* Settings */}
       <button
         onClick={onOpenSettings}
-        className="flex-shrink-0 p-1.5 rounded-lg text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 transition-all"
-        aria-label="Open settings (Cmd+K)"
+        className="flex-shrink-0 p-1.5 rounded-lg text-neutral-700 hover:text-neutral-300 transition-colors"
+        aria-label="Settings"
       >
-        <Settings size={16} />
+        <Settings size={15} />
       </button>
     </div>
   );

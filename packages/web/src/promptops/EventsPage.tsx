@@ -63,24 +63,24 @@ export default function EventsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-screen-2xl p-6 bg-neutral-950 text-neutral-200 font-sans">
+      <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nerdplexity-400 nerdplexity-glow"></div>
           <span className="ml-3 text-neutral-400">Loading events...</span>
         </div>
-      </div>
+      </div></div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6 bg-neutral-950 text-neutral-200 font-sans">
+    <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
       {/* Navigation */}
       <AnalyticsNav title="All Events" />
 
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">All Events</h1>
-        <p className="text-neutral-400 text-lg">Detailed log of all LLM interactions and their metrics</p>
+        <h1 className="text-[22px] font-bold tracking-tight text-neutral-100 mb-1">All Events</h1>
+        <p className="text-[13px] text-neutral-600">Detailed log of all LLM interactions and their metrics</p>
 
         {/* Summary Stats */}
         <div className="flex gap-6 mt-4">
@@ -127,6 +127,7 @@ export default function EventsPage() {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }

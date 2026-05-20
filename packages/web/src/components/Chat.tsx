@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plus, Globe, Brain } from 'lucide-react';
+import { Send, Loader2, Globe, Brain } from 'lucide-react';
 import { Message } from './Message';
 import { ChatHeader } from './layout/ChatHeader';
 
@@ -351,62 +351,57 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
     }
   };
 
-  // ── No conversation selected ──────────────────────────────
+  /* ── No conversation selected ─────────────────────────── */
   if (!conversation) {
     return (
-      <div className="flex-1 flex flex-col bg-neutral-950">
+      <div className="flex-1 flex flex-col" style={{ background: 'var(--bg)' }}>
         <ChatHeader conversation={null} onOpenSettings={onOpenSettings} />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-sm px-6 animate-fade-in">
-            <div className="w-12 h-12 rounded-2xl bg-nerdplexity-600/20 border border-nerdplexity-500/30 flex items-center justify-center mx-auto mb-6">
-              <span className="text-xl text-nerdplexity-400 font-bold">N</span>
+        <div className="flex-1 flex flex-col items-center justify-center gap-8 px-4">
+          {/* Logo mark */}
+          <div className="text-center">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.2)' }}
+            >
+              <span className="text-lg font-bold text-nerdplexity-400">N</span>
             </div>
-            <h2 className="text-lg font-semibold text-neutral-100 mb-2">Nerdplexity</h2>
-            <p className="text-sm text-neutral-500 mb-8 leading-relaxed">
-              Bring your own keys. Ask anything. Local-first, private by default.
+            <h2 className="text-[16px] font-semibold text-neutral-200 mb-1">Nerdplexity</h2>
+            <p className="text-[13px] text-neutral-600 leading-relaxed max-w-[260px]">
+              Bring your own keys — local-first, private by default.
             </p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => newConversation()}
-                className="
-                  flex items-center justify-center gap-2 w-full px-4 py-2.5
-                  bg-nerdplexity-600 hover:bg-nerdplexity-500
-                  text-white text-sm font-medium rounded-xl
-                  transition-all duration-150
-                "
-              >
-                <Plus size={16} />
-                New Thread
-              </button>
-              <button
-                onClick={onOpenSettings}
-                className="
-                  flex items-center justify-center gap-2 w-full px-4 py-2.5
-                  bg-neutral-800 hover:bg-neutral-750
-                  text-neutral-300 hover:text-neutral-100
-                  text-sm font-medium rounded-xl border border-neutral-700
-                  transition-all duration-150
-                "
-              >
-                Configure API Keys
-              </button>
-            </div>
-            {!hasValidKey && (
-              <div className="mt-5 px-4 py-3 bg-amber-900/20 border border-amber-800/60 rounded-xl">
-                <p className="text-xs text-amber-300">
-                  No API key configured. Add one in settings to start chatting.
-                </p>
-              </div>
-            )}
           </div>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-2.5 w-full max-w-[260px]">
+            <button
+              onClick={() => newConversation()}
+              className="w-full py-2.5 text-white text-[13px] font-medium rounded-xl transition-all"
+              style={{ background: 'var(--accent)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#e11d48'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent)'; }}
+            >
+              New Thread
+            </button>
+            <button
+              onClick={onOpenSettings}
+              className="w-full py-2.5 text-neutral-400 hover:text-neutral-200 text-[13px] font-medium rounded-xl transition-all"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border-hi)' }}
+            >
+              Configure API Keys
+            </button>
+          </div>
+
+          {!hasValidKey && (
+            <p className="text-[11px] text-amber-500">No API key configured — add one in settings.</p>
+          )}
         </div>
       </div>
     );
   }
 
-  // ── Active conversation ────────────────────────────────────
+  /* ── Active conversation ───────────────────────────────── */
   return (
-    <div className="flex-1 flex flex-col bg-neutral-950 min-w-0">
+    <div className="flex-1 flex flex-col min-w-0" style={{ background: 'var(--bg)' }}>
       <ChatHeader
         conversation={conversation}
         onOpenSettings={onOpenSettings}
@@ -415,19 +410,17 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
         availableProviders={availableProviders}
       />
 
-      {/* Messages */}
+      {/* ── Message thread ── */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {conversation.messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center px-6 animate-fade-in">
-              <p className="text-sm text-neutral-600 mb-1">
-                Using {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
-              </p>
-              <p className="text-xs text-neutral-700">Ask anything to begin</p>
-            </div>
+          <div className="h-full flex flex-col items-center justify-center">
+            <p className="text-[13px] text-neutral-700">
+              {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
+            </p>
+            <p className="text-[11px] text-neutral-800 mt-1">Send a message to begin</p>
           </div>
         ) : (
-          <div ref={messagesContainerRef} className="pb-4">
+          <div ref={messagesContainerRef} className="py-4">
             {conversation.messages.map((message, index) => {
               const isLast = index === conversation.messages.length - 1;
               return (
@@ -450,18 +443,20 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
             })}
 
             {isLoading && thinkingStartTime && (
-              <div className="px-6 max-w-3xl mx-auto">
-                <ThinkingHUD
-                  running={isLoading}
-                  elapsedMs={Date.now() - thinkingStartTime}
-                  tokensPerSec={
-                    tokensReceived > 0
-                      ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000)
-                      : undefined
-                  }
-                  phase={thinkingPhase}
-                  summary={reasoningSummary}
-                />
+              <div className="px-4 w-full">
+                <div className="max-w-[680px] mx-auto">
+                  <ThinkingHUD
+                    running={isLoading}
+                    elapsedMs={Date.now() - thinkingStartTime}
+                    tokensPerSec={
+                      tokensReceived > 0
+                        ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000)
+                        : undefined
+                    }
+                    phase={thinkingPhase}
+                    summary={reasoningSummary}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -469,33 +464,34 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Composer ─────────────────────────────────────────── */}
-      <div className="px-4 pb-5 pt-3">
-        <div className="max-w-3xl mx-auto">
+      {/* ── Composer ── */}
+      <div
+        className="flex-shrink-0 px-4 pb-5 pt-3"
+        style={{ borderTop: '1px solid var(--border)' }}
+      >
+        {/* Composer constrained to same 680px column as messages */}
+        <div className="max-w-[680px] mx-auto w-full">
           {!hasValidKey ? (
-            <div className="px-4 py-3 bg-amber-900/20 border border-amber-800/60 rounded-xl text-center">
-              <p className="text-xs text-amber-300 mb-3">
-                No API key configured for {conversationProvider}
-              </p>
+            <div className="px-4 py-3 rounded-xl text-center" style={{ background: 'rgba(251,191,36,.05)', border: '1px solid rgba(251,191,36,.15)' }}>
+              <p className="text-[11px] text-amber-400 mb-2.5">No API key for {conversationProvider}</p>
               <button
                 onClick={onOpenSettings}
-                className="px-3 py-1.5 bg-nerdplexity-600 hover:bg-nerdplexity-500 text-white text-xs font-medium rounded-lg transition-all"
+                className="px-3 py-1.5 text-white text-[12px] font-medium rounded-lg transition-all"
+                style={{ background: 'var(--accent)' }}
               >
-                Configure API Keys
+                Configure Keys
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
-              {/* Input container */}
               <div
-                className="
-                  relative border border-neutral-700 rounded-2xl bg-neutral-900
-                  transition-all duration-200
-                  focus-within:border-nerdplexity-500/50
-                  focus-within:[box-shadow:0_0_0_3px_rgba(139,92,246,0.08),0_0_20px_rgba(139,92,246,0.06)]
-                "
+                id="composer"
+                className="rounded-2xl overflow-hidden transition-all duration-200"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border-hi)' }}
               >
-                {/* Textarea */}
+                <style>{`#composer:focus-within{border-color:rgba(244,63,94,.45)!important;box-shadow:0 0 0 3px rgba(244,63,94,.07)}`}</style>
+
+                {/* Text area */}
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -504,70 +500,51 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                   placeholder="Ask anything…"
                   rows={1}
                   disabled={isLoading}
-                  className="
-                    w-full px-4 pt-4 pb-2
-                    bg-transparent text-sm text-neutral-100
-                    placeholder:text-neutral-600
-                    resize-none outline-none
-                    leading-relaxed
-                  "
+                  className="block w-full px-4 pt-4 pb-2 bg-transparent text-[14px] text-neutral-100 placeholder:text-neutral-700 resize-none outline-none leading-[1.65]"
                 />
 
-                {/* Bottom bar: toggles + send */}
-                <div className="flex items-center justify-between px-3 pb-3 pt-1 gap-2">
-                  {/* Feature toggles */}
-                  <div className="flex items-center gap-1.5">
+                {/* Bottom action row */}
+                <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                  {/* Feature pills */}
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setWebSearchEnabled(v => !v)}
-                      className={`
-                        flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-                        border transition-all duration-150
-                        ${webSearchEnabled
-                          ? 'bg-nerdplexity-600/20 border-nerdplexity-500/50 text-nerdplexity-300'
-                          : 'border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600'}
-                      `}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-150"
+                      style={webSearchEnabled
+                        ? { background: 'rgba(244,63,94,.1)', borderColor: 'rgba(244,63,94,.35)', color: '#fb7185' }
+                        : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-3)' }}
                     >
-                      <Globe size={12} />
+                      <Globe size={11} />
                       Web
                     </button>
                     <button
                       type="button"
                       onClick={() => setReasoningEnabled(v => !v)}
-                      className={`
-                        flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-                        border transition-all duration-150
-                        ${reasoningEnabled
-                          ? 'bg-nerdplexity-600/20 border-nerdplexity-500/50 text-nerdplexity-300'
-                          : 'border-neutral-700 text-neutral-500 hover:text-neutral-300 hover:border-neutral-600'}
-                      `}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-150"
+                      style={reasoningEnabled
+                        ? { background: 'rgba(244,63,94,.1)', borderColor: 'rgba(244,63,94,.35)', color: '#fb7185' }
+                        : { background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-3)' }}
                     >
-                      <Brain size={12} />
+                      <Brain size={11} />
                       Reason
                     </button>
                   </div>
 
-                  {/* Send button */}
+                  {/* Send */}
                   <button
                     type="submit"
                     disabled={!input.trim() || isLoading}
-                    className="
-                      flex items-center justify-center w-8 h-8 rounded-lg
-                      bg-nerdplexity-600 hover:bg-nerdplexity-500
-                      text-white transition-all duration-150
-                      disabled:opacity-30 disabled:cursor-not-allowed
-                    "
+                    className="flex items-center justify-center w-8 h-8 rounded-xl text-white transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--accent)' }}
                   >
-                    {isLoading
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : <Send size={14} />}
+                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
                 </div>
               </div>
 
-              {/* Hint */}
-              <p className="mt-2 text-center text-[10px] text-neutral-700">
-                Enter to send · Shift+Enter for new line · ⌘K settings
+              <p className="mt-2 text-center text-[10px] text-neutral-800">
+                Enter to send · Shift+Enter new line · ⌘K settings
               </p>
             </form>
           )}
