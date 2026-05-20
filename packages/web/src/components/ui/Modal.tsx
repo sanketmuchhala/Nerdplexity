@@ -1,87 +1,32 @@
-import React, { useEffect } from 'react';
-import { cn } from '../../lib/utils';
-import { X } from 'lucide-react';
+import { useEffect, ReactNode } from 'react';
 
-interface ModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title?: string;
-  children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
-}
+interface Props { isOpen: boolean; onClose: () => void; title: string; children: ReactNode; maxWidth?: string; }
 
-const modalSizes = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl'
-};
-
-export const Modal: React.FC<ModalProps> = ({
-  isOpen,
-  onClose,
-  title,
-  children,
-  size = 'md'
-}) => {
-  // Handle ESC key
+export function Modal({ isOpen, onClose, title, children, maxWidth = '600px' }: Props) {
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEsc);
-      document.body.style.overflow = 'unset';
-    };
+    if (!isOpen) return;
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', fn);
+    return () => document.removeEventListener('keydown', fn);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop - translucent is okay */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal Panel - MUST be fully opaque */}
-      <div
-        className={cn(
-          'relative w-full rounded-2xl bg-neutral-900 text-neutral-100 shadow-2xl',
-          'border border-neutral-700 nerdplexity-border nerdplexity-glow-strong',
-          modalSizes[size]
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        {title && (
-          <div className="flex items-center justify-between p-6 border-b border-neutral-700 nerdplexity-border">
-            <h2 className="text-lg font-semibold text-nerdplexity-300">{title}</h2>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-neutral-800 rounded-lg transition-colors text-nerdplexity-400 hover:text-nerdplexity-300 hover:nerdplexity-glow"
-              aria-label="Close modal"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        )}
-        
-        {/* Content */}
-        <div className={cn('p-6', title && 'pt-0')}>
-          {children}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full rounded-2xl overflow-hidden animate-fade-in"
+        style={{ maxWidth, background: 'var(--s0)', border: '1px solid var(--b-hi)', boxShadow: '0 16px 64px rgba(0,0,0,.8)' }}>
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--b)' }}>
+          <h2 className="text-base font-semibold" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}>{title}</h2>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-lg font-light transition-all"
+            style={{ color: 'var(--t3)' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--s2)'; (e.currentTarget as HTMLElement).style.color = 'var(--t1)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--t3)'; }}>×</button>
         </div>
+        <div className="overflow-y-auto" style={{ maxHeight: '80vh' }}>{children}</div>
       </div>
     </div>
   );
-};
+}

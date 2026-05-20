@@ -63,40 +63,40 @@ export default function EventsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--t1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nerdplexity-400 nerdplexity-glow"></div>
-          <span className="ml-3 text-neutral-400">Loading events...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 nerdplexity-glow"></div>
+          <span className="ml-3 style-replaced">Loading events...</span>
         </div>
       </div></div>
     );
   }
 
   return (
-    <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--text-1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
+    <div className="min-h-screen font-sans" style={{ background: 'var(--bg)', color: 'var(--t1)' }}><div className="max-w-7xl mx-auto px-6 py-6">
       {/* Navigation */}
       <AnalyticsNav title="All Events" />
 
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-[22px] font-bold tracking-tight text-neutral-100 mb-1">All Events</h1>
-        <p className="text-[13px] text-neutral-600">Detailed log of all LLM interactions and their metrics</p>
+        <h1 className="text-[22px] font-bold tracking-tight style-replaced mb-1">All Events</h1>
+        <p className="text-[13px] style-replaced">Detailed log of all LLM interactions and their metrics</p>
 
         {/* Summary Stats */}
         <div className="flex gap-6 mt-4">
           <div className="text-sm">
-            <span className="text-neutral-400">Total Events:</span>{' '}
-            <span className="text-nerdplexity-300 font-semibold">{rows.length}</span>
+            <span className="style-replaced">Total Events:</span>{' '}
+            <span className="text-blue-400 font-semibold">{rows.length}</span>
           </div>
           <div className="text-sm">
-            <span className="text-neutral-400">Success Rate:</span>{' '}
-            <span className="text-nerdplexity-300 font-semibold">
+            <span className="style-replaced">Success Rate:</span>{' '}
+            <span className="text-blue-400 font-semibold">
               {rows.length ? Math.round(((rows.filter(e => e.result?.status !== "error").length) / rows.length) * 100) : 0}%
             </span>
           </div>
           <div className="text-sm">
-            <span className="text-neutral-400">Avg Latency:</span>{' '}
-            <span className="text-nerdplexity-300 font-semibold">
+            <span className="style-replaced">Avg Latency:</span>{' '}
+            <span className="text-blue-400 font-semibold">
               {rows.length ? Math.round(rows.reduce((sum, e) => sum + (Number(e.timing?.latency_ms) || 0), 0) / rows.length) : 0}ms
             </span>
           </div>
@@ -107,8 +107,8 @@ export default function EventsPage() {
       <div className="bg-neutral-900 rounded-xl border border-neutral-700 nerdplexity-border overflow-hidden">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-nerdplexity-300">Event Details</h2>
-            <div className="text-sm text-neutral-400">
+            <h2 className="text-xl font-semibold text-blue-400">Event Details</h2>
+            <div className="text-sm style-replaced">
               Showing all {rows.length} events
             </div>
           </div>

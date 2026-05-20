@@ -1,386 +1,196 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Globe, Brain } from 'lucide-react';
 import { Message } from './Message';
 import { ChatHeader } from './layout/ChatHeader';
-
+import ThinkingHUD from './ThinkingHUD';
 import useChat from '../state/chatStore';
 import { PROVIDER_NAMES, getDefaultModelForProvider } from '../constants/models';
 import type { Provider } from '../lib/db';
 import { startTurn } from '../promptops/instrument';
 import { useStickyAutoScroll } from '../hooks/useStickyAutoScroll';
-import ThinkingHUD from './ThinkingHUD';
 
-interface ChatProps {
-  onOpenSettings: () => void;
-}
+interface Props { onOpenSettings: () => void; }
 
-export const Chat: React.FC<ChatProps> = ({ onOpenSettings }) => {
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
-  const [reasoningEnabled, setReasoningEnabled] = useState(false);
+export function Chat({ onOpenSettings }: Props) {
+  const [input, setInput]                     = useState('');
+  const [isLoading, setIsLoading]             = useState(false);
+  const [webSearch, setWebSearch]             = useState(false);
+  const [reasoning, setReasoning]             = useState(false);
+  const [thinkingStart, setThinkingStart]     = useState<number|null>(null);
+  const [thinkingPhase, setThinkingPhase]     = useState<'Planning'|'Drafting'|'Refining'>('Planning');
+  const [tokensReceived, setTokensReceived]   = useState(0);
+  const [reasoningSummary, setReasoningSummary] = useState<string|undefined>();
 
-  // Debouncing state for send button
-  const [sendDebounceTimer, setSendDebounceTimer] = useState<NodeJS.Timeout | null>(null);
-  
-  // ThinkingHUD state
-  const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
-  const [thinkingPhase, setThinkingPhase] = useState<"Planning" | "Drafting" | "Refining">("Planning");
-  const [tokensReceived, setTokensReceived] = useState(0);
-  const [reasoningSummary, setReasonningSummary] = useState<string | undefined>();
-  
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef       = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef    = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  
-  const { 
-    activeConversation,
-    addMessage,
-    newConversation,
-    getApiKey,
-    getCurrentProvider,
-    updateConversationSettings,
-    settings
+
+  const {
+    activeConversation, addMessage, newConversation,
+    getApiKey, getCurrentProvider, updateConversationSettings, settings,
   } = useChat();
 
-  // Initialize sticky auto-scroll hook
   const { scrollToBottomIfStuck, markMessageAnchor } = useStickyAutoScroll(messagesContainerRef);
 
-  // Auto-scroll when messages change (non-jittery)
-  useEffect(() => {
-    scrollToBottomIfStuck();
-  }, [activeConversation()?.messages, scrollToBottomIfStuck]);
+  const conversation       = activeConversation();
+  const provider           = conversation?.provider ?? getCurrentProvider();
+  const apiKey             = getApiKey(provider);
+  const hasKey             = provider === 'local-ollama' || (apiKey && apiKey.length > 10);
+
+  const availableProviders = Object.keys(PROVIDER_NAMES).filter(p => {
+    if (p === 'local-ollama') return true;
+    const k = getApiKey(p as Provider);
+    return k && k.length > 10;
+  });
+
+  useEffect(() => { scrollToBottomIfStuck(); }, [activeConversation()?.messages, scrollToBottomIfStuck]);
 
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
     }
   }, [input]);
 
-
-  const conversation = activeConversation();
-  const conversationProvider = conversation?.provider || getCurrentProvider();
-  const currentApiKey = getApiKey(conversationProvider);
-  const hasValidKey = conversationProvider === 'local-ollama' || (currentApiKey && currentApiKey.length > 10);
-
-  // Get available providers (those with valid API keys or local-ollama)
-  const availableProviders = Object.keys(PROVIDER_NAMES).filter(provider => {
-    if (provider === 'local-ollama') return true; // Local Ollama doesn't need API key
-    const key = getApiKey(provider as any);
-    return key && key.length > 10;
-  });
-
-  // Get available models for current provider
-  const handleModelChange = async (newModel: string) => {
-    if (conversation && newModel !== conversation.model) {
-      // Auto-detect required provider for the model
-      let requiredProvider: Provider = conversation.provider;
-      
-      // Check if model requires a specific provider
-      if (newModel.includes('gemma') || newModel.includes('llama') || newModel.includes('qwen') || newModel.includes('phi')) {
-        requiredProvider = 'local-ollama';
-      } else if (newModel.includes('claude')) {
-        requiredProvider = 'anthropic';
-      } else if (newModel.includes('gpt')) {
-        requiredProvider = 'openai';
-      } else if (newModel.includes('gemini')) {
-        requiredProvider = 'gemini';
-      } else if (newModel.includes('deepseek')) {
-        requiredProvider = 'deepseek';
-      }
-      
-      await updateConversationSettings(conversation.id, {
-        model: newModel,
-        ...(requiredProvider !== conversation.provider && { provider: requiredProvider })
-      });
+  const handleProviderChange = async (p: Provider) => {
+    if (conversation && p !== conversation.provider) {
+      await updateConversationSettings(conversation.id, { provider: p, model: getDefaultModelForProvider(p) });
     }
   };
-
-  const handleProviderChange = async (newProvider: Provider) => {
-    if (conversation && newProvider !== conversation.provider) {
-      const defaultModel = getDefaultModelForProvider(newProvider);
-      await updateConversationSettings(conversation.id, {
-        provider: newProvider,
-        model: defaultModel
-      });
-    }
-  };
-
-  // Helper function to validate local model exists
-  const ensureLocalModelExists = async (baseURL: string, model: string) => {
-    try {
-      const response = await fetch(`${baseURL.replace(/\/+$/, '')}/api/tags`);
-      const data = await response.json();
-      const models = data.models || [];
-      return models.some((m: any) => m.model === model || m.name === model);
-    } catch {
-      return false;
+  const handleModelChange = async (m: string) => {
+    if (conversation && m !== conversation.model) {
+      await updateConversationSettings(conversation.id, { model: m });
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || !hasValidKey || !conversation) return;
+    if (!input.trim() || isLoading || !hasKey || !conversation) return;
 
-    // Debounce rapid submissions (prevent double-click issues)
-    if (sendDebounceTimer) {
-      clearTimeout(sendDebounceTimer);
-    }
-
-    const submitTimer = setTimeout(() => {
-      setSendDebounceTimer(null);
-      performSubmit();
-    }, 150); // 150ms debounce
-
-    setSendDebounceTimer(submitTimer);
-  };
-
-  const performSubmit = async () => {
-    if (!input.trim() || isLoading || !hasValidKey || !conversation) return;
-
-    const currentInput = input.trim();
+    const text = input.trim();
     setInput('');
     setIsLoading(true);
-    
-    // Initialize ThinkingHUD
-    setThinkingStartTime(Date.now());
-    setThinkingPhase("Planning");
+    setThinkingStart(Date.now());
+    setThinkingPhase('Planning');
     setTokensReceived(0);
-    setReasonningSummary(undefined);
+    setReasoningSummary(undefined);
 
-    // Start turn instrumentation
     const turn = startTurn({
-      corr_id: crypto.randomUUID(),
-      session_id: conversation.id,
-      provider: conversationProvider,
-      model: conversation.model,
-      settings: {
-        temperature: conversation.settings.temperature,
-        max_tokens: conversation.settings.max_tokens,
-        web_search: webSearchEnabled,
-        reasoning: reasoningEnabled
-      },
-      business: { task: 'chat' }
+      corr_id: crypto.randomUUID(), session_id: conversation.id,
+      provider, model: conversation.model,
+      settings: { temperature: conversation.settings.temperature, max_tokens: conversation.settings.max_tokens, web_search: webSearch, reasoning },
+      business: { task: 'chat' },
     });
 
     try {
-      // Validate local model exists before sending
-      if (conversationProvider === 'local-ollama') {
-        const baseURL = settings?.baseURL || 'http://localhost:11434';
-        const model = conversation.model;
-        const modelExists = await ensureLocalModelExists(baseURL, model);
-        if (!modelExists) {
-          throw new Error(`Model not installed: ${model}. Install with: ollama pull ${model}`);
+      // Validate local model
+      if (provider === 'local-ollama') {
+        const base = settings?.baseURL ?? 'http://localhost:11434';
+        const resp = await fetch(`${base.replace(/\/+$/,'')}/api/tags`);
+        const { models = [] } = await resp.json();
+        if (!models.some((m: any) => m.model === conversation.model || m.name === conversation.model)) {
+          throw new Error(`Model not installed: ${conversation.model}. Run: ollama pull ${conversation.model}`);
         }
       }
 
-      // Add user message
-      await addMessage('user', currentInput);
+      await addMessage('user', text);
 
-      // Prepare messages with performance trimming for local-ollama
-      let messagesToSend = conversation.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.createdAt
-      }));
+      let msgs = conversation.messages.map(m => ({ role: m.role, content: m.content, timestamp: m.createdAt }));
+      msgs.push({ role: 'user', content: text, timestamp: Date.now() });
 
-      // Add current user message
-      messagesToSend.push({ role: 'user', content: currentInput, timestamp: Date.now() });
-
-      // Enhanced performance trimming for local-ollama with gemma2 detection
-      const isGemma2 = conversation.model.toLowerCase().includes('gemma2');
-      const performanceMode = settings?.performanceMode !== false;
-
-      if (conversationProvider === 'local-ollama' && performanceMode) {
-        // More aggressive trimming for gemma2 models
-        const maxTurns = isGemma2 ? 6 : 8; // 6 turns for gemma2, 8 for others
-        const maxMessages = maxTurns * 2; // Each turn is user + assistant
-
-        if (messagesToSend.length > maxMessages) {
-          // Preserve system messages
-          const systemMessages = messagesToSend.filter(m => m.role === 'system');
-          const conversationMessages = messagesToSend.filter(m => m.role !== 'system');
-
-          if (conversationMessages.length > maxMessages) {
-            // Create a more sophisticated summary
-            const olderMessages = conversationMessages.slice(0, -(maxMessages - 1)); // Leave room for current message
-            const recentMessages = conversationMessages.slice(-(maxMessages - 1));
-
-            // Extract key information for summary
-            const userQueries = olderMessages.filter(m => m.role === 'user').slice(-3);
-            const assistantResponses = olderMessages.filter(m => m.role === 'assistant').slice(-2);
-
-            const summaryContent = `[Previous conversation context - ${olderMessages.length} messages]
-Recent topics: ${userQueries.map(m => m.content.substring(0, 50).replace(/\n/g, ' ')).join(' | ')}
-Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n/g, ' ')).join(' | ')}`;
-
-            messagesToSend = [
-              ...systemMessages,
-              { role: 'system', content: summaryContent, timestamp: Date.now() },
-              ...recentMessages
-            ];
+      // Trim for local
+      if (provider === 'local-ollama' && settings?.performanceMode !== false) {
+        const max = conversation.model.toLowerCase().includes('gemma2') ? 12 : 16;
+        if (msgs.length > max) {
+          const system = msgs.filter(m => m.role === 'system');
+          const conv   = msgs.filter(m => m.role !== 'system');
+          if (conv.length > max) {
+            msgs = [...system, ...conv.slice(-max)];
           }
         }
-
-        // Input limiting for large prompts (performance optimization)
-        if (currentInput.length > 4000) {
-          const trimmed = currentInput.substring(0, 4000) + '\n\n[Note: Input was trimmed to 4000 characters for optimal performance]';
-          messagesToSend[messagesToSend.length - 1].content = trimmed;
-        }
       }
 
-      // Send to API
       const response = await fetch('/v1/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: messagesToSend,
-          provider: conversationProvider,
-          model: conversation.model,
-          api_key: currentApiKey,
-          temperature: conversation.settings.temperature,
-          max_tokens: conversation.settings.max_tokens,
-          web_search: webSearchEnabled,
-          show_reasoning: reasoningEnabled,
-          // Local Ollama specific fields
-          ...(conversationProvider === 'local-ollama' && settings && {
-            baseURL: settings.baseURL || 'http://localhost:11434',
-            num_ctx: settings.num_ctx || 4096,
+          messages: msgs, provider, model: conversation.model, api_key: apiKey,
+          temperature: conversation.settings.temperature, max_tokens: conversation.settings.max_tokens,
+          web_search: webSearch, show_reasoning: reasoning,
+          ...(provider === 'local-ollama' && settings && {
+            baseURL: settings.baseURL ?? 'http://localhost:11434',
+            num_ctx: settings.num_ctx ?? 4096,
             performanceMode: settings.performanceMode,
-            top_p: settings.topP,
-            top_k: settings.topK,
-            num_thread: settings.numThread
-          })
-        })
+          }),
+        }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || `HTTP ${response.status}: ${response.statusText}`);
+        const err = await response.json();
+        throw new Error(err.details || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
-
-      // Mark first token received (for TTFT)
       turn.markFirstToken();
+      setTimeout(() => setThinkingPhase('Drafting'), 200);
+      setTokensReceived(Math.max(1, Math.floor((data.message?.content?.length ?? 0) / 4)));
+      setTimeout(() => setThinkingPhase('Refining'), 800);
 
-      // Realistic phase transitions with timing
-      setTimeout(() => setThinkingPhase("Drafting"), 200);
+      if (data.reasoning) setReasoningSummary(data.reasoning.substring(0, 100) + (data.reasoning.length > 100 ? '…' : ''));
 
-      // Estimate tokens received for progress tracking
-      const contentLength = data.message?.content?.length || 0;
-      const estimatedTokens = Math.max(1, Math.floor(contentLength / 4)); // Rough chars to tokens
-      setTokensReceived(estimatedTokens);
-
-      // Final phase transition
-      setTimeout(() => setThinkingPhase("Refining"), 800);
-      
-      // Check for reasoning summary
-      if (data.reasoning) {
-        setReasonningSummary(data.reasoning.substring(0, 100) + (data.reasoning.length > 100 ? '...' : ''));
-      }
-      
-      // Add assistant message with web search metadata and reasoning
       await addMessage('assistant', data.message.content, {
         webSearchResults: data.webSearchResults,
-        reasoning: data.reasoning
+        reasoning: data.reasoning,
       });
+      await turn.endOk({ usage: data.usage, safety: data.safety, quality: data.quality, prompt: { prompt_chars: text.length } });
 
-      // Complete turn logging
-      await turn.endOk({
-        usage: data.usage,
-        safety: data.safety,
-        quality: data.quality,
-        prompt: {
-          prompt_chars: currentInput.length
-        }
-      });
-      
-    } catch (error: any) {
-      console.error('Chat error:', error);
-      
-      let errorContent = `Error: ${error.message}`;
-      
-      // Provide more helpful error messages
-      if (conversationProvider === 'local-ollama') {
-        if (error.message.includes('ECONNREFUSED') || error.message.includes('Failed to fetch') || error.message.includes('Connection failed')) {
-          errorContent = `**Ollama Not Running**: Cannot connect to Ollama at ${settings?.baseURL || 'http://localhost:11434'}. Start Ollama with: \`ollama serve\``;
-        } else if (error.message.includes('ETIMEDOUT') || error.message.includes('timeout')) {
-          errorContent = `**Connection Timeout**: Connection to Ollama at ${settings?.baseURL || 'http://localhost:11434'} timed out. Check if Ollama is running.`;
-        } else if (error.message.includes('404')) {
-          errorContent = `**Model Not Found**: The model "${conversation?.model}" is not available. Pull it with: \`ollama pull ${conversation?.model}\``;
-        } else if (error.message.includes('HTTP 400') || error.message.includes('HTTP 500')) {
-          errorContent = `**Ollama Error**: ${error.message.slice(0, 200)}. Try restarting Ollama or check the model.`;
-        } else {
-          errorContent = `**Ollama Error**: ${error.message}. Make sure Ollama is running and the model is available.`;
-        }
-      } else if (error.message.includes('401') || error.message.includes('Authentication failed')) {
-        errorContent = `**Invalid API Key**: Your API key appears to be incorrect or expired for ${conversationProvider}. Please check your settings.`;
-      } else if (error.message.includes('429') || error.message.includes('Rate limited')) {
-        errorContent = `**Rate Limited**: The ${conversationProvider} API is rate limiting your requests. Please wait a moment and try again.`;
-      } else if (error.message.includes('Network error') || error.message.includes('fetch')) {
-        errorContent = `**Network Error**: Unable to connect to the server. Please check your connection.`;
-      } else {
-        errorContent += ` Please check your API key and settings.`;
-      }
-      
-      await addMessage('assistant', errorContent);
-
-      // Log error turn
-      await turn.endError(error, {
-        prompt: {
-          prompt_chars: currentInput.length
-        }
-      });
-
+    } catch (err: any) {
+      let msg = `Error: ${err.message}`;
+      if (provider === 'local-ollama') {
+        if (err.message.includes('ECONNREFUSED') || err.message.includes('fetch')) msg = `**Ollama not running.** Start with: \`ollama serve\``;
+        else if (err.message.includes('404')) msg = `**Model not found:** \`ollama pull ${conversation?.model}\``;
+      } else if (err.message.includes('401')) msg = `**Invalid API key** for ${provider}. Check Settings.`;
+      else if (err.message.includes('429')) msg = `**Rate limited** by ${provider}. Wait a moment and retry.`;
+      await addMessage('assistant', msg);
+      await turn.endError(err, { prompt: { prompt_chars: text.length } });
     } finally {
       setIsLoading(false);
-      setThinkingStartTime(null);
+      setThinkingStart(null);
       setTokensReceived(0);
-      setReasonningSummary(undefined);
+      setReasoningSummary(undefined);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); }
   };
 
   /* ── No conversation ── */
   if (!conversation) {
     return (
-      <div className="flex-1 flex flex-col" style={{ background: 'var(--bg)' }}>
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
         <ChatHeader conversation={null} onOpenSettings={onOpenSettings} />
-        <div className="flex-1 flex items-center justify-center px-4">
-          <div className="text-center max-w-sm">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-5"
-              style={{ background: 'var(--blue)', boxShadow: '0 0 24px rgba(78,107,255,.35)' }}
-            >
-              <span className="text-lg font-bold text-white" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</span>
-            </div>
-            <h2 className="text-lg font-semibold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}>
+        <div className="flex-1 flex items-center justify-center px-6">
+          <div className="text-center max-w-sm w-full">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5 text-xl font-bold text-white"
+              style={{ background: 'var(--blue-dark)', boxShadow: '0 0 28px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
+            <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em' }}>
               Nerdplexity
             </h2>
             <p className="text-sm mb-7 leading-relaxed" style={{ color: 'var(--t3)' }}>
-              Bring your own keys. Local-first, private by default.
+              Your keys, your models, your data.
             </p>
             <div className="flex flex-col gap-2.5">
-              <button onClick={() => newConversation()} className="btn-primary w-full justify-center">
-                New Thread
+              <button onClick={() => newConversation()} className="btn-primary w-full justify-center" style={{ padding: '11px 20px' }}>
+                New thread
               </button>
-              <button onClick={onOpenSettings} className="btn-ghost w-full justify-center">
-                Configure API Keys
+              <button onClick={onOpenSettings} className="btn-ghost w-full justify-center" style={{ padding: '11px 20px' }}>
+                Configure API keys
               </button>
             </div>
-            {!hasValidKey && (
+            {!hasKey && (
               <p className="mt-4 text-xs" style={{ color: '#fbbf24' }}>
-                No API key configured — add one in settings.
+                No API key set — add one in Settings to start.
               </p>
             )}
           </div>
@@ -391,12 +201,10 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
 
   /* ── Active conversation ── */
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <ChatHeader
-        conversation={conversation}
-        onOpenSettings={onOpenSettings}
-        onProviderChange={handleProviderChange}
-        onModelChange={handleModelChange}
+        conversation={conversation} onOpenSettings={onOpenSettings}
+        onProviderChange={handleProviderChange} onModelChange={handleModelChange}
         availableProviders={availableProviders}
       />
 
@@ -406,7 +214,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <p className="text-sm mb-1" style={{ color: 'var(--t4)' }}>
-                {PROVIDER_NAMES[conversationProvider as keyof typeof PROVIDER_NAMES] ?? conversationProvider}
+                {PROVIDER_NAMES[provider as keyof typeof PROVIDER_NAMES] ?? provider}
               </p>
               <p className="text-xs" style={{ color: 'var(--t4)' }}>Send a message to begin</p>
             </div>
@@ -421,16 +229,13 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
                 </div>
               );
             })}
-
-            {isLoading && thinkingStartTime && (
+            {isLoading && thinkingStart && (
               <div className="px-4">
                 <div className="max-w-[680px] mx-auto">
                   <ThinkingHUD
-                    running={isLoading}
-                    elapsedMs={Date.now() - thinkingStartTime}
-                    tokensPerSec={tokensReceived > 0 ? tokensReceived / Math.max(1, (Date.now() - thinkingStartTime) / 1000) : undefined}
-                    phase={thinkingPhase}
-                    summary={reasoningSummary}
+                    running={isLoading} elapsedMs={Date.now() - thinkingStart}
+                    tokensPerSec={tokensReceived > 0 ? tokensReceived / Math.max(1, (Date.now() - thinkingStart) / 1000) : undefined}
+                    phase={thinkingPhase} summary={reasoningSummary}
                   />
                 </div>
               </div>
@@ -443,59 +248,46 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
       {/* Composer */}
       <div className="flex-shrink-0 px-4 pb-5 pt-3" style={{ borderTop: '1px solid var(--b)' }}>
         <div className="max-w-[680px] mx-auto w-full">
-          {!hasValidKey ? (
-            <div className="px-4 py-3 rounded-xl text-center" style={{ background: 'rgba(251,191,36,.05)', border: '1px solid rgba(251,191,36,.15)' }}>
-              <p className="text-xs mb-2.5" style={{ color: '#fbbf24' }}>No API key for {conversationProvider}</p>
-              <button onClick={onOpenSettings} className="btn-primary text-xs px-4 py-1.5">Configure Keys</button>
+          {!hasKey ? (
+            <div className="px-5 py-4 rounded-xl text-center"
+              style={{ background: 'rgba(251,191,36,.04)', border: '1px solid rgba(251,191,36,.2)' }}>
+              <p className="text-xs mb-3" style={{ color: '#fbbf24' }}>No API key for {provider}</p>
+              <button onClick={onOpenSettings} className="btn-primary text-xs" style={{ padding: '7px 16px' }}>
+                Configure keys
+              </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>
-              {/* Input box */}
               <div
-                id="nerd-composer"
-                className="rounded-2xl overflow-hidden transition-all duration-150"
-                style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)' }}
+                className="composer-wrap rounded-2xl overflow-hidden transition-all duration-200"
+                style={{ background: 'var(--s1)', border: '1px solid var(--b-hi)', boxShadow: '0 4px 24px rgba(0,0,0,.4)' }}
               >
-                <style>{`#nerd-composer:focus-within{border-color:rgba(78,107,255,.5)!important;box-shadow:0 0 0 3px rgba(78,107,255,.08),0 0 24px rgba(78,107,255,.06)}`}</style>
-
                 <textarea
                   ref={textareaRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask anything…"
-                  rows={1}
-                  disabled={isLoading}
+                  value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                  placeholder="Ask anything…" rows={1} disabled={isLoading}
                   className="block w-full px-4 pt-4 pb-2 bg-transparent text-sm resize-none outline-none leading-relaxed"
-                  style={{ color: 'var(--t1)' }}
+                  style={{ color: 'var(--t1)', caretColor: 'var(--blue)' }}
                 />
 
                 <div className="flex items-center justify-between px-3 pb-3 pt-1">
                   <div className="flex items-center gap-1.5">
                     {[
-                      { key: 'web', active: webSearchEnabled, toggle: () => setWebSearchEnabled(v => !v), icon: Globe, label: 'Web' },
-                      { key: 'reason', active: reasoningEnabled, toggle: () => setReasoningEnabled(v => !v), icon: Brain, label: 'Reason' },
-                    ].map(({ key, active, toggle, icon: Icon, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={toggle}
-                        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-all duration-150"
-                        style={active
-                          ? { background: 'rgba(78,107,255,.12)', borderColor: 'rgba(78,107,255,.4)', color: '#8fa5ff' }
-                          : { background: 'transparent', borderColor: 'var(--b)', color: 'var(--t3)' }}
-                      >
-                        <Icon size={11} />
-                        {label}
+                      { key:'web', label:'Web', icon:Globe, active:webSearch, toggle:()=>setWebSearch(v=>!v) },
+                      { key:'reason', label:'Reason', icon:Brain, active:reasoning, toggle:()=>setReasoning(v=>!v) },
+                    ].map(({ key, label, icon: Icon, active, toggle }) => (
+                      <button key={key} type="button" onClick={toggle}
+                        className="pill-toggle" data-active={String(active)}>
+                        <Icon size={11} />{label}
                       </button>
                     ))}
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={!input.trim() || isLoading}
-                    className="flex items-center justify-center w-8 h-8 rounded-xl text-white transition-all disabled:opacity-20 disabled:cursor-not-allowed"
-                    style={{ background: 'var(--blue)' }}
+                  <button type="submit" disabled={!input.trim() || isLoading}
+                    className="flex items-center justify-center w-8 h-8 rounded-xl text-white transition-all disabled:opacity-25 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--blue-dark)' }}
+                    onMouseEnter={e => { if (!(!input.trim()||isLoading)) (e.currentTarget as HTMLElement).style.background = 'var(--blue)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--blue-dark)'; }}
                   >
                     {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
@@ -503,7 +295,7 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
               </div>
 
               <p className="mt-2 text-center text-[10px]" style={{ color: 'var(--t4)' }}>
-                Enter to send · Shift+Enter new line · ⌘K settings
+                Enter to send · Shift+Enter for new line · ⌘K for settings
               </p>
             </form>
           )}
@@ -511,4 +303,4 @@ Key points: ${assistantResponses.map(m => m.content.substring(0, 70).replace(/\n
       </div>
     </div>
   );
-};
+}

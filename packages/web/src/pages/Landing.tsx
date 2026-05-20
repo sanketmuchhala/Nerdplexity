@@ -1,282 +1,240 @@
-import _React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Key, Shield, Zap, Globe, Brain, BarChart3, ChevronRight } from 'lucide-react';
 
-const providers = [
-  { name: 'Claude', color: '#e8a575' },
-  { name: 'GPT-4',  color: '#74c69d' },
-  { name: 'Gemini', color: '#74b3f8' },
-  { name: 'DeepSeek', color: '#a78bfa' },
-  { name: 'Ollama', color: '#8892b0' },
+const PROVIDERS = [
+  { name: 'Claude',    sub: 'Anthropic',  dot: '#e8a575' },
+  { name: 'GPT-4',     sub: 'OpenAI',     dot: '#74c99d' },
+  { name: 'Gemini',    sub: 'Google',     dot: '#74b3f8' },
+  { name: 'DeepSeek',  sub: 'DeepSeek',   dot: '#a78bfa' },
+  { name: 'Ollama',    sub: 'Local',       dot: '#888' },
 ];
 
-const features = [
-  {
-    icon: Key,
-    title: 'Your Keys, Your Control',
-    desc: 'Bring your own API keys for every provider. Zero data retention. Zero lock-in.',
-  },
-  {
-    icon: Shield,
-    title: 'Private by Design',
-    desc: 'Messages never leave your browser. No accounts, no tracking, no telemetry.',
-  },
-  {
-    icon: Zap,
-    title: 'Multi-Provider',
-    desc: 'Switch between Claude, GPT-4, Gemini, DeepSeek, or local Ollama mid-conversation.',
-  },
-  {
-    icon: Globe,
-    title: 'Web Search',
-    desc: 'Ground responses in live data. Toggle web search per message.',
-  },
-  {
-    icon: Brain,
-    title: 'Extended Reasoning',
-    desc: 'Surface the chain-of-thought for models that support it.',
-  },
-  {
-    icon: BarChart3,
-    title: 'PromptOps Analytics',
-    desc: 'Latency, cost, quality metrics — full observability over every interaction.',
-  },
+const FEATURES = [
+  { icon: Key,      title: 'Bring Your Own Keys',   desc: 'Your API keys, your billing, your usage. Zero markup. Direct to provider.' },
+  { icon: Shield,   title: 'Zero Data Retention',   desc: 'Messages live in your browser. No server stores your conversations.' },
+  { icon: Zap,      title: 'Any Provider, Any Model', desc: 'Switch between Claude, GPT, Gemini, DeepSeek, and local Ollama in one click.' },
+  { icon: Globe,    title: 'Live Web Search',        desc: 'Ground responses in real-time data. Toggle per message, per model.' },
+  { icon: Brain,    title: 'Extended Thinking',      desc: 'Surface chain-of-thought from models that support reasoning.' },
+  { icon: BarChart3,'title': 'PromptOps Analytics', desc: 'Full observability. Latency, cost, quality — every request measured.' },
 ];
 
 export default function Landing() {
   return (
-    <div
-      className="min-h-screen relative overflow-hidden"
-      style={{ background: 'var(--bg)' }}
-    >
-      {/* Subtle grid background */}
+    <div className="min-h-screen overflow-x-hidden" style={{ background: 'var(--bg)', color: 'var(--t1)' }}>
+
+      {/* ─────────── Background decoration ─────────── */}
+      {/* Dot grid */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-100"
+        className="fixed inset-0 pointer-events-none"
         style={{
-          backgroundImage: 'linear-gradient(rgba(78,107,255,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(78,107,255,.04) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+          maskImage: 'radial-gradient(ellipse 80% 80% at 50% 0%, black 40%, transparent 100%)',
+        }}
+      />
+      {/* Blue radial glow at top */}
+      <div
+        className="fixed pointer-events-none"
+        style={{
+          top: '-20%', left: '50%', transform: 'translateX(-50%)',
+          width: '800px', height: '600px',
+          background: 'radial-gradient(ellipse, rgba(59,130,246,.12) 0%, transparent 65%)',
         }}
       />
 
-      {/* Blue glow origin */}
-      <div
-        className="pointer-events-none absolute top-[-20%] left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full opacity-20"
-        style={{ background: 'radial-gradient(ellipse, rgba(78,107,255,.35) 0%, transparent 70%)' }}
-      />
-
-      {/* ── Nav ── */}
-      <nav className="relative z-10 flex items-center justify-between px-8 py-5 max-w-6xl mx-auto">
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--blue)', boxShadow: '0 0 16px rgba(78,107,255,.4)' }}
-          >
-            <span className="text-xs font-bold text-white" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</span>
+      {/* ─────────── Nav ─────────── */}
+      <nav className="relative z-10 border-b" style={{ borderColor: 'var(--b)' }}>
+        <div className="max-w-6xl mx-auto px-8 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white"
+              style={{ background: 'var(--blue-dark)', boxShadow: '0 0 12px rgba(59,130,246,.35)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
+            >N</div>
+            <span className="font-semibold text-sm tracking-tight" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>
+              Nerdplexity
+            </span>
           </div>
-          <span className="text-base font-semibold text-[var(--t1)]" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.01em' }}>
-            Nerdplexity
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            to="/promptops"
-            className="text-sm text-[var(--t3)] hover:text-[var(--t1)] transition-colors"
-          >
-            Analytics
-          </Link>
-          <Link
-            to="/app"
-            className="flex items-center gap-1.5 btn-primary text-sm px-4 py-2"
-            style={{ borderRadius: '10px', paddingTop: '8px', paddingBottom: '8px' }}
-          >
-            Open App
-            <ArrowRight size={14} />
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link to="/app/analytics" className="text-sm transition-colors" style={{ color: 'var(--t3)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--t1)')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--t3)')}>
+              Analytics
+            </Link>
+            <Link to="/app" className="btn-primary" style={{ padding: '7px 16px', borderRadius: '10px', fontSize: '13px' }}>
+              Open App <ArrowRight size={13} />
+            </Link>
+          </div>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
-      <section className="relative z-10 text-center px-6 pt-20 pb-24 max-w-4xl mx-auto">
-        {/* Badge */}
-        <div className="inline-flex items-center gap-2 mb-8">
-          <span
-            className="text-xs px-3 py-1.5 rounded-full"
-            style={{
-              background: 'rgba(78,107,255,.1)',
-              border: '1px solid rgba(78,107,255,.25)',
-              color: '#6b85ff',
-              fontWeight: 500,
-              letterSpacing: '0.02em',
-            }}
-          >
-            Private-first AI interface
-          </span>
+      {/* ─────────── Hero ─────────── */}
+      <section className="relative z-10 pt-28 pb-24 px-6 text-center max-w-5xl mx-auto">
+        {/* Pill badge */}
+        <div className="inline-flex items-center gap-2 mb-8 px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: 'var(--blue-dim)', border: '1px solid rgba(59,130,246,.3)', color: 'var(--blue-bright)' }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+          Private-first AI interface
         </div>
 
+        {/* Headline */}
         <h1
           className="mb-6"
           style={{
             fontFamily: 'Bricolage Grotesque, sans-serif',
             fontWeight: 800,
-            fontSize: 'clamp(40px, 6vw, 72px)',
-            lineHeight: 1.08,
+            fontSize: 'clamp(48px, 7vw, 88px)',
+            lineHeight: 1.02,
             letterSpacing: '-0.04em',
-            color: '#e8eaf5',
+            color: 'var(--t1)',
           }}
         >
-          Your AI.
-          <br />
-          <span style={{ color: 'var(--blue)' }}>Your Keys.</span>
-          <br />
-          Your Control.
+          AI on your terms.<br />
+          <span style={{
+            background: 'linear-gradient(135deg, var(--blue-bright) 0%, var(--blue) 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
+            Your keys, your rules.
+          </span>
         </h1>
 
-        <p
-          className="mx-auto mb-10 max-w-xl"
-          style={{ fontSize: '17px', lineHeight: '1.7', color: 'var(--t2)' }}
-        >
-          The intelligent chat interface that runs entirely on your API keys.
-          No accounts. No data retention. Full provider flexibility.
+        <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed" style={{ color: 'var(--t2)' }}>
+          Chat with Claude, GPT-4, Gemini, DeepSeek, and local models — using your own API keys.
+          No accounts. No data collection. No lock-in.
         </p>
 
         <div className="flex items-center justify-center gap-3 flex-wrap">
-          <Link to="/app" className="btn-primary">
-            Start Chatting
-            <ArrowRight size={15} />
+          <Link to="/app" className="btn-primary" style={{ fontSize: '15px', padding: '12px 24px' }}>
+            Start chatting free <ArrowRight size={15} />
           </Link>
-          <Link to="/promptops" className="btn-ghost">
-            View Analytics
+          <Link to="/app/analytics" className="btn-ghost" style={{ fontSize: '15px', padding: '12px 24px' }}>
+            View analytics
           </Link>
         </div>
 
-        {/* Provider chips */}
-        <div className="flex items-center justify-center gap-3 mt-12 flex-wrap">
-          <span className="text-xs text-[var(--t3)]">Works with</span>
-          {providers.map(p => (
-            <span
+        {/* Provider row */}
+        <div className="flex items-center justify-center gap-3 mt-14 flex-wrap">
+          <span className="text-xs" style={{ color: 'var(--t3)' }}>Works with</span>
+          {PROVIDERS.map(p => (
+            <div
               key={p.name}
-              className="text-xs px-3 py-1 rounded-full"
-              style={{
-                background: 'var(--s2)',
-                border: '1px solid var(--b)',
-                color: p.color,
-              }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+              style={{ background: 'var(--s1)', border: '1px solid var(--b-hi)', color: 'var(--t2)' }}
             >
+              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: p.dot }} />
               {p.name}
-            </span>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* ── App preview mockup ── */}
-      <section className="relative z-10 px-6 pb-24 max-w-5xl mx-auto">
+      {/* ─────────── App Mockup ─────────── */}
+      <section className="relative z-10 px-6 pb-28 max-w-5xl mx-auto">
         <div
-          className="relative rounded-2xl overflow-hidden"
+          className="rounded-2xl overflow-hidden"
           style={{
             border: '1px solid var(--b-hi)',
-            background: 'var(--s1)',
-            boxShadow: '0 0 0 1px rgba(78,107,255,.12), 0 24px 80px rgba(0,0,0,.7)',
+            background: 'var(--s0)',
+            boxShadow: '0 0 0 1px rgba(59,130,246,.06), 0 32px 96px rgba(0,0,0,.8), 0 0 80px rgba(59,130,246,.04)',
           }}
         >
-          {/* Mock title bar */}
-          <div
-            className="flex items-center gap-2 px-4 py-3"
-            style={{ borderBottom: '1px solid var(--b)', background: 'var(--s2)' }}
-          >
-            <div className="flex gap-1.5">
+          {/* Window chrome */}
+          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--b)', background: 'var(--s1)' }}>
+            <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full" style={{ background: '#ff5f57' }} />
               <div className="w-3 h-3 rounded-full" style={{ background: '#febc2e' }} />
               <div className="w-3 h-3 rounded-full" style={{ background: '#28c840' }} />
             </div>
-            <div
-              className="mx-auto text-xs px-4 py-0.5 rounded"
-              style={{ background: 'var(--s3)', color: 'var(--t3)', border: '1px solid var(--b)' }}
-            >
-              nerdplexity.app
+            <div className="flex items-center gap-2 px-3 py-1 rounded text-xs" style={{ background: 'var(--s2)', border: '1px solid var(--b)', color: 'var(--t3)' }}>
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#28c840' }} />
+              nerdplexity — claude-3-5-sonnet
             </div>
+            <div className="w-16" />
           </div>
 
-          {/* Mock chat area */}
-          <div className="flex" style={{ minHeight: '320px' }}>
-            {/* Sidebar mock */}
-            <div
-              className="hidden sm:flex flex-col gap-2 p-3"
-              style={{ width: '200px', borderRight: '1px solid var(--b)', background: 'var(--s1)' }}
-            >
-              <div className="text-2xs text-[var(--t3)] px-2 pt-1">TODAY</div>
-              {['Explain RLHF training', 'Python async patterns', 'Write a SQL query'].map((t, i) => (
-                <div
-                  key={i}
-                  className="text-xs px-2.5 py-1.5 rounded-md truncate"
-                  style={{
-                    background: i === 0 ? 'rgba(78,107,255,.12)' : 'transparent',
-                    color: i === 0 ? '#6b85ff' : 'var(--t3)',
-                    borderLeft: i === 0 ? '2px solid var(--blue)' : '2px solid transparent',
-                  }}
-                >
-                  {t}
+          {/* App layout mock */}
+          <div className="flex" style={{ minHeight: '380px' }}>
+            {/* Sidebar */}
+            <div className="hidden sm:flex flex-col py-4" style={{ width: '200px', borderRight: '1px solid var(--b)', background: 'var(--s0)' }}>
+              <div className="px-3 pb-3">
+                <div className="flex items-center gap-2 mb-3 px-2">
+                  <div className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ background: 'var(--blue-dark)' }}>N</div>
+                  <span className="text-xs font-semibold" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>Nerdplexity</span>
                 </div>
-              ))}
+                <div className="text-xs py-1.5 px-3 rounded-lg font-medium" style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)', color: 'var(--t2)' }}>+ New thread</div>
+              </div>
+              <div className="px-3">
+                <div className="t-caps px-2 pb-2">Today</div>
+                {['Explain transformer attention', 'Rust async patterns', 'SQL window functions'].map((t, i) => (
+                  <div key={t} className="text-xs px-2.5 py-2 rounded-lg mb-0.5 truncate"
+                    style={{
+                      background: i === 0 ? 'var(--blue-dim)' : 'transparent',
+                      borderLeft: i === 0 ? '2px solid var(--blue)' : '2px solid transparent',
+                      color: i === 0 ? 'var(--blue-bright)' : 'var(--t3)',
+                      paddingLeft: i === 0 ? '10px' : undefined,
+                    }}>{t}</div>
+                ))}
+              </div>
             </div>
 
-            {/* Chat mock */}
-            <div className="flex-1 p-6 flex flex-col gap-4">
-              {/* User message */}
-              <div className="flex justify-end">
-                <div
-                  className="text-sm px-4 py-2.5 rounded-xl rounded-tr-sm max-w-xs"
-                  style={{ background: 'var(--s3)', border: '1px solid var(--b-hi)', color: 'var(--t1)' }}
-                >
-                  Explain how transformer attention works
-                </div>
-              </div>
-
-              {/* AI message */}
-              <div className="max-w-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className="w-4 h-4 rounded flex items-center justify-center text-[8px] font-bold text-white"
-                    style={{ background: 'var(--blue)' }}
-                  >N</div>
-                  <span className="text-2xs text-[var(--t3)] font-semibold uppercase tracking-wider">Nerdplexity</span>
-                  <span
-                    className="text-2xs px-2 py-0.5 rounded-full"
-                    style={{ background: 'var(--s3)', color: '#74b3f8', border: '1px solid var(--b)' }}
-                  >
-                    claude-3-5-sonnet
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {['Attention mechanisms compute weighted sums over all tokens simultaneously...', 'For each token, we create Query, Key, and Value vectors through learned projections...'].map((_line, i) => (
-                    <div
-                      key={i}
-                      className="h-3 rounded"
-                      style={{
-                        background: 'var(--s3)',
-                        width: i === 0 ? '100%' : '75%',
-                        opacity: 1 - i * 0.2,
-                      }}
-                    />
+            {/* Chat area */}
+            <div className="flex-1 flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 h-11" style={{ borderBottom: '1px solid var(--b)' }}>
+                <span className="text-xs font-medium truncate" style={{ color: 'var(--t2)' }}>Explain transformer attention</span>
+                <div className="flex items-center gap-1.5">
+                  {['Anthropic', 'claude-3-5-sonnet'].map(t => (
+                    <span key={t} className="text-[11px] px-2 py-0.5 rounded-md" style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)', color: 'var(--t3)' }}>{t}</span>
                   ))}
-                  <p className="text-xs text-[var(--t2)] leading-relaxed">
-                    Attention mechanisms compute weighted sums over all tokens simultaneously, allowing each position to attend to every other position...
-                  </p>
                 </div>
               </div>
 
-              {/* Composer mock */}
-              <div className="mt-auto">
-                <div
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl"
-                  style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)' }}
-                >
-                  <span className="text-sm text-[var(--t3)] flex-1">Ask anything…</span>
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center"
-                    style={{ background: 'var(--blue)' }}
-                  >
-                    <ArrowRight size={13} className="text-white" />
+              {/* Messages */}
+              <div className="flex-1 overflow-hidden p-5 space-y-5">
+                {/* User */}
+                <div className="flex justify-end">
+                  <div className="max-w-[72%] px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm" style={{ background: 'var(--s3)', border: '1px solid var(--b-hi)', color: 'var(--t1)' }}>
+                    How does self-attention work in transformers?
+                  </div>
+                </div>
+                {/* AI */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <div className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold text-white" style={{ background: 'var(--blue-dark)' }}>N</div>
+                    <span className="t-caps">Nerdplexity</span>
+                    <div className="flex gap-1.5 ml-1">
+                      {['arxiv.org', 'attention is all you need', 'huggingface.co'].map((s, i) => (
+                        <span key={s} className="text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1" style={{ background: 'var(--s2)', border: '1px solid var(--b)', color: 'var(--t3)' }}>
+                          <span className="w-3 h-3 rounded-full text-[8px] flex items-center justify-center text-white font-bold" style={{ background: 'rgba(59,130,246,.6)' }}>{i+1}</span>
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--t1)' }}>
+                      Self-attention allows every token to attend to every other token in the sequence simultaneously, computing weighted sums based on query-key dot products...
+                    </p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--t2)' }}>
+                      For each position <span className="font-mono text-xs px-1.5 rounded" style={{ background: 'var(--blue-dim)', color: 'var(--blue-bright)' }}>i</span>, the model computes Q, K, V projections and scales dot products by √d_k...
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Composer */}
+              <div className="px-4 pb-4">
+                <div className="rounded-xl overflow-hidden composer-wrap" style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)' }}>
+                  <div className="px-4 py-3 text-sm" style={{ color: 'var(--t3)' }}>Ask anything…</div>
+                  <div className="flex items-center justify-between px-3 pb-2.5">
+                    <div className="flex gap-1.5">
+                      {['🌐 Web', '🧠 Reason'].map(p => (
+                        <span key={p} className="text-[11px] px-2.5 py-1 rounded-full" style={{ background: 'var(--s3)', border: '1px solid var(--b)', color: 'var(--t3)' }}>{p}</span>
+                      ))}
+                    </div>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--blue-dark)' }}>
+                      <ArrowRight size={13} className="text-white" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -285,89 +243,94 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Features ── */}
-      <section className="relative z-10 px-6 pb-24 max-w-5xl mx-auto">
-        <div className="text-center mb-12">
-          <h2
-            className="text-3xl mb-3"
-            style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
-          >
-            Everything you need
+      {/* ─────────── Features ─────────── */}
+      <section className="relative z-10 px-6 pb-28 max-w-5xl mx-auto">
+        <div className="text-center mb-14">
+          <h2 className="text-3xl font-bold mb-3" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.03em' }}>
+            Built for power users
           </h2>
-          <p className="text-base text-[var(--t2)]">Built for developers who want total control.</p>
+          <p className="text-sm" style={{ color: 'var(--t2)' }}>Everything you need, nothing you don't.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {features.map(({ icon: Icon, title, desc }) => (
+          {FEATURES.map(({ icon: Icon, title, desc }) => (
             <div
               key={title}
-              className="p-5 rounded-xl group transition-all duration-200 cursor-default"
-              style={{
-                background: 'var(--s1)',
-                border: '1px solid var(--b)',
-              }}
+              className="p-5 rounded-xl transition-all duration-200 group"
+              style={{ background: 'var(--s0)', border: '1px solid var(--b)' }}
               onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(78,107,255,.3)';
-                (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 1px rgba(78,107,255,.1), 0 8px 32px rgba(0,0,0,.4)';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,.25)';
+                (e.currentTarget as HTMLElement).style.background = 'var(--s1)';
               }}
               onMouseLeave={e => {
                 (e.currentTarget as HTMLElement).style.borderColor = 'var(--b)';
-                (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                (e.currentTarget as HTMLElement).style.background = 'var(--s0)';
               }}
             >
-              <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center mb-4"
-                style={{ background: 'rgba(78,107,255,.1)', border: '1px solid rgba(78,107,255,.2)' }}
-              >
-                <Icon size={16} style={{ color: 'var(--blue-hi)' }} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4" style={{ background: 'var(--blue-dim)', border: '1px solid rgba(59,130,246,.2)' }}>
+                <Icon size={16} style={{ color: 'var(--blue-bright)' }} />
               </div>
-              <h3
-                className="text-sm font-semibold text-[var(--t1)] mb-1.5"
-                style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}
-              >
-                {title}
-              </h3>
-              <p className="text-xs text-[var(--t2)] leading-relaxed">{desc}</p>
+              <h3 className="text-sm font-semibold mb-2" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t1)' }}>{title}</h3>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--t3)' }}>{desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── CTA bottom ── */}
-      <section className="relative z-10 px-6 pb-24 max-w-2xl mx-auto text-center">
-        <div
-          className="p-10 rounded-2xl"
-          style={{
-            background: 'var(--s1)',
-            border: '1px solid rgba(78,107,255,.2)',
-            boxShadow: '0 0 60px rgba(78,107,255,.08)',
-          }}
-        >
-          <h2
-            className="text-2xl mb-3"
-            style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 700, letterSpacing: '-0.025em', color: 'var(--t1)' }}
-          >
+      {/* ─────────── Analytics preview ─────────── */}
+      <section className="relative z-10 px-6 pb-28 max-w-5xl mx-auto">
+        <div className="rounded-2xl p-8" style={{ background: 'var(--s0)', border: '1px solid var(--b)' }}>
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em' }}>
+                Full observability
+              </h2>
+              <p className="text-sm" style={{ color: 'var(--t2)' }}>Every interaction measured. PromptOps analytics built in.</p>
+            </div>
+            <Link to="/app/analytics" className="flex items-center gap-1 text-sm font-medium transition-colors" style={{ color: 'var(--blue-bright)' }}>
+              Open dashboard <ChevronRight size={14} />
+            </Link>
+          </div>
+
+          {/* Mini KPI grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total calls', value: '2,847', trend: '↑' },
+              { label: 'Avg latency', value: '1.2s', trend: '↓' },
+              { label: 'Helpful rate', value: '94%', trend: '↑' },
+              { label: 'Cost / 100', value: '$0.14', trend: '↓' },
+            ].map(k => (
+              <div key={k.label} className="p-4 rounded-xl" style={{ background: 'var(--s2)', border: '1px solid var(--b-hi)' }}>
+                <div className="t-caps mb-2">{k.label}</div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xl font-bold" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--blue-bright)' }}>{k.value}</span>
+                  <span className="text-xs" style={{ color: k.trend === '↑' ? '#74c99d' : '#f87171' }}>{k.trend}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────── Final CTA ─────────── */}
+      <section className="relative z-10 px-6 pb-28 max-w-2xl mx-auto text-center">
+        <div className="rounded-2xl p-12" style={{ background: 'var(--s0)', border: '1px solid rgba(59,130,246,.2)', boxShadow: '0 0 60px rgba(59,130,246,.06)' }}>
+          <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em' }}>
             Ready to take control?
           </h2>
-          <p className="text-sm text-[var(--t2)] mb-6 leading-relaxed">
-            No sign-up. No credit card. Just paste your API key and start.
+          <p className="text-sm mb-7 leading-relaxed" style={{ color: 'var(--t2)' }}>
+            No sign-up. No credit card. Paste your API key and you're in.
           </p>
-          <Link to="/app" className="btn-primary inline-flex">
-            Open Nerdplexity
-            <ChevronRight size={15} />
+          <Link to="/app" className="btn-primary inline-flex" style={{ fontSize: '15px', padding: '12px 28px' }}>
+            Open Nerdplexity <ArrowRight size={15} />
           </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer
-        className="relative z-10 border-t px-8 py-6 max-w-6xl mx-auto flex items-center justify-between"
-        style={{ borderColor: 'var(--b)' }}
-      >
-        <span className="text-xs text-[var(--t3)]" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', fontWeight: 600 }}>
-          NERDPLEXITY
-        </span>
-        <span className="text-xs text-[var(--t3)]">Local-first. Private by design.</span>
+      <footer className="relative z-10 px-8 py-5 border-t max-w-6xl mx-auto flex items-center justify-between" style={{ borderColor: 'var(--b)' }}>
+        <span className="text-xs font-bold tracking-widest" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--t4)' }}>NERDPLEXITY</span>
+        <span className="text-xs" style={{ color: 'var(--t4)' }}>Local-first. Private by design.</span>
       </footer>
     </div>
   );

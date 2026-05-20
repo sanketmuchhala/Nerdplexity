@@ -26,7 +26,7 @@ interface KPICardProps {
 }
 
 const trends = {
-  up:      { bg: 'rgba(78,107,255,.1)', color: '#8fa5ff', label: '↑' },
+  up:      { bg: 'rgba(59,130,246,.1)', color: '#8fa5ff', label: '↑' },
   down:    { bg: 'rgba(239,68,68,.1)', color: '#fca5a5', label: '↓' },
   neutral: { bg: 'var(--s4)', color: 'var(--t3)', label: '—' },
 };
@@ -35,7 +35,7 @@ const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subti
   <div
     className="rounded-xl p-4 transition-all duration-150"
     style={{ background: 'var(--s1)', border: '1px solid var(--b)' }}
-    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(78,107,255,.25)'; }}
+    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,.25)'; }}
     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--b)'; }}
   >
     <div className="flex items-center justify-between mb-2.5">
@@ -50,7 +50,7 @@ const KPICard: React.FC<KPICardProps> = ({ label, value, unit = '', trend, subti
       )}
     </div>
     <div className="flex items-baseline gap-1">
-      <span className="text-2xl font-bold leading-none" style={{ color: 'var(--blue-hi)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
+      <span className="text-2xl font-bold leading-none" style={{ color: 'var(--blue-bright)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
         {value}
       </span>
       {unit && <span className="text-sm" style={{ color: 'var(--t3)' }}>{unit}</span>}
@@ -209,10 +209,10 @@ export default function MetricsDashboard() {
       <AnalyticsNav title="Metrics Dashboard" />
 
       <header className="mb-8">
-        <h1 className="text-[22px] font-bold tracking-tight text-neutral-100 mb-1" style={{ letterSpacing: '-0.015em' }}>
+        <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', letterSpacing: '-0.025em', color: 'var(--t1)' }}>
           Analytics
         </h1>
-        <p className="text-[13px] text-neutral-600">Performance metrics and insights for your AI interactions</p>
+        <p className="text-sm" style={{ color: 'var(--t3)' }}>Performance metrics and insights for your AI interactions</p>
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
