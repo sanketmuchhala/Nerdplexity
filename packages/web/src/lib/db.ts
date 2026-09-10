@@ -2,6 +2,16 @@ import Dexie, { Table } from 'dexie';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
+export type RuntimeKind = 'ollama' | 'openai-compatible';
+export interface WorkspaceDocument { id: string; title: string; content: string; updatedAt: number }
+export interface RunRecord {
+  id: string; conversationId: string; model: string; provider: string;
+  prompt: string; startedAt: number; durationMs: number;
+  status: 'completed' | 'stopped' | 'failed'; mode: 'chat' | 'agent';
+  output: string; error?: string; ttftMs?: number;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  tools: { name: string; input: unknown; output: unknown; step: number }[];
+}
 
 export interface WebSearchResult {
   title: string;
@@ -27,6 +37,7 @@ export interface Conversation {
   title: string;
   provider: Provider;
   model: string;
+  runtime?: RuntimeKind;
   createdAt: number;
   updatedAt: number;
   messages: Message[];
@@ -94,12 +105,17 @@ export interface AppSettings {
   topP?: number;
   topK?: number;
   numThread?: number;
+  localRuntime?: RuntimeKind;
+  compatibleBaseURL?: string;
+  localModels?: Partial<Record<RuntimeKind, string>>;
 }
 
 export class ChatDatabase extends Dexie {
   conversations!: Table<Conversation>;
   settings!: Table<AppSettings>;
   events!: Table<PromptEvent>;
+  documents!: Table<WorkspaceDocument>;
+  runs!: Table<RunRecord>;
 
   constructor() {
     super('ChatDatabase');
@@ -113,6 +129,13 @@ export class ChatDatabase extends Dexie {
       conversations: 'id, title, provider, model, createdAt, updatedAt',
       settings: '++id',
       events: 'id, ts, corr_id, provider, model'
+    });
+    this.version(3).stores({
+      conversations: 'id, title, provider, model, createdAt, updatedAt',
+      settings: '++id',
+      events: 'id, ts, corr_id, provider, model',
+      documents: 'id, title, updatedAt',
+      runs: 'id, conversationId, startedAt, status'
     });
   }
 }
@@ -220,7 +243,7 @@ export const initializeDatabase = async () => {
     if (!existingSettings) {
       const defaultSettings: AppSettings = {
         id: 1,
-        selectedProvider: 'openai',
+        selectedProvider: 'local-ollama',
         apiKeys: {
           openai: '',
           anthropic: '',
@@ -229,11 +252,12 @@ export const initializeDatabase = async () => {
           'local-ollama': ''
         },
         temperature: 0.7,
-        max_tokens: 4000,
+        max_tokens: 2048,
         web_enabled: false,
         mode: 'direct',
         baseURL: 'http://localhost:11434',
-        num_ctx: 4096
+        num_ctx: 8192,
+        localRuntime: 'ollama'
       };
       await db.settings.put(defaultSettings);
     }

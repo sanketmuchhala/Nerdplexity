@@ -18,7 +18,7 @@ interface ChatStore {
   loadSettings: () => Promise<void>;
   newConversation: (defaults?: Partial<Conversation>) => Promise<void>;
   selectConversation: (id: string) => void;
-  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }) => Promise<void>;
+  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -80,7 +80,8 @@ const useChat = create<ChatStore>((set, get) => ({
       id,
       title: "New chat",
       provider: currentProvider,
-      model: getDefaultModelForProvider(currentProvider),
+      model: currentProvider === 'local-ollama' ? (get().settings?.localModels?.[get().settings?.localRuntime || 'ollama'] || '') : getDefaultModelForProvider(currentProvider),
+      runtime: get().settings?.localRuntime || 'ollama',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
@@ -105,9 +106,9 @@ const useChat = create<ChatStore>((set, get) => ({
   },
   
   // Add message to active conversation
-  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }) => {
+  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string) => {
     const state = get();
-    const activeConv = state.activeConversation();
+    const activeConv = conversationId ? state.conversations.find(c => c.id === conversationId) : state.activeConversation();
     
     if (!activeConv) {
       console.error('No active conversation');
@@ -290,15 +291,15 @@ const useChat = create<ChatStore>((set, get) => ({
   // Helper: get current provider from settings
   getCurrentProvider: (): Provider => {
     const state = get();
-    return state.settings?.selectedProvider || 'openai';
+    return state.settings?.selectedProvider || 'local-ollama';
   },
   
   // Helper: get default settings
   getDefaultSettings: () => {
     const state = get();
     return {
-      temperature: state.settings?.temperature || 0.7,
-      max_tokens: state.settings?.max_tokens || 4000,
+      temperature: state.settings?.temperature ?? 0.7,
+      max_tokens: state.settings?.max_tokens ?? 2048,
       web_enabled: state.settings?.web_enabled || false
     };
   }

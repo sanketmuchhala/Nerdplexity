@@ -13,7 +13,7 @@ export function stripEmojis(text: string): string {
 
 /**
  * Sanitizes text for display in UI components
- * Removes emojis and normalizes whitespace
+ * Removes emojis while preserving Markdown and code whitespace.
  */
 export function sanitizeDisplayText(text: string): string {
   if (!text) return '';
@@ -21,8 +21,7 @@ export function sanitizeDisplayText(text: string): string {
   // Remove emojis
   const withoutEmojis = stripEmojis(text);
   
-  // Normalize whitespace
-  return withoutEmojis.replace(/\s+/g, ' ').trim();
+  return withoutEmojis;
 }
 
 /**

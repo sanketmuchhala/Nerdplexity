@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Sidebar }       from './components/Sidebar';
-import { Chat }          from './components/Chat';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SettingsModal } from './components/SettingsModal';
-import Landing           from './pages/Landing';
+import Workspace from './workspace/Workspace';
 import useChat           from './state/chatStore';
 import { initializeDatabase } from './lib/db';
 
@@ -12,28 +10,6 @@ import MetricsDashboard  from './promptops/MetricsDashboard';
 import EventsPage        from './promptops/EventsPage';
 import PromptOpsLanding  from './promptops/PromptOpsLanding';
 import BenchmarkPage     from './promptops/BenchmarkPage';
-
-function AppShell({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const {
-    conversations, activeConversationId,
-    newConversation, selectConversation, deleteConversation, updateConversationTitle,
-  } = useChat();
-
-  return (
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <Sidebar
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        onNewChat={newConversation}
-        onLoadChat={selectConversation}
-        onDeleteChat={deleteConversation}
-        onRenameChat={updateConversationTitle}
-        onOpenSettings={onOpenSettings}
-      />
-      <Chat onOpenSettings={onOpenSettings} />
-    </div>
-  );
-}
 
 export default function App() {
   const [settingsOpen,  setSettingsOpen]  = useState(false);
@@ -51,7 +27,6 @@ export default function App() {
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSettingsOpen(true); }
       if (e.key === 'Escape') setSettingsOpen(false);
     };
     window.addEventListener('keydown', fn);
@@ -75,10 +50,10 @@ export default function App() {
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <Routes>
         {/* Marketing */}
-        <Route path="/"   element={<Landing />} />
+        <Route path="/" element={<Navigate to="/app" replace />} />
 
         {/* App shell */}
-        <Route path="/app" element={<AppShell onOpenSettings={() => setSettingsOpen(true)} />} />
+        <Route path="/app/*" element={<Workspace onOpenSettings={() => setSettingsOpen(true)} />} />
 
         {/* Analytics */}
         <Route path="/app/analytics"           element={<PromptOpsLanding />} />

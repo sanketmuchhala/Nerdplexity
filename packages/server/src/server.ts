@@ -13,6 +13,7 @@ import { performWebSearch, extractSearchQuery, enhancePromptWithWebResults } fro
 import { orchestrator } from './orchestrator/index.js';
 import { localMetrics } from './routes/localMetrics.js';
 import { enqueueLocal, getLocalQueueStatus } from './queue/localQueue.js';
+import { localRuntime } from './routes/localRuntime.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -26,19 +27,22 @@ app.use(cors({
   credentials: true
 }));
 
-// Add dev CORS for local Ollama endpoints
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/v1/')) {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    }
-    next();
-  });
-}
+// Reject browser requests from unrelated sites before accessing local runtimes.
+app.use((req, res, next) => {
+  if (req.headers.origin) {
+    try {
+      const origin = new URL(req.headers.origin);
+      if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) {
+        res.status(403).json({ error: 'Open Nerdplexity on localhost.' });
+        return;
+      }
+    } catch { res.status(403).json({ error: 'Invalid origin.' }); return; }
+  }
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
+app.use('/v1/local', localRuntime);
 
 // Provider registry
 const providers = {
@@ -414,7 +418,7 @@ app.get('*', (_req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(Number(PORT), process.env.HOST || '127.0.0.1', () => {
   console.log(`[SERVER] Nerdplexity server running on http://localhost:${PORT}`);
   console.log(`[SECURITY] Local-only mode. API keys are never logged or stored.`);
   console.log(`[READY] Serving frontend from: ${webDist}`);
