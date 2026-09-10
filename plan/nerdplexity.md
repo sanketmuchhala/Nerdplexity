@@ -1,3 +1,5 @@
+> Historical proposal, superseded on 2026-09-10 by [the Nerdplexity workbench plan](implementation-plan.md). This document contains unrelated Merchant branding and incorrect implementation assumptions. Use the linked plan for current work.
+
 # 1. Phase 2 Goals
 * Clean and consolidate the existing "PromptOps / Nerdplexity" dashboard into a cohesive layout.
 * Modernize the brand by anchoring the primary color system around a core "Merchant blue" while maintaining the existing dark mode neutral palettes.

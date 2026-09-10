@@ -34,6 +34,10 @@ coverage/
 *.backup*
 
 # Build tools
+*.tsbuildinfo
+*.timestamp-*.mjs
+test-results/
+playwright-report/
 .turbo/
 .vercel/
 

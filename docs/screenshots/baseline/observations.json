@@ -1,0 +1,42 @@
+[
+  {
+    "name": "landing",
+    "viewport": "desktop",
+    "overflow": false
+  },
+  {
+    "name": "chat",
+    "viewport": "desktop",
+    "overflow": false
+  },
+  {
+    "name": "dashboard",
+    "viewport": "desktop",
+    "overflow": false
+  },
+  {
+    "name": "events",
+    "viewport": "desktop",
+    "overflow": false
+  },
+  {
+    "name": "landing",
+    "viewport": "phone",
+    "overflow": false
+  },
+  {
+    "name": "chat",
+    "viewport": "phone",
+    "overflow": false
+  },
+  {
+    "name": "dashboard",
+    "viewport": "phone",
+    "overflow": true
+  },
+  {
+    "name": "events",
+    "viewport": "phone",
+    "overflow": true
+  }
+]

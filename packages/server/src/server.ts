@@ -18,7 +18,8 @@ import { localRuntime } from './routes/localRuntime.js';
 dotenv.config({ path: '.env.local' });
 
 const app = express();
-const PORT = process.env.PORT || 5174;
+const PORT = Number(process.env.PORT) || 5174;
+const HOST = process.env.HOST || '127.0.0.1';
 
 // Security middleware
 app.use(helmet());
@@ -418,8 +419,8 @@ app.get('*', (_req, res) => {
   });
 });
 
-app.listen(Number(PORT), process.env.HOST || '127.0.0.1', () => {
-  console.log(`[SERVER] Nerdplexity server running on http://localhost:${PORT}`);
+app.listen(Number(PORT), HOST, () => {
+  console.log(`[SERVER] Nerdplexity server running on http://${HOST}:${PORT}`);
   console.log(`[SECURITY] Local-only mode. API keys are never logged or stored.`);
   console.log(`[READY] Serving frontend from: ${webDist}`);
 });

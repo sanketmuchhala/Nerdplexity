@@ -1,11 +1,12 @@
 #!/bin/bash
-# BYOK Research Copilot Development Script
+# Nerdplexity development entry point
+set -euo pipefail
 
-echo "Starting BYOK Research Copilot..."
+echo "Starting Nerdplexity..."
 echo "Server will run on http://localhost:5174"
 echo "Web app will run on http://localhost:5173"
 echo ""
-echo "SECURITY: This app is LOCAL-ONLY. Git push is disabled."
+echo "Ollama is optional. Start it separately with pnpm dev:ollama when needed."
 echo ""
 
 # Install dependencies if needed

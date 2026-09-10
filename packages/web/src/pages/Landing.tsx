@@ -263,7 +263,7 @@ export default function Landing() {
                   <div className="px-4 py-3 text-sm" style={{ color: 'var(--t4)' }}>Ask anything…</div>
                   <div className="flex items-center justify-between px-3 pb-2.5">
                     <div className="flex gap-1.5">
-                      {['🌐 Web', '🧠 Reason'].map(p => (
+                      {['Web', 'Reason'].map(p => (
                         <span key={p} className="text-[11px] px-2.5 py-1 rounded-full" style={{ background: 'var(--s3)', border: '1px solid var(--b)', color: 'var(--t3)' }}>{p}</span>
                       ))}
                     </div>

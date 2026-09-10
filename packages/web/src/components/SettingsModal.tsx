@@ -78,7 +78,7 @@ function ProviderRow({ provider, apiKey, onSave, onTest }: ProviderRowProps) {
           <button type="button" onClick={handleSave}
             className="px-3 py-2 rounded-lg text-sm font-medium transition-all"
             style={{ background: saved ? 'rgba(74,222,128,.1)' : 'var(--s2)', border: '1px solid var(--b-hi)', color: saved ? '#86efac' : 'var(--t2)' }}>
-            {saved ? '✓ Saved' : 'Save'}
+            {saved ? 'Saved' : 'Save'}
           </button>
           <button type="button" onClick={handleTest} disabled={testing || !value.trim()}
             className="px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40"
@@ -134,7 +134,7 @@ function OllamaSettings({ settings, onSave }: OllamaSettingsProps) {
       </div>
       <button onClick={save} className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
         style={{ background: saved ? 'rgba(74,222,128,.1)' : 'var(--s2)', border: '1px solid var(--b-hi)', color: saved ? '#86efac' : 'var(--t2)' }}>
-        {saved ? '✓ Saved' : 'Save Ollama settings'}
+        {saved ? 'Saved' : 'Save Ollama settings'}
       </button>
     </div>
   );

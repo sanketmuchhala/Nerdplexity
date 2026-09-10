@@ -6,7 +6,7 @@
     "dev": "vite --port 5173",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "npm run ci:no-emoji",
     "ci:no-emoji": "node ../../scripts/no-emoji-check.mjs",
     "typecheck": "tsc --noEmit"
