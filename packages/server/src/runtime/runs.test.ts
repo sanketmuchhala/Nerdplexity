@@ -188,22 +188,29 @@ describe('runs routes', () => {
     expect(resumed.trim().split('\n').map(line => JSON.parse(line).seq)).toEqual([5]);
   });
 
-  it('runs the document agent through the engine on a local model', async () => {
-    const completion = (async () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Answer from notes.' } }], usage: { prompt_tokens: 4, completion_tokens: 3 } }), { headers: { 'content-type': 'application/json' } })) as typeof fetch;
-    const base = await start(completion);
-    const { runId } = await (await post(base, body({ idempotencyKey: 'agent-key-01', agent: true, documents: [{ id: 'd1', title: 'Notes', content: 'Decision: ship.' }] }))).json();
+  it('runs a tool-enabled run through the engine: tool events, then the streamed answer', async () => {
+    const steps = [
+      [{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'search_documents', arguments: '{"query":"decision"}' } }] }, finish_reason: 'tool_calls' }] }],
+      [{ choices: [{ delta: { content: 'Ship it.' }, finish_reason: 'stop' }] }],
+    ];
+    let calls = 0;
+    const model = (async () => new Response(steps[Math.min(calls++, 1)].map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } })) as typeof fetch;
+    const base = await start(model);
+    const { runId } = await (await post(base, body({ idempotencyKey: 'tools-key-01', tools: ['search_documents'], documents: [{ id: 'd1', title: 'Notes', content: 'Decision: ship.' }] }))).json();
     const envelopes: RunEnvelope[] = (await (await fetch(`${base}/${runId}/events`)).text()).trim().split('\n').map(line => JSON.parse(line));
-    expect(envelopes.map(e => e.event.type)).toEqual(['queued', 'started', 'status', 'delta', 'completed']);
-    expect(envelopes[3].event).toEqual({ type: 'delta', text: 'Answer from notes.' });
-    expect(envelopes[4].event).toMatchObject({ usage: { total_tokens: 7 } });
+    expect(envelopes.map(e => e.event.type)).toEqual(['queued', 'started', 'tool', 'tool', 'status', 'delta', 'completed']);
+    expect(envelopes[3].event).toMatchObject({ type: 'tool', id: 'call_1', status: 'completed', source: 'retrieved', output: [{ id: 'd1', title: 'Notes' }] });
+    expect(envelopes[5].event).toEqual({ type: 'delta', text: 'Ship it.' });
   });
 
   it('validates input and reports unknown runs', async () => {
     const base = await start(upstream);
     expect((await post(base, body({ idempotencyKey: 'x' }))).status).toBe(400);
     expect((await post(base, body({ target: { kind: 'anthropic' } }))).status).toBe(400);
-    const agentRemote = await post(base, body({ target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1' }, agent: true, documents: [{ id: 'd', title: 't', content: 'c' }] }));
-    expect((await agentRemote.json()).error).toMatch(/only on models on this machine/);
+    const documentsRemote = await post(base, body({ target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1' }, tools: ['read_document'], documents: [{ id: 'd', title: 't', content: 'c' }] }));
+    expect((await documentsRemote.json()).error).toMatch(/only on models on this machine/);
+    expect((await (await post(base, body({ tools: ['search_documents'] }))).json()).error).toMatch(/Add a document/);
+    expect((await (await post(base, body({ tools: ['shell'] }))).json()).error).toMatch(/Choose tools from/);
     expect((await post(base, body({ settings: { maxTokens: 1.5 } }))).status).toBe(400);
     const unknown = await fetch(`${base}/nope/events`);
     expect(unknown.status).toBe(404);
@@ -217,8 +224,15 @@ describe('multimodal run validation', () => {
   it('accepts bounded user images and keeps their content', () => {
     expect(validateRunRequest(base).request.messages[0].content).toEqual(base.messages[0].content);
   });
-  it('rejects image blocks on system messages and in document-agent mode', () => {
+  it('rejects image blocks on system messages', () => {
     expect(() => validateRunRequest({ ...base, messages: [{ ...base.messages[0], role: 'system' }] })).toThrow('valid text or image');
-    expect(() => validateRunRequest({ ...base, agent: true, documents: [{ id: 'd', title: 'd', content: 'x' }] })).toThrow('not available in document agent');
+  });
+  it('allows images alongside tools, which now run through the same adapters', () => {
+    expect(validateRunRequest({ ...base, tools: ['calculator'] }).tools).toEqual(['calculator']);
+  });
+  it('sends documents only when a document tool is enabled', () => {
+    const docs = [{ id: 'd', title: 'd', content: 'x' }];
+    expect(validateRunRequest({ ...base, tools: ['calculator'], documents: docs }).documents).toEqual([]);
+    expect(validateRunRequest({ ...base, tools: ['read_document'], documents: docs }).documents).toEqual(docs);
   });
 });

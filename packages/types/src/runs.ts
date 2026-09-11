@@ -48,11 +48,22 @@ export interface RunTiming {
   durationMs: number;
 }
 
+/** Built-in tools a run may enable. None of them changes anything outside the app. */
+export type ToolName = 'calculator' | 'search_documents' | 'read_document';
+
 export interface ToolTrace {
+  /** Matches the running and finished events of one call. Absent on records saved before P6. */
+  id?: string;
   name: string;
   input: unknown;
   output: unknown;
   step: number;
+  /** 'denied': the tool exists but was not enabled for this run. Absent on records saved before P6. */
+  status?: 'running' | 'completed' | 'error' | 'denied';
+  error?: string;
+  durationMs?: number;
+  /** 'computed' by the app, or 'retrieved' from the user's documents. */
+  source?: 'computed' | 'retrieved';
 }
 
 export type RunEventPayload =
@@ -95,7 +106,8 @@ export interface RunStartRequest {
   model: string;
   messages: RunMessage[];
   settings?: { temperature?: number; maxTokens?: number; numCtx?: number };
-  agent?: boolean;
+  /** Tools the model may call. Document tools require `documents` and a model on this machine. */
+  tools?: ToolName[];
   documents?: { id: string; title: string; content: string }[];
 }
 

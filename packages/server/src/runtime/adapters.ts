@@ -5,13 +5,38 @@ import { redact, ResolvedTarget } from './destinations.js';
 
 type FetchFn = typeof fetch;
 
+export interface ToolSpec {
+  name: string;
+  description: string;
+  /** JSON Schema for the arguments object. */
+  parameters: Record<string, unknown>;
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  /** JSON text as the model produced it; may be malformed. */
+  arguments: string;
+  /** The provider sent no ID; this one was generated and is not sent back to providers that issue their own. */
+  generatedId?: boolean;
+  /** Gemini thought signature, which must be returned with the call. */
+  signature?: string;
+}
+
+/** Conversation turns sent to a model, including the tool turns of a tool-enabled run. */
+export type ModelMessage =
+  | RunMessage
+  | { role: 'assistant'; content: string; toolCalls: ToolCall[] }
+  | { role: 'tool'; toolCallId: string; name: string; content: string; isError?: boolean };
+
 export interface ModelRequest {
   target: ResolvedTarget;
   model: string;
-  messages: RunMessage[];
+  messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
   numCtx?: number;
+  tools?: ToolSpec[];
 }
 
 export type AdapterEvent =
@@ -19,7 +44,7 @@ export type AdapterEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'status'; message: string }
   | { type: 'quota'; quota: RateLimitState }
-  | { type: 'done'; usage?: Usage; finishReason?: string; loadMs?: number };
+  | { type: 'done'; usage?: Usage; finishReason?: string; loadMs?: number; toolCalls?: ToolCall[] };
 
 export class ProviderFailure extends Error {
   constructor(public error: ProviderError) { super(error.message); }
@@ -177,12 +202,69 @@ const normalizeUsage = (prompt: unknown, completion: unknown): Usage | undefined
     ? { prompt_tokens: prompt as number, completion_tokens: completion as number, total_tokens: (prompt as number) + (completion as number) }
     : undefined;
 
-const partsOf = (message: RunMessage) => typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content;
-const textOf = (message: RunMessage) => partsOf(message).filter((part): part is Extract<(typeof part), { type: 'text' }> => part.type === 'text').map(part => part.text).join('\n');
-const openAIMessage = (message: RunMessage) => typeof message.content === 'string' ? message : {
-  ...message,
-  content: message.content.map(part => part.type === 'text' ? { type: 'text', text: part.text } : { type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } }),
-};
+type ContentPart = Exclude<RunMessage['content'], string>[number];
+const partsOf = (message: ModelMessage): ContentPart[] => typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content;
+const textOf = (message: ModelMessage) => partsOf(message).filter((part): part is Extract<ContentPart, { type: 'text' }> => part.type === 'text').map(part => part.text).join('\n');
+const imagesOf = (message: ModelMessage) => partsOf(message).filter((part): part is Extract<ContentPart, { type: 'image' }> => part.type === 'image');
+const hasToolCalls = (message: ModelMessage): message is Extract<ModelMessage, { toolCalls: ToolCall[] }> => 'toolCalls' in message;
+
+/** Arguments as an object for providers that take objects; malformed arguments were already reported to the model as a tool error. */
+function argumentsObject(json: string): Record<string, unknown> {
+  try {
+    const value = JSON.parse(json);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+
+/** A tool result as a JSON object (Gemini requires an object). */
+function resultObject(content: string): Record<string, unknown> {
+  try {
+    const value = JSON.parse(content);
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : { result: value };
+  } catch { return { result: content }; }
+}
+
+const openAITools = (tools: ToolSpec[]) => tools.map(({ name, description, parameters }) => ({ type: 'function', function: { name, description, parameters } }));
+
+function openAIMessage(message: ModelMessage) {
+  if (message.role === 'tool') return { role: 'tool', tool_call_id: message.toolCallId, content: message.content };
+  if (hasToolCalls(message)) {
+    return { role: 'assistant', content: message.content || null, tool_calls: message.toolCalls.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) };
+  }
+  return typeof message.content === 'string' ? message : {
+    ...message,
+    content: message.content.map(part => part.type === 'text' ? { type: 'text', text: part.text } : { type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } }),
+  };
+}
+
+function ollamaMessage(message: ModelMessage) {
+  if (message.role === 'tool') return { role: 'tool', content: message.content, tool_name: message.name };
+  if (hasToolCalls(message)) return { role: 'assistant', content: message.content, tool_calls: message.toolCalls.map(call => ({ function: { name: call.name, arguments: argumentsObject(call.arguments) } })) };
+  const images = imagesOf(message);
+  return { role: message.role, content: textOf(message), ...(images.length ? { images: images.map(part => part.data) } : {}) };
+}
+
+/** Collect streamed tool calls; OpenAI-style providers send each call in fragments keyed by index. */
+function toolCallAccumulator() {
+  const calls: { id?: string; name: string; arguments: string; signature?: string }[] = [];
+  return {
+    add(index: number | undefined, part: { id?: unknown; name?: unknown; arguments?: unknown; signature?: unknown }) {
+      const call = calls[Number.isInteger(index) ? index! : calls.length] ??= { name: '', arguments: '' };
+      if (typeof part.id === 'string' && part.id) call.id = part.id;
+      if (typeof part.name === 'string' && part.name && !call.name) call.name = part.name;
+      if (typeof part.arguments === 'string') call.arguments += part.arguments;
+      else if (part.arguments && typeof part.arguments === 'object') call.arguments = JSON.stringify(part.arguments);
+      if (typeof part.signature === 'string') call.signature = part.signature;
+    },
+    result(): ToolCall[] | undefined {
+      const list = calls.filter(Boolean).map((call, i) => ({
+        id: call.id ?? `call_${i + 1}`, name: call.name, arguments: call.arguments || '{}',
+        ...(call.id ? {} : { generatedId: true }), ...(call.signature ? { signature: call.signature } : {}),
+      }));
+      return list.length ? list : undefined;
+    },
+  };
+}
 
 /** OpenAI, DeepSeek, and OpenAI-compatible servers share the chat completions SSE format. */
 async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
@@ -192,6 +274,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+    ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
   };
   const url = `${target.baseURL}/chat/completions`;
   const send = () => post(fetchImpl, url, target, body, signal);
@@ -207,6 +290,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   let usage: Usage | undefined;
   let finishReason: string | undefined;
   let done = false;
+  const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
     if (!line.startsWith('data:')) continue;
     const payload = line.slice(5).trim();
@@ -220,21 +304,28 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     if (typeof reasoning === 'string' && reasoning) yield { type: 'reasoning', text: reasoning };
     const text = choice?.delta?.content;
     if (typeof text === 'string' && text) yield { type: 'delta', text };
+    for (const part of Array.isArray(choice?.delta?.tool_calls) ? choice.delta.tool_calls : []) {
+      calls.add(part?.index, { id: part?.id, name: part?.function?.name, arguments: part?.function?.arguments });
+    }
     if (choice?.finish_reason) finishReason = choice.finish_reason;
     const reported = data.usage ?? data.x_groq?.usage;
     usage = normalizeUsage(reported?.prompt_tokens, reported?.completion_tokens) ?? usage;
   }
   // Some servers omit [DONE]; a reported finish reason still marks a complete answer.
   if (!done && !finishReason) throw new ProviderFailure({ category: 'transport', message: INCOMPLETE, retryable: true });
-  yield { type: 'done', usage, finishReason };
+  const toolCalls = req.tools?.length ? calls.result() : undefined;
+  yield { type: 'done', usage, finishReason, ...(toolCalls ? { toolCalls } : {}) };
 }
 
 async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const response = yield* sendWithRetry(target, () => post(fetchImpl, `${target.baseURL}/api/chat`, target, {
-    model: req.model, messages: req.messages.map(message => ({ role: message.role, content: textOf(message), ...(partsOf(message).some(part => part.type === 'image') ? { images: partsOf(message).filter((part): part is Extract<(typeof part), { type: 'image' }> => part.type === 'image').map(part => part.data) } : {}) })), stream: true,
+    model: req.model, messages: req.messages.map(ollamaMessage), stream: true,
     options: { num_predict: req.maxTokens ?? DEFAULT_MAX_TOKENS, num_ctx: req.numCtx ?? 8192, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
+    ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
   }, signal), signal);
+  // Ollama sends each tool call whole, with arguments as an object.
+  const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
     const data = parseRecord(line, target);
     if (data.error) throw failureFromStatus(500, String(data.error), target);
@@ -242,31 +333,59 @@ async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: 
     if (typeof thinking === 'string' && thinking) yield { type: 'reasoning', text: thinking };
     const text = data.message?.content;
     if (typeof text === 'string' && text) yield { type: 'delta', text };
+    for (const call of Array.isArray(data.message?.tool_calls) ? data.message.tool_calls : []) {
+      calls.add(undefined, { id: call?.id, name: call?.function?.name, arguments: call?.function?.arguments ?? {} });
+    }
     if (data.done) {
       // load_duration is in nanoseconds; it is near zero when the model was already in memory.
       const loadMs = Number.isFinite(data.load_duration) && data.load_duration >= 0 ? Math.round(data.load_duration / 1e6) : undefined;
-      yield { type: 'done', usage: normalizeUsage(data.prompt_eval_count, data.eval_count), finishReason: data.done_reason, ...(loadMs !== undefined ? { loadMs } : {}) };
+      const toolCalls = req.tools?.length ? calls.result() : undefined;
+      yield { type: 'done', usage: normalizeUsage(data.prompt_eval_count, data.eval_count), finishReason: data.done_reason, ...(loadMs !== undefined ? { loadMs } : {}), ...(toolCalls ? { toolCalls } : {}) };
       return;
     }
   }
   throw new ProviderFailure({ category: 'transport', message: INCOMPLETE, retryable: true });
 }
 
-/** Gemini needs alternating roles; merge consecutive turns from the same side. */
-function geminiContents(messages: RunMessage[]) {
-  const contents: { role: 'user' | 'model'; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[] = [];
+type GeminiPart = Record<string, unknown>;
+
+/** Gemini needs alternating roles; merge consecutive turns from the same side. Tool results go back as function responses. */
+function geminiContents(messages: ModelMessage[]) {
+  const contents: { role: 'user' | 'model'; parts: GeminiPart[] }[] = [];
   for (const message of messages) {
     if (message.role === 'system') continue;
     const role = message.role === 'assistant' ? 'model' : 'user';
+    let parts: GeminiPart[];
+    if (message.role === 'tool') {
+      parts = [{ functionResponse: { name: message.name, response: resultObject(message.content) } }];
+    } else if (hasToolCalls(message)) {
+      parts = [
+        ...(message.content ? [{ text: message.content }] : []),
+        ...message.toolCalls.map(call => ({
+          functionCall: { name: call.name, args: argumentsObject(call.arguments), ...(call.generatedId ? {} : { id: call.id }) },
+          ...(call.signature ? { thoughtSignature: call.signature } : {}),
+        })),
+      ];
+    } else {
+      parts = partsOf(message).map(part => part.type === 'text' ? { text: part.text } : { inlineData: { mimeType: part.mimeType, data: part.data } });
+    }
     const last = contents[contents.length - 1];
-    const parts = partsOf(message).map(part => part.type === 'text' ? { text: part.text } : { inlineData: { mimeType: part.mimeType, data: part.data } });
-    if (last?.role === role) last.parts.push({ text: '\n\n' }, ...parts);
-    else contents.push({ role, parts });
+    if (last?.role !== role) { contents.push({ role, parts }); continue; }
+    // Separate merged text turns; never put text between function calls or responses.
+    if ('text' in last.parts[last.parts.length - 1] && 'text' in parts[0]) last.parts.push({ text: '\n\n' });
+    last.parts.push(...parts);
   }
   return contents;
 }
 
-const systemText = (messages: RunMessage[]) => messages.filter(m => m.role === 'system').map(textOf).join('\n\n');
+/** Gemini's function declarations accept an OpenAPI subset without additionalProperties. */
+function geminiSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(geminiSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+  return Object.fromEntries(Object.entries(schema).filter(([key]) => key !== 'additionalProperties').map(([key, value]) => [key, geminiSchema(value)]));
+}
+
+const systemText = (messages: ModelMessage[]) => messages.filter(m => m.role === 'system').map(textOf).join('\n\n');
 const GEMINI_BLOCKED = new Set(['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION']);
 
 async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
@@ -276,12 +395,14 @@ async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: 
     contents: geminiContents(req.messages),
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
     generationConfig: { maxOutputTokens: req.maxTokens ?? DEFAULT_MAX_TOKENS, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
+    ...(req.tools?.length ? { tools: [{ functionDeclarations: req.tools.map(({ name, description, parameters }) => ({ name, description, parameters: geminiSchema(parameters) })) }] } : {}),
   };
   // alt=sse selects the event-stream format; the key stays in the x-goog-api-key header.
   const url = `${target.baseURL}/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`;
   const response = yield* sendWithRetry(target, () => post(fetchImpl, url, target, body, signal), signal);
   let usage: Usage | undefined;
   let finishReason: string | undefined;
+  const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
     if (!line.startsWith('data:')) continue;
     const data = parseRecord(line.slice(5).trim(), target);
@@ -289,6 +410,10 @@ async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: 
     if (data.promptFeedback?.blockReason) throw new ProviderFailure({ category: 'refused', message: `Gemini blocked this prompt (${data.promptFeedback.blockReason}).`, retryable: false });
     const candidate = data.candidates?.[0];
     for (const part of candidate?.content?.parts ?? []) {
+      if (part.functionCall) {
+        calls.add(undefined, { id: part.functionCall.id, name: part.functionCall.name, arguments: part.functionCall.args ?? {}, signature: part.thoughtSignature });
+        continue;
+      }
       if (typeof part.text !== 'string' || !part.text) continue;
       yield part.thought ? { type: 'reasoning', text: part.text } : { type: 'delta', text: part.text };
     }
@@ -304,7 +429,8 @@ async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: 
   }
   if (!finishReason) throw new ProviderFailure({ category: 'transport', message: INCOMPLETE, retryable: true });
   if (GEMINI_BLOCKED.has(finishReason)) throw new ProviderFailure({ category: 'refused', message: `Gemini stopped the answer (${finishReason}). The partial answer was kept.`, retryable: false });
-  yield { type: 'done', usage, finishReason: finishReason.toLowerCase() };
+  const toolCalls = req.tools?.length ? calls.result() : undefined;
+  yield { type: 'done', usage, finishReason: finishReason.toLowerCase(), ...(toolCalls ? { toolCalls } : {}) };
 }
 
 function anthropicFailure(error: unknown, target: ResolvedTarget, streamed: boolean): unknown {
@@ -325,6 +451,31 @@ function anthropicFailure(error: unknown, target: ResolvedTarget, streamed: bool
   return error;
 }
 
+/** Tool results go back as tool_result blocks; results for one step share a single user turn. */
+function anthropicMessages(messages: ModelMessage[]): Anthropic.MessageParam[] {
+  const out: Anthropic.MessageParam[] = [];
+  for (const message of messages) {
+    if (message.role === 'system') continue;
+    if (message.role === 'tool') {
+      const block: Anthropic.ToolResultBlockParam = { type: 'tool_result', tool_use_id: message.toolCallId, content: message.content, ...(message.isError ? { is_error: true } : {}) };
+      const last = out[out.length - 1];
+      if (last?.role === 'user' && Array.isArray(last.content) && last.content.every(part => part.type === 'tool_result')) last.content.push(block);
+      else out.push({ role: 'user', content: [block] });
+      continue;
+    }
+    if (hasToolCalls(message)) {
+      out.push({ role: 'assistant', content: [
+        // Anthropic rejects empty text blocks.
+        ...(message.content.trim() ? [{ type: 'text' as const, text: message.content }] : []),
+        ...message.toolCalls.map(call => ({ type: 'tool_use' as const, id: call.id, name: call.name, input: argumentsObject(call.arguments) })),
+      ] });
+      continue;
+    }
+    out.push({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.map(part => part.type === 'text' ? { type: 'text' as const, text: part.text } : { type: 'image' as const, source: { type: 'base64' as const, media_type: part.mimeType, data: part.data } }) });
+  }
+  return out;
+}
+
 async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const client = new Anthropic({ apiKey: target.apiKey, maxRetries: 0, timeout: 600_000, fetch: fetchImpl });
@@ -332,9 +483,10 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
   const params: Anthropic.MessageStreamParams = {
     model: req.model,
     max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
-    messages: req.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : m.content.map(part => part.type === 'text' ? { type: 'text' as const, text: part.text } : { type: 'image' as const, source: { type: 'base64' as const, media_type: part.mimeType, data: part.data } }) })),
+    messages: anthropicMessages(req.messages),
     ...(system ? { system } : {}),
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+    ...(req.tools?.length ? { tools: req.tools.map(({ name, description, parameters }) => ({ name, description, input_schema: parameters as Anthropic.Tool.InputSchema })) } : {}),
   };
   let rateLimitRetries = 0;
   for (;;) {
@@ -353,7 +505,10 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
       }
       const usage = message.usage;
       const input = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
-      yield { type: 'done', usage: normalizeUsage(input, usage.output_tokens), finishReason: message.stop_reason ?? undefined };
+      // The SDK assembles each tool_use input from its streamed JSON fragments.
+      const toolCalls = message.content.filter((block): block is Anthropic.ToolUseBlock => block.type === 'tool_use')
+        .map(block => ({ id: block.id, name: block.name, arguments: JSON.stringify(block.input ?? {}) }));
+      yield { type: 'done', usage: normalizeUsage(input, usage.output_tokens), finishReason: message.stop_reason ?? undefined, ...(req.tools?.length && toolCalls.length ? { toolCalls } : {}) };
       return;
     } catch (error) {
       const failure = anthropicFailure(error, target, streamed);

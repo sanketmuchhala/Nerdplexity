@@ -298,3 +298,100 @@ describe('Anthropic streaming (SDK)', () => {
     expect(overloaded).toMatchObject({ category: 'unavailable', retryable: true });
   });
 });
+
+describe('tool calls', () => {
+  const calculator = { name: 'calculator', description: 'Arithmetic', parameters: { type: 'object', properties: { expression: { type: 'string' } }, required: ['expression'], additionalProperties: false } };
+  const call = (id: string, extra: object = {}) => ({ id, name: 'calculator', arguments: '{"expression":"6*7"}', ...extra });
+  const toolTurn = (calls: ReturnType<typeof call>[], results: { id: string; content: string; isError?: boolean }[]): ModelRequest['messages'] => [
+    { role: 'user', content: 'What is 6*7?' },
+    { role: 'assistant', content: '', toolCalls: calls },
+    ...results.map(r => ({ role: 'tool' as const, toolCallId: r.id, name: 'calculator', content: r.content, ...(r.isError ? { isError: true } : {}) })),
+  ];
+
+  it('OpenAI-style: assembles fragmented calls and sends tool turns back by ID', async () => {
+    const { fn, calls } = fakeFetch(() => stream(sse([
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_a', type: 'function', function: { name: 'calculator', arguments: '' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"expres' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: 'sion":"6*7"}' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+    ])));
+    const first = await run(request(compat, { tools: [calculator] }), fn);
+    expect(first.done).toMatchObject({ finishReason: 'tool_calls', toolCalls: [call('call_a')] });
+    expect(calls[0].body.tools).toEqual([{ type: 'function', function: calculator }]);
+
+    await run(request(compat, { tools: [calculator], messages: toolTurn([call('call_a')], [{ id: 'call_a', content: '{"result":42}' }]) }), fn);
+    expect(calls[1].body.messages.slice(1)).toEqual([
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_a', type: 'function', function: { name: 'calculator', arguments: '{"expression":"6*7"}' } }] },
+      { role: 'tool', tool_call_id: 'call_a', content: '{"result":42}' },
+    ]);
+  });
+
+  it('OpenAI-style: ignores tool call deltas when the request enabled no tools', async () => {
+    const { fn } = fakeFetch(() => stream(sse([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'x', function: { name: 'calculator', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] }])));
+    expect((await run(request(compat), fn)).done?.toolCalls).toBeUndefined();
+  });
+
+  it('Ollama: reads whole calls with object arguments and returns results by tool name', async () => {
+    const lines = [
+      { message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'calculator', arguments: { expression: '6*7' } } }] }, done: false },
+      { message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 5, eval_count: 3 },
+    ].map(l => JSON.stringify(l)).join('\n') + '\n';
+    const { fn, calls } = fakeFetch(() => stream(lines, 'application/x-ndjson'));
+    const ollama = { kind: 'ollama', baseURL: 'http://127.0.0.1:11434' };
+    const first = await run(request(ollama, { tools: [calculator] }), fn);
+    expect(first.done?.toolCalls).toEqual([call('call_1', { generatedId: true })]);
+    expect(calls[0].body.tools).toEqual([{ type: 'function', function: calculator }]);
+
+    await run(request(ollama, { tools: [calculator], messages: toolTurn([call('call_1', { generatedId: true })], [{ id: 'call_1', content: '{"result":42}' }]) }), fn);
+    expect(calls[1].body.messages.slice(1)).toEqual([
+      { role: 'assistant', content: '', tool_calls: [{ function: { name: 'calculator', arguments: { expression: '6*7' } } }] },
+      { role: 'tool', content: '{"result":42}', tool_name: 'calculator' },
+    ]);
+  });
+
+  it('Anthropic: assembles streamed tool_use input and groups one step’s results into one user turn', async () => {
+    const body = [
+      ['message_start', { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 20, output_tokens: 1 } } }],
+      ['content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }],
+      ['content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Checking.' } }],
+      ['content_block_stop', { type: 'content_block_stop', index: 0 }],
+      ['content_block_start', { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'toolu_1', name: 'calculator', input: {} } }],
+      ['content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"expression":' } }],
+      ['content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '"6*7"}' } }],
+      ['content_block_stop', { type: 'content_block_stop', index: 1 }],
+      ['message_delta', { type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: 9 } }],
+      ['message_stop', { type: 'message_stop' }],
+    ].map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join('');
+    const { fn, calls } = fakeFetch(() => stream(body));
+    const anthropic = { kind: 'anthropic', apiKey: 'sk-ant-key' };
+    const first = await run(request(anthropic, { tools: [calculator] }), fn);
+    expect(first.text).toBe('Checking.');
+    expect(first.done).toMatchObject({ finishReason: 'tool_use', toolCalls: [call('toolu_1')] });
+    expect(calls[0].body.tools).toEqual([{ name: 'calculator', description: 'Arithmetic', input_schema: calculator.parameters }]);
+
+    await run(request(anthropic, { tools: [calculator], messages: toolTurn([call('toolu_1'), call('toolu_2')], [{ id: 'toolu_1', content: '{"result":42}' }, { id: 'toolu_2', content: '{"error":"bad"}', isError: true }]) }), fn);
+    expect(calls[1].body.messages).toEqual([
+      { role: 'user', content: 'What is 6*7?' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'calculator', input: { expression: '6*7' } }, { type: 'tool_use', id: 'toolu_2', name: 'calculator', input: { expression: '6*7' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{"result":42}' }, { type: 'tool_result', tool_use_id: 'toolu_2', content: '{"error":"bad"}', is_error: true }] },
+    ]);
+  });
+
+  it('Gemini: returns thought signatures with calls and sends results as function responses', async () => {
+    const { fn, calls } = fakeFetch(() => stream(sse([
+      { candidates: [{ content: { role: 'model', parts: [{ functionCall: { name: 'calculator', args: { expression: '6*7' } }, thoughtSignature: 'sig-1' }] }, finishReason: 'STOP' }] },
+    ], false)));
+    const gemini = { kind: 'gemini', apiKey: 'AIza-secret' };
+    const first = await run(request(gemini, { model: 'gemini-2.5-flash', tools: [calculator] }), fn);
+    expect(first.done?.toolCalls).toEqual([call('call_1', { generatedId: true, signature: 'sig-1' })]);
+    // Gemini rejects additionalProperties in function declarations.
+    expect(calls[0].body.tools).toEqual([{ functionDeclarations: [{ name: 'calculator', description: 'Arithmetic', parameters: { type: 'object', properties: { expression: { type: 'string' } }, required: ['expression'] } }] }]);
+
+    await run(request(gemini, { model: 'gemini-2.5-flash', tools: [calculator], messages: toolTurn([call('call_1', { generatedId: true, signature: 'sig-1' })], [{ id: 'call_1', content: '{"expression":"6*7","result":42}' }]) }), fn);
+    expect(calls[1].body.contents).toEqual([
+      { role: 'user', parts: [{ text: 'What is 6*7?' }] },
+      { role: 'model', parts: [{ functionCall: { name: 'calculator', args: { expression: '6*7' } }, thoughtSignature: 'sig-1' }] },
+      { role: 'user', parts: [{ functionResponse: { name: 'calculator', response: { expression: '6*7', result: 42 } } }] },
+    ]);
+  });
+});

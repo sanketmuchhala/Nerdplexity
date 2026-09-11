@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { DiscoveryResult, ModelRef, ProviderErrorCategory, RunMessage, TerminalPayload, ToolTrace } from '@app/types';
+import type { DiscoveryResult, ModelRef, ProviderErrorCategory, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
 import { db, RunRecord, WorkspaceDocument } from '../lib/db';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { isLocal, latestResult, targetFor } from '../state/connections';
-import { buildContext, workbenchSettings, type InputSnapshot } from '../lib/workbench';
+import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 
 export interface RunError {
@@ -25,7 +25,7 @@ interface Attempt {
   model: string;
   prompt: string;
   messages: RunMessage[];
-  agent: boolean;
+  tools: ToolName[];
   documents: InputSnapshot['documents'];
   input: InputSnapshot;
 }
@@ -97,7 +97,8 @@ export function useRun() {
       });
       const chat = useChat.getState();
       if (claimed && record.output) {
-        await chat.addMessage('assistant', record.output, record.reasoning ? { reasoning: record.reasoning } : undefined, record.conversationId, {
+        const metadata = { ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}) };
+        await chat.addMessage('assistant', record.output, Object.keys(metadata).length ? metadata : undefined, record.conversationId, {
           ...(record.connectionId ? { provenance: { connectionId: record.connectionId, modelId: record.model } } : {}),
           ...(record.runId ? { runId: record.runId } : {}),
           ...(status !== 'completed' ? { runStatus: status as 'canceled' | 'failed' | 'interrupted' } : {}),
@@ -150,7 +151,14 @@ export function useRun() {
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'delta': record.output += event.text; setPhase('Generating'); break;
-          case 'tool': record.tools.push({ name: event.name, input: event.input, output: event.output, step: event.step }); setTools([...record.tools]); break;
+          case 'tool': {
+            const { type: _type, ...trace } = event;
+            const index = trace.id ? record.tools.findIndex(t => t.id === trace.id && t.step === trace.step) : -1;
+            record.tools = index >= 0 ? record.tools.map((t, i) => i === index ? trace : t) : [...record.tools, trace];
+            setTools(record.tools);
+            setPhase(trace.status === 'running' ? `Running ${trace.name.replaceAll('_', ' ')}` : 'Waiting for the model');
+            break;
+          }
           case 'quota': record.quota = event.quota; if (record.connectionId) useConnections.getState().setQuota(record.connectionId, event.quota); break;
         }
         if ((event.type === 'delta' || event.type === 'reasoning') && !frame) frame = requestAnimationFrame(render);
@@ -173,7 +181,7 @@ export function useRun() {
     const controller = new AbortController();
     const record: RunRecord = {
       id: uuidv4(), conversationId: attempt.conversationId, connectionId: connection.id, provider: connection.name, model: attempt.model,
-      prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.agent ? 'agent' : 'chat',
+      prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.tools.length ? 'agent' : 'chat',
       input: structuredClone(attempt.input), notices: [],
       output: '', reasoning: '', tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
     };
@@ -186,7 +194,8 @@ export function useRun() {
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: attempt.model, messages: attempt.messages,
         settings: attempt.input.settings,
-        agent: attempt.agent, documents: attempt.agent ? attempt.documents : [],
+        ...(attempt.tools.length ? { tools: attempt.tools } : {}),
+        documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);
@@ -201,7 +210,7 @@ export function useRun() {
   };
 
   const preparing = useRef(false);
-  const prepareAndSend = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
+  const prepareAndSend = async (prompt: string, documents: WorkspaceDocument[]) => {
     if (active.current || !prompt.trim()) return;
     let state = useChat.getState();
     try {
@@ -212,33 +221,40 @@ export function useRun() {
     const connection = useConnections.getState().connections.find(c => c.id === conversation.connectionId);
     if (!conversation.model || !conversation.connectionId) { setError({ message: 'Choose a model in Models first.', retryable: false }); return; }
     if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
-    if (agent && !isLocal(connection)) { setError({ message: 'Document agents run only on models on this machine.', retryable: false }); return; }
     const blocked = policyBlock({ connectionId: connection.id, modelId: conversation.model }, conversation.id);
     if (blocked) { setError({ message: blocked, retryable: false, policy: true }); return; }
     const result = latestResult(useConnections.getState().catalog[connection.id]);
     const descriptor = result?.ok ? result.models.find(m => m.id === conversation.model) : undefined;
     const configured = workbenchSettings(conversation, state.settings);
+    const tools = toolNamesFor(configured.tools);
+    const documentTools = usesDocumentTools(tools);
+    // Enabled tools are never dropped silently; the user turns them off or changes model.
+    const toolProblem = tools.length && descriptor?.capabilities.tools === false ? 'This model does not support tools. Turn off tools or choose another model.'
+      : documentTools && !isLocal(connection) ? 'Document tools run only on models on this machine, so documents are never sent online. Turn off Documents or choose a local model.'
+      : documentTools && !documents.length ? 'Add a document in Workspace, or turn off Documents.'
+      : null;
     const context = buildContext(conversation.messages, prompt, configured, descriptor, connection, conversation.attachments);
-    if (context.warnings.length || (agent && descriptor?.capabilities.tools === false)) {
-      setError({ message: context.warnings[0] || 'This model does not support tools. Switch to Chat or another model.', retryable: false }); return;
+    if (context.warnings.length || toolProblem) {
+      setError({ message: context.warnings[0] || toolProblem!, retryable: false }); return;
     }
     const input: InputSnapshot = { messages: context.messages, settings: context.effective, configured,
       context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown },
-      documents: agent ? documents.map(({ id, title, content }) => ({ id, title, content })) : [],
+      documents: documentTools ? documents.map(({ id, title, content }) => ({ id, title, content })) : [],
+      tools,
       attachments: (conversation.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })),
     };
     try { await state.addMessage('user', prompt, undefined, conversation.id); }
     catch { setError({ message: 'Unable to save your message. Check browser storage.', retryable: false }); return; }
     await execute({
-      conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, agent, documents: input.documents,
+      conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, tools, documents: input.documents,
       messages: context.messages, input,
     });
   };
 
-  const send = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
+  const send = async (prompt: string, documents: WorkspaceDocument[]) => {
     if (preparing.current) return;
     preparing.current = true;
-    try { await prepareAndSend(prompt, agent, documents); }
+    try { await prepareAndSend(prompt, documents); }
     finally { preparing.current = false; }
   };
 
@@ -287,7 +303,8 @@ export function useRun() {
         active.current = { record, controller, cancelRequested: false };
         lastAttempt.current = {
           conversationId: record.conversationId, connectionId: record.connectionId || '', model: record.model, prompt: record.prompt,
-          messages: record.input?.messages ?? historyOf(record.conversationId), agent: record.mode === 'agent', documents: record.input?.documents ?? [], recordId: record.id,
+          messages: record.input?.messages ?? historyOf(record.conversationId), documents: record.input?.documents ?? [], recordId: record.id,
+          tools: record.input?.tools ?? (record.mode === 'agent' ? ['search_documents', 'read_document'] : []),
           input: record.input ?? { messages: historyOf(record.conversationId), settings: { maxTokens: 2048 }, configured: workbenchSettings(), context: { estimatedTokens: 0, budget: 8192, omittedMessages: 0, limitKnown: false }, documents: [] },
         };
         showRunning(record, 'Reconnecting');

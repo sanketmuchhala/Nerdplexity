@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
+  Calculator,
   Code2,
   Copy,
   Download,
@@ -33,7 +34,9 @@ import {
   buildContext,
   exportConversation,
   workbenchSettings,
+  type WorkbenchTool,
 } from '../lib/workbench';
+import { ToolActivity } from './ToolActivity';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -64,6 +67,7 @@ export function ChatWorkspace({
     updateConversationTitle,
     addAttachment,
     removeAttachment,
+    setWorkbench,
   } = useChat();
   const connections = useConnections((state) => state.connections);
   useConnections((state) => state.keyVersion);
@@ -81,7 +85,6 @@ export function ChatWorkspace({
   const needsKey =
     !!connection && requiresKey(connection.kind) && !hasKey(connection.id);
   const [input, setInput] = useState('');
-  const [agent, setAgent] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [edit, setEdit] = useState<{
@@ -98,6 +101,8 @@ export function ChatWorkspace({
     ? discovered.models.find((m) => m.id === model)
     : undefined;
   const configured = workbenchSettings(conversation, settings);
+  const enabledTools = configured.tools;
+  const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
     conversation?.messages ?? [],
     input,
@@ -138,7 +143,6 @@ export function ChatWorkspace({
   useEffect(() => {
     setInput(branchDraft.current ?? '');
     branchDraft.current = null;
-    setAgent(false);
     setActionError('');
     sticky.current = true;
   }, [conversation?.id]);
@@ -159,7 +163,28 @@ export function ChatWorkspace({
     const prompt = input.trim();
     setInput('');
     sticky.current = true;
-    void run.send(prompt, agent && local && documents.length > 0, documents);
+    void run.send(prompt, documents);
+  };
+  /** Tools are a per-thread setting, so presets save them and they stay visible until turned off. */
+  const toggleTool = async (tool: WorkbenchTool) => {
+    const turningOn = !enabledTools.includes(tool);
+    if (turningOn && tool === 'documents') {
+      if (!local) {
+        setActionError('Document tools run only on models on this machine, so documents are never sent online. Choose a local model to use them.');
+        return;
+      }
+      if (!documents.length) { onDocuments(); return; }
+    }
+    try {
+      if (!conversation) await newConversation();
+      const current = useChat.getState().activeConversation();
+      if (!current) throw new Error('Unable to create a thread.');
+      const now = workbenchSettings(current, settings);
+      await setWorkbench(current.id, { ...now, tools: turningOn ? [...now.tools, tool] : now.tools.filter((t) => t !== tool) });
+      setActionError('');
+    } catch (error) {
+      setActionError((error as Error).message);
+    }
   };
   const branch = async (
     messageId: string,
@@ -171,7 +196,7 @@ export function ChatWorkspace({
       if (!regenerate) branchDraft.current = text;
       await forkConversation(conversation.id, messageId);
       setEdit(null);
-      if (regenerate) await run.send(text, false, []);
+      if (regenerate) await run.send(text, documents);
     } catch (error) {
       branchDraft.current = null;
       setActionError((error as Error).message);
@@ -417,7 +442,8 @@ export function ChatWorkspace({
                       onDocuments();
                       return;
                     }
-                    setAgent(title === 'Work with my notes');
+                    if (title === 'Work with my notes' && !documentsOn)
+                      void toggleTool('documents');
                     setInput(text);
                     textarea.current?.focus();
                   }}
@@ -443,6 +469,9 @@ export function ChatWorkspace({
           <div className="np-thread">
             {messages.map((message, index) => (
               <Fragment key={message.id}>
+                {message.role === 'assistant' && message.metadata?.tools && (
+                  <ToolActivity tools={message.metadata.tools} />
+                )}
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
                   animate={!message.runId}
@@ -522,26 +551,7 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
-            {ownRun && run.tools.length > 0 && (
-              <div className="np-inline-tools">
-                {run.tools.map((tool, i) => (
-                  <details key={i}>
-                    <summary>
-                      <FileText size={13} />
-                      {tool.name.replaceAll('_', ' ')}
-                      <span>Step {tool.step}</span>
-                    </summary>
-                    <pre>
-                      {JSON.stringify(
-                        { input: tool.input, output: tool.output },
-                        null,
-                        2,
-                      )}
-                    </pre>
-                  </details>
-                ))}
-              </div>
-            )}
+            {ownRun && !saved && <ToolActivity tools={run.tools} />}
             {ownRun && !saved && (run.partial || run.reasoning) && (
               <Message
                 message={{
@@ -715,7 +725,7 @@ export function ChatWorkspace({
             rows={2}
             aria-label="Message"
             placeholder={
-              agent
+              documentsOn
                 ? 'Ask your workspace a question…'
                 : 'Where do you want to start?'
             }
@@ -771,38 +781,24 @@ export function ChatWorkspace({
                   }
                 }}
               />
-              <button
-                type="button"
-                className={`np-mode ${!agent ? 'selected' : ''}`}
-                onClick={() => setAgent(false)}
-              >
-                Chat
-              </button>
-              <button
-                type="button"
-                className={`np-mode ${agent ? 'selected' : ''}`}
-                aria-pressed={agent}
-                disabled={descriptor?.capabilities.tools === false}
-                title={
-                  descriptor?.capabilities.tools === false
-                    ? 'This model does not support tools'
-                    : 'Uses search and read tools on your local documents'
-                }
-                onClick={() => {
-                  if (!local) {
-                    onModels();
-                    return;
-                  }
-                  if (!documents.length) {
-                    onDocuments();
-                    return;
-                  }
-                  setAgent(!agent);
-                }}
-              >
-                <Workflow size={13} />
-                Document agent
-              </button>
+              {([
+                ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
+                ['documents', Workflow, 'Documents', 'Lets a model on this machine search and read your Workspace documents'],
+              ] as const).map(([tool, Icon, name, hint]) => (
+                <button
+                  key={tool}
+                  type="button"
+                  className={`np-mode ${enabledTools.includes(tool) ? 'selected' : ''}`}
+                  aria-pressed={enabledTools.includes(tool)}
+                  aria-label={`${name} tool`}
+                  disabled={run.running || descriptor?.capabilities.tools === false}
+                  title={descriptor?.capabilities.tools === false ? 'This model does not support tools' : hint}
+                  onClick={() => void toggleTool(tool)}
+                >
+                  <Icon size={13} />
+                  {name}
+                </button>
+              ))}
             </div>
             <div className="np-composer-send">
               {local && (
@@ -839,13 +835,22 @@ export function ChatWorkspace({
         </form>
         <div className="np-composer-footnote">
           <span>
-            {agent
-              ? `Agent access: all ${documents.length} workspace documents · search and read only`
-              : !connection
+            {[
+              enabledTools.length > 0 &&
+                `Tools: ${[
+                  enabledTools.includes('calculator') && 'Calculator',
+                  documentsOn && `Documents (${documents.length}, search and read only)`,
+                ]
+                  .filter(Boolean)
+                  .join(', ')}`,
+              !connection
                 ? 'Choose a model in Models.'
                 : local
                   ? 'Requests stay on this machine.'
-                  : `Prompts are sent to ${connection.name}${hasKey(connection.id) ? ' with your API key' : ''}.`}
+                  : `Prompts are sent to ${connection.name}${hasKey(connection.id) ? ' with your API key' : ''}.`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </span>
           <span>Shift + Enter for a new line</span>
         </div>

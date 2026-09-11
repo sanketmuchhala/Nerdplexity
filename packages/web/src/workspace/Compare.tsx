@@ -102,7 +102,8 @@ export function Compare({ onChat }: { onChat: () => void }) {
       const blocked = policyBlock(choice.ref, activeConversation?.id);
       if (blocked) { setError(`${choice.descriptor.displayName}: ${blocked}`); return; }
     }
-    const configured = workbenchSettings(activeConversation, chat.settings);
+    // Comparisons run without tools; the snapshot records that, whatever the source thread enables.
+    const configured = { ...workbenchSettings(activeConversation, chat.settings), tools: [] };
     const contextLimit = Math.min(...selected.map(choice => choice.descriptor.contextLength ?? Infinity));
     const sharedDescriptor = { ...selected[0].descriptor, contextLength: Number.isFinite(contextLimit) ? contextLimit : undefined };
     const context = buildContext(activeConversation?.messages ?? [], prompt.trim(), configured, sharedDescriptor, undefined, activeConversation?.attachments);

@@ -6,9 +6,13 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, a bounded document agent for local models, run history, and analytics pages. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, optional bounded tools, run history, and analytics pages. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs.
 
-The Models page can stream Ollama pull progress and remove an installed model. Compare sends one frozen context snapshot to two explicitly selected models through the normal run engine, saves both results, labels measured and estimated metrics, and can continue either result in chat. General tool execution is planned work. Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
+The Models page can stream Ollama pull progress and remove an installed model. Compare sends one frozen context snapshot to two explicitly selected models through the normal run engine, saves both results, labels measured and estimated metrics, and can continue either result in chat.
+
+Tools are off by default and enabled per thread from the composer: **Calculator** (exact arithmetic computed by the app, available on any model) and **Documents** (search and read your Workspace documents, only on models on this machine). Tool calls stream through the same run engine for every provider, are limited to 6 model steps and 12 tool calls, and each call's exact input and result is shown with the answer and in Run history, separate from the model's text. No tool changes anything outside the app. Online retrieval and MCP are planned work.
+
+Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
 ## Setup
 
@@ -80,7 +84,7 @@ Alternatively, use an installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
 
-Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, streaming and interruption behavior, inline model switching, settings snapshots and retries, presets, branches, explicit context trimming, safe thread import/export, attachments, identical comparison context, saved-result continuation, Ollama management controls, theme persistence, dialog focus, mobile navigation, and responsive layouts.
+Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, streaming and interruption behavior, inline model switching, settings snapshots and retries, presets, branches, explicit context trimming, safe thread import/export, attachments, identical comparison context, saved-result continuation, Ollama management controls, calculator and document tool loops with malformed tool arguments, theme persistence, dialog focus, mobile navigation, and responsive layouts.
 
 Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
 
@@ -106,7 +110,7 @@ Run history records queue time, time to first text, total time, reported token u
 - `/app`: chat and settings.
 - `/app/models`: model catalog and Ollama management.
 - `/app/connections`: local runtime and hosted provider connections.
-- `/app/workspace`: persistent text documents for the local document agent.
+- `/app/workspace`: persistent text documents for the Documents tool.
 - `/app/runs`: run history.
 - `/app/compare`: persisted side-by-side model comparisons.
 - `/app/analytics`: analytics navigation.
@@ -120,7 +124,7 @@ Threads, attachments, comparisons, settings, connections, and analytics live in 
 
 Text/code attachments are limited to 100 KB each. Images are limited to PNG, JPEG, WebP, or GIF, 2 MB each and four per thread; all attachments together are limited to 5 MB. Images can be sent only when the selected catalog entry confirms vision support. Attachments are visible and removable before a run. Thread and comparison exports include their source context but omit credentials and connection destinations.
 
-Requests to an online connection send your messages through the local backend to that provider. Hosted providers are pinned to their official endpoints. Custom endpoints must use https unless they are on this machine. The document agent runs only on models on this machine; documents are never sent to remote endpoints. Web search also uses external services.
+Requests to an online connection send your messages through the local backend to that provider. Hosted providers are pinned to their official endpoints. Custom endpoints must use https unless they are on this machine. Document tools run only on models on this machine; documents are never sent to remote endpoints. Web search also uses external services.
 
 Do not commit keys or personal conversation exports.
 

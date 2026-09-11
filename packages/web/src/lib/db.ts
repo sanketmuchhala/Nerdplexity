@@ -83,6 +83,8 @@ export interface Message {
   metadata?: {
     webSearchResults?: WebSearchResult[];
     reasoning?: string;
+    /** Tool calls made while producing this answer, kept with it in the transcript. */
+    tools?: ToolTrace[];
   };
   /** Which model produced an assistant message. Absent on legacy messages: unknown. */
   provenance?: ModelRef;

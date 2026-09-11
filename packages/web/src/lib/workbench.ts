@@ -4,8 +4,18 @@ import type {
   ModelRef,
   RunMessage,
   RunStartRequest,
+  ToolName,
 } from '@app/types';
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
+
+/** Tool groups a thread can enable; 'documents' is search plus read. */
+export type WorkbenchTool = 'calculator' | 'documents';
+const WORKBENCH_TOOLS = new Map<string, ToolName[]>([
+  ['calculator', ['calculator']],
+  ['documents', ['search_documents', 'read_document']],
+]);
+export const toolNamesFor = (tools: WorkbenchTool[] = []): ToolName[] => tools.flatMap(tool => WORKBENCH_TOOLS.get(tool) ?? []);
+export const usesDocumentTools = (tools: ToolName[]) => tools.some(name => name !== 'calculator');
 
 export interface WorkbenchSettings {
   systemPrompt: string;
@@ -15,6 +25,8 @@ export interface WorkbenchSettings {
   contextBudget: number;
   history: 'all' | 'recent';
   recentTurns: number;
+  /** Tools the model may call in this thread. Off by default. */
+  tools: WorkbenchTool[];
 }
 
 export interface Preset {
@@ -37,6 +49,8 @@ export interface InputSnapshot {
   };
   documents: { id: string; title: string; content: string }[];
   attachments?: { id: string; name: string; mimeType: string; size: number; content: string; kind: 'text' | 'image' }[];
+  /** Tools the model was allowed to call. Absent on runs saved before P6. */
+  tools?: ToolName[];
 }
 
 export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 100_000, imageBytes: 2_000_000, totalBytes: 5_000_000 } as const;
@@ -86,6 +100,7 @@ export function workbenchSettings(
     contextBudget: defaults?.num_ctx ?? 8192,
     history: 'all',
     recentTurns: 6,
+    tools: [],
     ...conversation?.workbench,
   };
 }
@@ -105,6 +120,10 @@ export function estimateTokens(messages: RunMessage[]): number {
 
 export function settingsErrors(settings: WorkbenchSettings): string[] {
   const errors: string[] = [];
+  // Presets and threads saved before P6 have no tools field, which means none.
+  const tools: unknown = settings.tools ?? [];
+  if (!Array.isArray(tools) || tools.some(tool => !WORKBENCH_TOOLS.has(tool)))
+    errors.push('Choose tools from Calculator and Documents.');
   if (
     typeof settings.systemPrompt !== 'string' ||
     settings.systemPrompt.length > 20_000

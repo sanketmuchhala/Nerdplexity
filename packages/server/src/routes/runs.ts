@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import type { RunEnvelope, RunMessage } from '@app/types';
+import type { RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
-import { runWorkspaceAgent, WorkspaceDocument } from '../runtime/agent.js';
+import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
+import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
 
 type FetchFn = typeof fetch;
@@ -10,7 +11,7 @@ type FetchFn = typeof fetch;
 interface ValidRun {
   key: string;
   request: ModelRequest;
-  agent: boolean;
+  tools: ToolName[];
   documents: WorkspaceDocument[];
 }
 
@@ -34,15 +35,15 @@ export function validateRunRequest(body: any): ValidRun {
     const value = settings[name];
     if (value !== undefined && (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value)))) throw new Error(`Invalid ${name}: use ${min}–${max}.`);
   }
-  if (body.agent !== undefined && typeof body.agent !== 'boolean') throw new Error('Agent mode must be true or false.');
+  const tools: ToolName[] = body.tools ?? [];
+  if (!Array.isArray(tools) || tools.some(name => !TOOL_NAMES.includes(name)) || new Set(tools).size !== tools.length) throw new Error(`Choose tools from: ${TOOL_NAMES.join(', ')}.`);
   const documents = body.documents ?? [];
   if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
   if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
-  const agent = body.agent === true;
-  if (agent) {
-    if (imageBytes) throw new Error('Image input is not available in document agent mode.');
-    if (!documents.length) throw new Error('Add a document in Workspace before starting a document agent.');
-    if (target.execution !== 'local' || (target.kind !== 'ollama' && target.kind !== 'openai-compatible')) throw new Error('Document agents run only on models on this machine. Documents are not sent to remote endpoints.');
+  const documentTools = tools.some(name => DOCUMENT_TOOLS.has(name));
+  if (documentTools) {
+    if (!documents.length) throw new Error('Add a document in Workspace before enabling document tools.');
+    if (target.execution !== 'local') throw new Error('Document tools run only on models on this machine. Documents are not sent to remote endpoints.');
   }
   return {
     key: body.idempotencyKey,
@@ -51,30 +52,22 @@ export function validateRunRequest(body: any): ValidRun {
       messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
       temperature: settings.temperature, maxTokens: settings.maxTokens, numCtx: settings.numCtx,
     },
-    agent,
-    documents: agent ? documents : [],
+    tools,
+    // Documents reach the model only through document tool calls.
+    documents: documentTools ? documents : [],
   };
 }
 
 function executorFor(run: ValidRun, fetchImpl: FetchFn): RunExecutor {
-  if (!run.agent) {
-    return async ({ signal, emit }) => {
-      for await (const event of streamModel(run.request, signal, fetchImpl)) {
-        if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason, ...(event.loadMs !== undefined ? { loadMs: event.loadMs } : {}) };
-        emit(event);
-      }
-      throw new Error('The model stream ended without a result.');
-    };
-  }
-  const { target, model, messages, temperature, maxTokens, numCtx } = run.request;
   return async ({ signal, emit }) => {
-    const local = { runtime: target.kind as 'ollama' | 'openai-compatible', baseURL: target.baseURL, headers: target.headers, model, messages: messages.map(message => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') })), temperature, max_tokens: maxTokens, num_ctx: numCtx };
-    for await (const event of runWorkspaceAgent(local, run.documents, signal, fetchImpl)) {
-      if (event.type === 'done') return { usage: event.usage };
-      if (event.type === 'error') throw new Error(event.message);
+    const events = run.tools.length
+      ? runWithTools(run.request, run.tools, run.documents, signal, fetchImpl)
+      : streamModel(run.request, signal, fetchImpl);
+    for await (const event of events) {
+      if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason, ...(event.loadMs !== undefined ? { loadMs: event.loadMs } : {}) };
       emit(event);
     }
-    throw new Error('The document agent ended without a result.');
+    throw new Error('The model stream ended without a result.');
   };
 }
 

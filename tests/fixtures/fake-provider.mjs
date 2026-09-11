@@ -12,6 +12,7 @@ const MODELS = [
   'busy-model',
   'broken-model',
   'reasoning-model',
+  'tool-model',
 ];
 // Groq-style rate-limit headers on every successful response.
 const QUOTA = {
@@ -63,6 +64,7 @@ http
       messages: body.messages,
       temperature: body.temperature,
       maxTokens: body.max_tokens ?? body.max_completion_tokens,
+      tools: (body.tools ?? []).map((t) => t.function?.name),
       aborted: false,
       completed: false,
       tokens: 0,
@@ -103,6 +105,38 @@ http
           JSON.stringify({ error: { message: 'Busy, try again shortly.' } }),
         );
       entry.completed = true;
+      return;
+    }
+    // tool-model: calls tools by prompt. "[[expr]]" uses the calculator, "malformed" sends
+    // broken arguments, "notes" searches then reads a document. Answers from the results.
+    if (body.model === 'tool-model') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const lastUser = body.messages.map((m) => m.role).lastIndexOf('user');
+      const results = body.messages
+        .slice(lastUser + 1)
+        .filter((m) => m.role === 'tool')
+        .map((m) => JSON.parse(m.content));
+      const call = (name, args) => {
+        res.write(frame({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call_${results.length + 1}`, type: 'function', function: { name, arguments: args } }] } }] }));
+        res.write(frame({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }));
+      };
+      const say = (text) => {
+        res.write(delta(text));
+        res.write(frame({ choices: [{ delta: {}, finish_reason: 'stop' }] }));
+      };
+      const expression = /\[\[(.+?)\]\]/.exec(prompt)?.[1];
+      const last = results.at(-1);
+      if (!body.tools?.length) say('No tools were enabled.');
+      else if (expression && !results.length) call('calculator', JSON.stringify({ expression }));
+      else if (/malformed/.test(prompt) && !results.length) call('calculator', '{"expression":');
+      else if (/notes/.test(prompt) && results.length === 0) call('search_documents', JSON.stringify({ query: 'owner' }));
+      else if (/notes/.test(prompt) && results.length === 1) call('read_document', JSON.stringify({ id: results[0][0]?.id ?? 'missing' }));
+      else if (/notes/.test(prompt)) say(`According to ${last.title}: ${last.content}`);
+      else if (last?.error) say(`The tool reported an error: ${last.error}`);
+      else say(`The result is ${last?.result}.`);
+      res.write(frame({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 1 } }));
+      entry.completed = true;
+      res.end('data: [DONE]\n\n');
       return;
     }
     res.writeHead(200, { 'content-type': 'text/event-stream', ...QUOTA });

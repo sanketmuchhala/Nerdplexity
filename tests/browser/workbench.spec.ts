@@ -377,3 +377,76 @@ test('Ollama install progress and removal reflect runtime state', async ({ page 
   await page.getByRole('article').filter({ hasText: 'gemma3:4b' }).getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByRole('article').filter({ hasText: 'gemma3:4b' })).toHaveCount(0);
 });
+
+test('calculator tool: the exact call and result stay separate from model text and persist', async ({ page }) => {
+  await setup(page, 'tool-model');
+  const toggle = page.getByRole('button', { name: 'Calculator tool' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.np-composer-footnote')).toContainText('Tools: Calculator');
+  const text = unique('What is [[2+3*4]]?');
+  await send(page, text, 1);
+  const activity = page.locator('.np-thread .np-tool');
+  await expect(activity).toHaveCount(1);
+  await expect(activity).toContainText('Calculator');
+  await expect(activity).toContainText('2+3*4 = 14');
+  await expect(page.locator('.np-thread')).toContainText('The result is 14.');
+  await activity.locator('summary').click();
+  await expect(activity).toContainText('Computed by the app, not by the model.');
+
+  const requests = await upstream(page, text);
+  expect(requests).toHaveLength(2);
+  expect(requests[0].tools).toEqual(['calculator']);
+  expect(requests[1].messages.slice(-2)).toEqual([
+    { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'calculator', arguments: '{"expression":"2+3*4"}' } }] },
+    { role: 'tool', tool_call_id: 'call_1', content: '{"expression":"2+3*4","result":14}' },
+  ]);
+
+  await page.reload();
+  await page.locator('.np-history-row > button:first-child').filter({ hasText: text }).click();
+  await expect(page.locator('.np-thread .np-tool')).toContainText('2+3*4 = 14');
+  await expect(page.getByRole('button', { name: 'Calculator tool' })).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/app/runs');
+  const row = page.locator('.np-run-list').getByRole('button', { name: new RegExp(text.replace(/[[\]+*?]/g, '\\$&')) }).first();
+  await expect(row).toContainText('With tools');
+  await row.click();
+  await expect(page.locator('.np-run-detail .np-tool')).toContainText('2+3*4 = 14');
+});
+
+test('malformed tool arguments are returned to the model and the run still completes', async ({ page }) => {
+  await setup(page, 'tool-model');
+  await page.getByRole('button', { name: 'Calculator tool' }).click();
+  const text = unique('malformed request');
+  await send(page, text, 1);
+  const activity = page.locator('.np-thread .np-tool-error');
+  await expect(activity).toContainText('not valid JSON');
+  await expect(page.locator('.np-thread')).toContainText('The tool reported an error: The tool arguments were not valid JSON.');
+  const requests = await upstream(page, text);
+  expect(JSON.parse(requests[1].messages.at(-1).content)).toEqual({ error: 'The tool arguments were not valid JSON.' });
+});
+
+test('document tools search, then read, local workspace documents in a multi-step loop', async ({ page }) => {
+  await page.goto('/app/workspace');
+  await page.getByRole('button', { name: 'New document' }).click();
+  await page.getByLabel('Document title').fill('Launch notes');
+  await page.getByLabel('Content').fill('Owner: Priya. Decision: ship on Friday.');
+  await page.getByRole('button', { name: 'Save document' }).click();
+  await expect(page.getByRole('status')).toContainText('Document saved');
+  await setup(page, 'tool-model');
+  await page.getByRole('button', { name: 'Documents tool' }).click();
+  await expect(page.getByRole('button', { name: 'Documents tool' })).toHaveAttribute('aria-pressed', 'true');
+  const text = unique('Check my notes');
+  await send(page, text, 1);
+  const activity = page.locator('.np-thread .np-tool');
+  await expect(activity).toHaveCount(2);
+  await expect(activity.nth(0)).toContainText('Searched documents');
+  await expect(activity.nth(0)).toContainText('“owner” · 1 match');
+  await expect(activity.nth(1)).toContainText('Read a document');
+  await expect(page.locator('.np-thread')).toContainText('According to Launch notes: Owner: Priya. Decision: ship on Friday.');
+  await activity.nth(1).locator('summary').click();
+  await expect(activity.nth(1)).toContainText('Retrieved from your documents');
+  const requests = await upstream(page, text);
+  expect(requests).toHaveLength(3);
+  expect(requests[0].tools).toEqual(['search_documents', 'read_document']);
+  expect(requests[0].messages[0].content).toContain('Launch notes');
+});
