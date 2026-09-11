@@ -58,9 +58,9 @@ export function ChatWorkspace({ run, documents, onModels, onDocuments }: { run: 
         <div className="np-suggestions">{suggestions.map(({icon: Icon, title, text}) => <button key={title} onClick={() => { if (title === 'Work with my notes' && (!documents.length || !local)) { onDocuments(); return; } setAgent(title === 'Work with my notes'); setInput(text); textarea.current?.focus(); }}><Icon size={18}/><span>{title}</span><ArrowRight size={13}/></button>)}</div>
         {!ready && <button className="np-connect-prompt" onClick={onModels}>{needsKey ? `Add your ${connection?.name} API key to get started` : model && !connection ? 'This thread’s connection was removed. Choose a model' : 'Choose a model to get started'}<ArrowRight size={14}/></button>}
       </div> : <div className="np-thread">
-        {messages.map(message => <Fragment key={message.id}><Message message={{ ...message, timestamp: message.createdAt }}/ >{message.role === 'assistant' && message.provenance && <p className="np-provenance">{message.provenance.modelId} · {connections.find(c => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}</p>}</Fragment>)}
+        {messages.map(message => <Fragment key={message.id}><Message message={{ ...message, timestamp: message.createdAt }} modelId={message.provenance?.modelId} providerName={message.provenance ? connections.find(c => c.id === message.provenance!.connectionId)?.id : undefined} /></Fragment>)}
         {ownRun && run.tools.length > 0 && <div className="np-inline-tools">{run.tools.map((tool, i) => <details key={i}><summary><FileText size={13}/>{tool.name.replaceAll('_',' ')}<span>Step {tool.step}</span></summary><pre>{JSON.stringify({ input: tool.input, output: tool.output }, null, 2)}</pre></details>)}</div>}
-        {ownRun && run.partial && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now() }}/ >}
+        {ownRun && run.partial && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now() }} modelId={run.model} providerName={connection?.id} />}
         {ownRun && run.running && <div className="np-live-status" role="status"><span className="np-live-dots"><i/><i/><i/></span>{run.phase}</div>}
         {ownRun && !run.running && run.phase && <div className="np-live-status">{run.phase}</div>}
       </div>}

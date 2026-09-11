@@ -239,7 +239,7 @@ export function Chat({ onOpenSettings }: Props) {
               const isLast = idx === conversation.messages.length - 1;
               return (
                 <div key={msg.id} ref={isLast ? markMessageAnchor : undefined} data-last-message={isLast ? 'true' : undefined}>
-                  <Message message={{ role: msg.role, content: msg.content, timestamp: msg.createdAt, id: msg.id, metadata: msg.metadata }} />
+                  <Message message={{ role: msg.role, content: msg.content, timestamp: msg.createdAt, id: msg.id, metadata: msg.metadata }} modelId={conversation.model} providerName={conversation.provider} />
                 </div>
               );
             })}

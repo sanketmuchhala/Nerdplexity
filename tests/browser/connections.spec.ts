@@ -64,7 +64,7 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   await page.getByRole('textbox', { name: 'Message' }).fill('Say hello');
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   await expect(page.getByText('Hello from the endpoint.')).toBeVisible();
-  await expect(page.getByText('example/chat-1 · Example')).toBeVisible();
+  await expect(page.getByText('Chat 1')).toBeVisible();
 
   // The run is routed by connection, and the key travels only in the request body.
   expect(runBody).toMatchObject({ target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-example-secret' }, model: 'example/chat-1' });

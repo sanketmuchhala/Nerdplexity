@@ -6,12 +6,25 @@ import { sanitizeDisplayText } from '../lib/stripEmojis';
 import { WebSearchResult } from '../lib/db';
 
 interface Props {
+  modelId?: string;
+  providerName?: string;
   message: ChatMessage & { metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
 }
 
+import ModelLogo from '../workspace/ModelLogo';
+
 const COL = 'w-full max-w-[680px] mx-auto';
 
-export function Message({ message }: Props) {
+function formatModelId(id: string) {
+  if (!id) return 'Nerdplexity';
+  const withoutProvider = id.includes('/') ? id.split('/').slice(1).join('/') : id;
+  return withoutProvider
+    .split(/[-_]/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+export function Message({ message, modelId, providerName }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -28,12 +41,11 @@ export function Message({ message }: Props) {
       <div className="w-full px-4 py-4 animate-message-in">
         <div className={COL}>
           <div className="flex justify-end">
-            <div className="max-w-[78%] px-4 py-3 rounded-2xl rounded-tr-sm"
-              style={{ background: 'var(--s3)', border: '1px solid var(--b-hi)' }}>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
+            <div className="max-w-[78%] px-5 py-3.5 rounded-[22px]"
+              style={{ background: 'var(--s2)' }}>
+              <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
                 {sanitizeDisplayText(message.content)}
               </p>
-              <p className="text-[10px] mt-1.5 text-right" style={{ color: 'var(--t4)' }}>{ts}</p>
             </div>
           </div>
         </div>
@@ -46,10 +58,18 @@ export function Message({ message }: Props) {
     <div className="w-full px-4 py-6 animate-message-in">
       <div className={COL}>
         {/* Label */}
-        <div className="flex items-center gap-2 mb-3.5">
-          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
-            style={{ background: 'var(--blue-dark)', boxShadow: '0 0 8px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
-          <span className="t-caps" style={{ letterSpacing: '.1em' }}>Nerdplexity</span>
+        <div className="flex items-center gap-3 mb-4">
+          {modelId ? (
+            <div style={{ transform: 'scale(0.8)', transformOrigin: 'left center', margin: '-4px -6px -4px 0' }}>
+              <ModelLogo modelId={modelId} provider={providerName || ''} />
+            </div>
+          ) : (
+            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white"
+              style={{ background: 'var(--blue-dark)', boxShadow: '0 0 8px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
+          )}
+          <span className="text-[15px] font-medium" style={{ color: 'var(--t1)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
+            {formatModelId(modelId || '')}
+          </span>
         </div>
 
         {/* Source chips */}
@@ -77,7 +97,7 @@ export function Message({ message }: Props) {
         )}
 
         {/* Content */}
-        <div className="text-sm leading-[1.8]" style={{ color: 'var(--t1)' }}>
+        <div className="text-[15px] leading-[1.75]" style={{ color: 'var(--t1)' }}>
           {formatContent(sanitizeDisplayText(message.content))}
         </div>
 
