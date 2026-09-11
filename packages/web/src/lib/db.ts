@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie';
+import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
 import type { Connection, ConnectionKind, ModelRef, ProviderErrorCategory, RateLimitState, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
@@ -23,6 +24,9 @@ export interface RunRecord {
   retryOf?: string;
   /** Rate-limit state the provider reported during this run. */
   quota?: RateLimitState;
+  /** Immutable, credential-free request context and configured settings. */
+  input?: InputSnapshot;
+  notices?: string[];
 }
 
 export interface WebSearchResult {
@@ -61,6 +65,8 @@ export interface Conversation {
   connectionId?: string;
   /** The user allowed possibly billed models in this thread while Free only is on. */
   allowCharges?: boolean;
+  workbench?: WorkbenchSettings;
+  branchOf?: { conversationId: string; messageId: string };
   createdAt: number;
   updatedAt: number;
   messages: Message[];
@@ -139,6 +145,8 @@ export interface AppSettings {
   connectionsVersion?: number;
   /** 'free-only' blocks runs that cannot be confirmed free. */
   costPolicy?: 'any' | 'free-only';
+  theme?: 'dark' | 'light';
+  sidebarCollapsed?: boolean;
 }
 
 /** A key remembered on this device. Session-only keys never reach IndexedDB. */
@@ -156,6 +164,7 @@ export class ChatDatabase extends Dexie {
   runs!: Table<RunRecord>;
   connections!: Table<Connection>;
   credentials!: Table<StoredCredential>;
+  presets!: Table<Preset>;
 
   constructor() {
     super('ChatDatabase');
@@ -186,6 +195,8 @@ export class ChatDatabase extends Dexie {
       connections: 'id, kind',
       credentials: 'connectionId'
     });
+    // Additive upgrade: all existing stores and historical data are retained.
+    this.version(5).stores({ presets: 'id, name, updatedAt' });
   }
 }
 

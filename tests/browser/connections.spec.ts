@@ -66,7 +66,7 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   await card.getByRole('button', { name: 'Use model' }).click();
 
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole('button', { name: 'example/chat-1 Example', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Choose model', exact: true })).toContainText('example/chat-1Example');
   await page.getByRole('textbox', { name: 'Message' }).fill('Say hello');
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   await expect(page.getByText('Hello from the endpoint.')).toBeVisible();

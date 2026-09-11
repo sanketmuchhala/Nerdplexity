@@ -118,6 +118,7 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
         maxOutputTokens: Number(m.top_provider?.max_completion_tokens) || undefined,
         capabilities: {
           tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : null,
+          temperature: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('temperature') : null,
           vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null,
         },
         ...(pricing === 'paid' ? { price: { input: input!, output: output! } } : {}),

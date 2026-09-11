@@ -5,6 +5,7 @@ import useChat from '../state/chatStore';
 import { db, RunRecord, WorkspaceDocument } from '../lib/db';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { isLocal, latestResult, targetFor } from '../state/connections';
+import { buildContext, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 
 export interface RunError {
@@ -25,7 +26,8 @@ interface Attempt {
   prompt: string;
   messages: RunMessage[];
   agent: boolean;
-  documents: WorkspaceDocument[];
+  documents: InputSnapshot['documents'];
+  input: InputSnapshot;
 }
 
 type LocalOutcome = { type: 'local'; status: 'failed' | 'canceled' | 'interrupted'; message?: string };
@@ -136,7 +138,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void db.runs.update(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools }).catch(() => undefined);
+      void db.runs.update(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -145,7 +147,7 @@ export function useRun() {
         switch (event.type) {
           case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
           case 'started': setPhase('Waiting for the model'); break;
-          case 'status': setPhase(event.message); break;
+          case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'delta': record.output += event.text; setPhase('Generating'); break;
           case 'tool': record.tools.push({ name: event.name, input: event.input, output: event.output, step: event.step }); setTools([...record.tools]); break;
@@ -172,18 +174,18 @@ export function useRun() {
     const record: RunRecord = {
       id: uuidv4(), conversationId: attempt.conversationId, connectionId: connection.id, provider: connection.name, model: attempt.model,
       prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.agent ? 'agent' : 'chat',
+      input: structuredClone(attempt.input), notices: [],
       output: '', reasoning: '', tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
     };
     active.current = { record, controller, cancelRequested: false };
     lastAttempt.current = { ...attempt, recordId: record.id };
     showRunning(record, 'Starting');
-    const settings = useChat.getState().settings;
     try {
       // Durable before contacting the model, so a reload can find this run.
       await db.runs.put(record);
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: attempt.model, messages: attempt.messages,
-        settings: { temperature: settings?.temperature ?? 0.7, maxTokens: settings?.max_tokens ?? 2048, ...(connection.kind === 'ollama' ? { numCtx: settings?.num_ctx ?? 8192 } : {}) },
+        settings: attempt.input.settings,
         agent: attempt.agent, documents: attempt.agent ? attempt.documents : [],
       }, controller.signal);
       record.runId = runId;
@@ -198,7 +200,8 @@ export function useRun() {
     await follow(record, controller);
   };
 
-  const send = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
+  const preparing = useRef(false);
+  const prepareAndSend = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
     if (active.current || !prompt.trim()) return;
     let state = useChat.getState();
     try {
@@ -212,11 +215,30 @@ export function useRun() {
     if (agent && !isLocal(connection)) { setError({ message: 'Document agents run only on models on this machine.', retryable: false }); return; }
     const blocked = policyBlock({ connectionId: connection.id, modelId: conversation.model }, conversation.id);
     if (blocked) { setError({ message: blocked, retryable: false, policy: true }); return; }
-    await state.addMessage('user', prompt, undefined, conversation.id);
+    const result = latestResult(useConnections.getState().catalog[connection.id]);
+    const descriptor = result?.ok ? result.models.find(m => m.id === conversation.model) : undefined;
+    const configured = workbenchSettings(conversation, state.settings);
+    const context = buildContext(conversation.messages, prompt, configured, descriptor, connection);
+    if (context.warnings.length || (agent && descriptor?.capabilities.tools === false)) {
+      setError({ message: context.warnings[0] || 'This model does not support tools. Switch to Chat or another model.', retryable: false }); return;
+    }
+    const input: InputSnapshot = { messages: context.messages, settings: context.effective, configured,
+      context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown },
+      documents: agent ? documents.map(({ id, title, content }) => ({ id, title, content })) : [],
+    };
+    try { await state.addMessage('user', prompt, undefined, conversation.id); }
+    catch { setError({ message: 'Unable to save your message. Check browser storage.', retryable: false }); return; }
     await execute({
-      conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, agent, documents,
-      messages: historyOf(conversation.id),
+      conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, agent, documents: input.documents,
+      messages: context.messages, input,
     });
+  };
+
+  const send = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
+    if (preparing.current) return;
+    preparing.current = true;
+    try { await prepareAndSend(prompt, agent, documents); }
+    finally { preparing.current = false; }
   };
 
   /** Try the last attempt again as a linked run, optionally on a model the user chose. The user message is not repeated. */
@@ -227,7 +249,13 @@ export function useRun() {
     const blocked = policyBlock({ connectionId: next.connectionId, modelId: next.model }, next.conversationId);
     if (blocked) { setError({ message: blocked, retryable: false, policy: true }); return; }
     if (override) await useChat.getState().setConversationModel(attempt.conversationId, override);
-    await execute(next, attempt.recordId);
+    const result = latestResult(useConnections.getState().catalog[next.connectionId]);
+    const descriptor = result?.ok ? result.models.find(m => m.id === next.model) : undefined;
+    const connection = useConnections.getState().connections.find(c => c.id === next.connectionId);
+    const context = buildContext(next.messages, '', { ...next.input.configured, systemPrompt: '', history: 'all' }, descriptor, connection);
+    if (context.warnings.length) { setError({ message: context.warnings[0], retryable: false }); return; }
+    // Retry preserves the original context and settings; only the explicitly chosen route may change.
+    await execute({ ...next, input: override ? { ...next.input, settings: context.effective, context: { ...next.input.context, budget: context.budget, limitKnown: context.limitKnown } } : next.input }, attempt.recordId);
   };
 
   const stop = () => {
@@ -258,7 +286,8 @@ export function useRun() {
         active.current = { record, controller, cancelRequested: false };
         lastAttempt.current = {
           conversationId: record.conversationId, connectionId: record.connectionId || '', model: record.model, prompt: record.prompt,
-          messages: historyOf(record.conversationId), agent: record.mode === 'agent', documents: [], recordId: record.id,
+          messages: record.input?.messages ?? historyOf(record.conversationId), agent: record.mode === 'agent', documents: record.input?.documents ?? [], recordId: record.id,
+          input: record.input ?? { messages: historyOf(record.conversationId), settings: { maxTokens: 2048 }, configured: workbenchSettings(), context: { estimatedTokens: 0, budget: 8192, omittedMessages: 0, limitKnown: false }, documents: [] },
         };
         showRunning(record, 'Reconnecting');
         setStreamRunId(record.runId);

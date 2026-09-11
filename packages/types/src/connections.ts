@@ -62,7 +62,7 @@ export type PricingClass = 'local' | 'zero-price' | 'free-tier' | 'paid' | 'unkn
 export interface ModelDescriptor {
   id: string;
   displayName: string;
-  capabilities: { tools: Capability; vision: Capability };
+  capabilities: { tools: Capability; vision: Capability; temperature?: Capability };
   contextLength?: number;
   maxOutputTokens?: number;
   /** Download size reported by a local runtime. Not a guarantee the model fits in memory. */

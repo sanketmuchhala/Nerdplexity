@@ -6,7 +6,7 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, a bounded document agent for local models, run history, and analytics pages.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, a bounded document agent for local models, run history, and analytics pages. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, search, light/dark themes, and responsive keyboard-accessible dialogs.
 
 Files, comparisons, and general tool execution are planned work. Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
@@ -80,7 +80,7 @@ Alternatively, use an installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
 
-Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, a short rate limit waited out, streaming before completion, Unicode split across chunks, Stop, reload during a run, a run lost by a server restart, rate limits and Retry, a dropped stream, and reasoning display.
+Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, streaming and interruption behavior, inline model switching, settings snapshots and retries, presets, branches, explicit context trimming, safe thread import/export, theme persistence, dialog focus, mobile navigation, and responsive layouts.
 
 Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
 
