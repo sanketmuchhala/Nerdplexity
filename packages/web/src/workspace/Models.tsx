@@ -1,8 +1,9 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { ArrowRight, Check, Cpu, Eye, EyeOff, HardDrive, Pencil, Plus, RefreshCw, Server, Star, Trash2 } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Pencil, Eye, EyeOff, HardDrive, Cpu, Star, ArrowRight, Check, Search } from 'lucide-react';
 import type { Connection, ConnectionKind, DiscoveryResult, ModelDescriptor, ModelRef } from '@app/types';
 import useChat from '../state/chatStore';
 import useConnections, { CatalogState, isLocal, modelKey, requiresKey, usesBaseURL } from '../state/connections';
+import ModelLogo from './ModelLogo';
 import { hasKey } from '../lib/credentials';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
@@ -42,11 +43,11 @@ function statusLine(connection: Connection, state?: CatalogState) {
   return { ready: true, text: n ? `${n} model${n === 1 ? '' : 's'}` : isLocal(connection) ? 'No models installed' : 'No models available' };
 }
 
-function ConnectionForm({ initial, onDone }: { initial?: Connection; onDone: () => void }) {
+function ProviderModal({ initial, onDone }: { initial?: Connection; onDone: () => void }) {
   const { save, discover } = useConnections();
-  const [presetId, setPresetId] = useState(initial ? '' : 'ollama');
+  const [presetId, setPresetId] = useState(initial ? '' : 'openai');
   const preset = PRESETS.find(p => p.id === presetId);
-  const kind = initial?.kind ?? preset?.kind ?? 'ollama';
+  const kind = initial?.kind ?? preset?.kind ?? 'openai';
   const [name, setName] = useState(initial?.name ?? preset?.name ?? '');
   const [baseURL, setBaseURL] = useState(initial?.baseURL ?? preset?.baseURL ?? '');
   const [key, setKeyValue] = useState('');
@@ -78,25 +79,64 @@ function ConnectionForm({ initial, onDone }: { initial?: Connection; onDone: () 
     void discover(initial.id);
   };
 
-  return <form className="np-conn-form" onSubmit={submit} aria-label={initial ? `Edit ${initial.name}` : 'Add connection'}>
-    {!initial && <label className="np-field"><span>Type</span><select aria-label="Connection type" value={presetId} onChange={e => choosePreset(e.target.value)}>{PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>}
-    {preset && <p className="np-conn-hint">{preset.hint}</p>}
-    <div className="np-conn-fields">
-      <label className="np-field"><span>Name</span><input aria-label="Connection name" value={name} onChange={e => setName(e.target.value)} maxLength={60}/></label>
-      {usesBaseURL(kind) && <label className="np-field"><span>Server address</span><input aria-label="Server address" value={baseURL} onChange={e => setBaseURL(e.target.value)} spellCheck={false} autoComplete="off"/></label>}
+  return (
+    <div className="np-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onDone()}>
+      <form className="np-modal" onSubmit={submit} aria-label={initial ? `Edit ${initial.name}` : 'Add connection'}>
+        <div className="np-modal-header">
+          <h2>{initial ? 'Edit Provider' : 'Add Provider'}</h2>
+        </div>
+        
+        <div className="np-modal-body">
+          {!initial && (
+            <label className="np-field">
+              <span>Provider Type</span>
+              <select aria-label="Connection type" value={presetId} onChange={e => choosePreset(e.target.value)}>
+                {PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </label>
+          )}
+          {preset && !initial && <p className="np-conn-hint">{preset.hint}</p>}
+          
+          <div className="np-conn-fields" style={{ flexDirection: 'column' }}>
+            <label className="np-field">
+              <span>Display Name</span>
+              <input autoFocus aria-label="Connection name" value={name} onChange={e => setName(e.target.value)} maxLength={60}/>
+            </label>
+            {usesBaseURL(kind) && (
+              <label className="np-field">
+                <span>Server Address</span>
+                <input aria-label="Server address" value={baseURL} onChange={e => setBaseURL(e.target.value)} spellCheck={false} autoComplete="off"/>
+              </label>
+            )}
+          </div>
+          
+          <label className="np-field">
+            <span>API Key {requiresKey(kind) ? '' : '(Optional)'}</span>
+            <div className="np-key-input">
+              <input aria-label="API key" type={showKey ? 'text' : 'password'} value={key} onChange={e => setKeyValue(e.target.value)} placeholder={existingKey ? 'Saved. Enter a new key to replace it.' : kind === 'ollama' ? 'Not needed for local Ollama' : 'Paste your API key here'} spellCheck={false} autoComplete="off"/>
+              <button type="button" className="np-icon-button" aria-label={showKey ? 'Hide key' : 'Show key'} onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={16}/> : <Eye size={16}/>}</button>
+            </div>
+          </label>
+          
+          <label className="np-check">
+            <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}/>
+            <span>
+              <strong>Remember on this device</strong>
+              Saved securely in this browser's local storage.
+            </span>
+          </label>
+          
+          {error && <p className="np-error" role="alert">{error}</p>}
+        </div>
+        
+        <div className="np-modal-footer">
+          {existingKey && <button type="button" className="np-button ghost small" onClick={() => void clear()} style={{ marginRight: 'auto', color: '#e5a299' }}>Forget Key</button>}
+          <button type="button" className="np-button ghost" onClick={onDone}>Cancel</button>
+          <button className="np-button primary" disabled={saving}>{saving ? 'Saving…' : 'Save Connection'}</button>
+        </div>
+      </form>
     </div>
-    <label className="np-field"><span>API key {requiresKey(kind) ? '' : '(optional)'}</span>
-      <div className="np-key-input"><input aria-label="API key" type={showKey ? 'text' : 'password'} value={key} onChange={e => setKeyValue(e.target.value)} placeholder={existingKey ? 'Saved. Enter a new key to replace it.' : kind === 'ollama' ? 'Not needed for local Ollama' : 'Paste your key'} spellCheck={false} autoComplete="off"/>
-        <button type="button" className="np-icon-button" aria-label={showKey ? 'Hide key' : 'Show key'} onClick={() => setShowKey(!showKey)}>{showKey ? <EyeOff size={14}/> : <Eye size={14}/>}</button></div>
-    </label>
-    <label className="np-check"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}/><span><strong>Remember this key on this device</strong>Saved unencrypted in this browser profile's storage. Otherwise the key is forgotten when you close or reload the tab.</span></label>
-    {error && <p className="np-error" role="alert">{error}</p>}
-    <div className="np-conn-actions">
-      {existingKey && <button type="button" className="np-button ghost small" onClick={() => void clear()}>Forget key</button>}
-      <button type="button" className="np-button ghost small" onClick={onDone}>Cancel</button>
-      <button className="np-button primary small" disabled={saving}>{saving ? 'Saving…' : initial ? 'Save and check' : 'Add and check'}</button>
-    </div>
-  </form>;
+  );
 }
 
 export function Models({ onChat }: { onChat: () => void }) {
@@ -156,28 +196,27 @@ export function Models({ onChat }: { onChat: () => void }) {
     <div className="np-page-heading"><div><span className="np-eyebrow">MODELS</span><h1>Connect a model. Pick one.</h1><p>Local runtimes and your own API keys, in one catalog.</p></div><span className="np-label"><HardDrive size={13}/> Keys stay in this browser</span></div>
 
     <section className="np-panel" aria-labelledby="connections-title">
-      <div className="np-section-title"><div><h2 id="connections-title">Connections</h2><p>Listing models checks the address and key. It does not run a model.</p></div>
-        <div className="np-conn-actions"><button className="np-button ghost small" onClick={() => void discoverAll()} disabled={anyLoading}><RefreshCw size={13} className={anyLoading ? 'np-spin' : ''}/>Refresh all</button><button className="np-button small" onClick={() => setEditing('new')} disabled={editing === 'new'}><Plus size={13}/>Add connection</button></div></div>
-      {editing === 'new' && <ConnectionForm onDone={() => setEditing(null)}/>}
+      <div className="np-section-title"><div><h2 id="connections-title">Providers</h2><p>Manage your API keys and local connections.</p></div>
+        <div className="np-conn-actions"><button className="np-button ghost small" onClick={() => void discoverAll()} disabled={anyLoading}><RefreshCw size={13} className={anyLoading ? 'np-spin' : ''}/>Refresh All</button><button className="np-button primary small" onClick={() => setEditing('new')} disabled={editing === 'new'}><Plus size={13}/>Add Provider</button></div></div>
+      {editing === 'new' && <ProviderModal onDone={() => setEditing(null)}/>}
       <ul className="np-conn-list">
         {connections.map(connection => {
           const state = catalog[connection.id];
           const status = statusLine(connection, state);
           const badge = keyBadge(connection);
           return <li key={connection.id} className="np-conn-row">
-            {editing === connection.id ? <ConnectionForm initial={connection} onDone={() => setEditing(null)}/> : <>
-              <div className="np-conn-main">
-                <span className={`np-status ${status.ready ? 'ready' : ''}`}><i/></span>
-                <div className="np-conn-name"><strong>{connection.name}</strong><span>{usesBaseURL(connection.kind) ? connection.baseURL : 'Hosted API'}{' · '}{isLocal(connection) ? 'This machine' : 'Remote'}</span></div>
-                <div className="np-conn-badges">{badge && <span className={`np-label ${badge.error ? 'error' : ''}`}>{badge.text}</span>}<span className={`np-label ${status.error ? 'error' : ''}`} role="status">{status.text}</span></div>
-                <div className="np-conn-buttons">
-                  <button className="np-icon-button" aria-label={`Refresh ${connection.name}`} title="Refresh models" onClick={() => void discover(connection.id)} disabled={state?.status === 'loading'}><RefreshCw size={14} className={state?.status === 'loading' ? 'np-spin' : ''}/></button>
-                  <button className="np-icon-button" aria-label={`Edit ${connection.name}`} title="Edit" onClick={() => setEditing(connection.id)}><Pencil size={14}/></button>
-                  <button className="np-icon-button" aria-label={`Remove ${connection.name}`} title="Remove" onClick={() => void removeConnection(connection)}><Trash2 size={14}/></button>
-                </div>
+            <div className="np-conn-main">
+              <span className={`np-status ${status.ready ? 'ready' : ''}`}><i/></span>
+              <div className="np-conn-name"><strong>{connection.name}</strong><span>{usesBaseURL(connection.kind) ? connection.baseURL : 'Hosted API'}{' · '}{isLocal(connection) ? 'This machine' : 'Remote'}</span></div>
+              <div className="np-conn-badges">{badge && <span className={`np-label ${badge.error ? 'error' : ''}`}>{badge.text}</span>}<span className={`np-label ${status.error ? 'error' : ''}`} role="status">{status.text}</span></div>
+              <div className="np-conn-buttons">
+                <button className="np-icon-button" aria-label={`Refresh ${connection.name}`} title="Refresh models" onClick={() => void discover(connection.id)} disabled={state?.status === 'loading'}><RefreshCw size={16} className={state?.status === 'loading' ? 'np-spin' : ''}/></button>
+                <button className="np-icon-button" aria-label={`Edit ${connection.name}`} title="Edit" onClick={() => setEditing(connection.id)}><Pencil size={16}/></button>
+                <button className="np-icon-button" aria-label={`Remove ${connection.name}`} title="Remove" onClick={() => void removeConnection(connection)}><Trash2 size={16}/></button>
               </div>
-              {status.error && <p className="np-conn-error">{status.error}</p>}
-            </>}
+            </div>
+            {status.error && <p className="np-conn-error">{status.error}</p>}
+            {editing === connection.id && <ProviderModal initial={connection} onDone={() => setEditing(null)}/>}
           </li>;
         })}
       </ul>
@@ -185,29 +224,80 @@ export function Models({ onChat }: { onChat: () => void }) {
       {host?.ok && host.host && <div className="np-machine"><Cpu size={16}/><span>{host.host.platform} / {host.host.arch}</span><span>{sizeLabel(host.host.memory)} memory</span><span>{host.host.cpus} logical cores</span><small>Machine running local models. Download size does not guarantee a model fits.</small></div>}
     </section>
 
-    <div className="np-section-title np-model-title"><div><h2>All models <span className="np-count">{totalModels}</span></h2><p>{active ? <>Default for new threads: <strong>{active.modelId}</strong></> : 'Choose a model to use in new threads.'}</p></div>
-      <div className="np-catalog-controls">
-        <select className="np-search" aria-label="Filter by connection" value={source} onChange={e => setSource(e.target.value)}><option value="all">All connections</option>{connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <input className="np-search" aria-label="Search models" placeholder="Search models…" value={search} onChange={e => setSearch(e.target.value)}/>
-      </div></div>
-    <div className="np-filter-row" role="group" aria-label="Model filters">{(['all', 'favorites', 'local', 'tools', 'vision'] as Filter[]).map(f => <button key={f} className={`np-mode ${filter === f ? 'selected' : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f === 'favorites' ? 'Favorites' : f === 'local' ? 'This machine' : f === 'tools' ? 'Tool calling' : 'Vision'}</button>)}</div>
+    <div className="np-section-title np-model-title">
+      <div>
+        <h2>All models <span className="np-count">{totalModels}</span></h2>
+        <p>{active ? <>Default for new threads: <strong>{active.modelId}</strong></> : 'Choose a model to use in new threads.'}</p>
+      </div>
+    </div>
+
+    <div className="np-giant-search-container">
+      <div className="np-giant-search">
+        <Search size={24}/>
+        <input aria-label="Search models" placeholder="Search models…" value={search} onChange={e => setSearch(e.target.value)} autoFocus/>
+      </div>
+      <div className="np-giant-filters">
+        <select aria-label="Filter by connection" value={source} onChange={e => setSource(e.target.value)}>
+          <option value="all">All connections</option>
+          {connections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div className="np-filter-row" role="group" aria-label="Model filters">
+          {(['all', 'favorites', 'local', 'tools', 'vision'] as Filter[]).map(f => 
+            <button key={f} className={`np-mode ${filter === f ? 'selected' : ''}`} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {f === 'all' ? 'All' : f === 'favorites' ? 'Favorites' : f === 'local' ? 'This machine' : f === 'tools' ? 'Tool calling' : 'Vision'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+    
     {actionError && <p className="np-error" role="alert">{actionError}</p>}
 
-    <div className="np-model-grid">
+    <div className="np-model-list">
       {entries.map(({ connection, model, local }) => {
         const key = modelKey(connection.id, model.id);
         const isActive = active?.connectionId === connection.id && active.modelId === model.id;
-        const facts = [model.details, model.contextLength && `${tokensLabel(model.contextLength)} context`, model.sizeBytes !== undefined && sizeLabel(model.sizeBytes)].filter(Boolean);
-        return <article className={`np-model-card ${isActive ? 'active' : ''}`} key={key}>
-          <div className="np-model-card-top"><div className="np-model-icon">{local ? <Cpu size={20}/> : <Server size={20}/>}</div>
-            <div className="np-model-tags"><span className="np-label">{connection.name}</span>{model.loaded && <span className="np-label">Loaded</span>}</div>
-            <button className={`np-icon-button np-favorite ${favorites.has(key) ? 'on' : ''}`} aria-pressed={favorites.has(key)} aria-label={`${favorites.has(key) ? 'Remove' : 'Add'} ${model.id} ${favorites.has(key) ? 'from' : 'to'} favorites`} onClick={() => toggleFavorite(key)}><Star size={14}/></button></div>
-          <h3 title={model.id}>{model.displayName}</h3>
-          {model.displayName !== model.id && <p className="np-model-id">{model.id}</p>}
-          <p>{facts.join(' · ') || (local ? 'On this machine' : 'Hosted model')}</p>
-          <div className="np-cap-row">{model.capabilities.tools === true && <span className="np-label">Tools</span>}{model.capabilities.vision === true && <span className="np-label">Vision</span>}{model.pricing === 'local' && <span className="np-label">No hosted fee</span>}</div>
-          <div className="np-model-card-bottom"><span>{isActive ? 'Default' : ''}</span><button className="np-button small" onClick={() => void use({ connectionId: connection.id, modelId: model.id })}>{isActive ? <><Check size={13}/>Use again</> : <>Use model<ArrowRight size={13}/></>}</button></div>
-        </article>;
+
+        return (
+          <article className={`np-model-row ${isActive ? 'active' : ''}`} key={key}>
+            <ModelLogo modelId={model.id} provider={connection.id} local={local} />
+            
+            <div className="np-model-row-info">
+              <h3 title={model.id}>
+                {model.displayName}
+                {isActive && <span className="np-label">Active</span>}
+              </h3>
+              <p>{model.details || (local ? 'On this machine' : 'Hosted model')} • {model.id}</p>
+            </div>
+
+            <div className="np-model-row-tags">
+              <span className="np-label">{connection.name}</span>
+              {model.loaded && <span className="np-label">Loaded</span>}
+              {model.contextLength && <span className="np-label">{tokensLabel(model.contextLength)} ctx</span>}
+              {model.capabilities.tools === true && <span className="np-label">Tools</span>}
+              {model.capabilities.vision === true && <span className="np-label">Vision</span>}
+              {model.pricing === 'local' && <span className="np-label">Free</span>}
+            </div>
+
+            <div className="np-model-row-actions">
+              <button 
+                className={`np-icon-button np-favorite ${favorites.has(key) ? 'on' : ''}`} 
+                aria-pressed={favorites.has(key)} 
+                aria-label={`${favorites.has(key) ? 'Remove' : 'Add'} ${model.id} ${favorites.has(key) ? 'from' : 'to'} favorites`} 
+                onClick={() => toggleFavorite(key)}
+              >
+                <Star size={18}/>
+              </button>
+              
+              <button 
+                className={`np-button ${isActive ? 'ghost' : 'primary'}`} 
+                onClick={() => void use({ connectionId: connection.id, modelId: model.id })}
+              >
+                {isActive ? <><Check size={14}/>Selected</> : 'Select Model'}
+              </button>
+            </div>
+          </article>
+        );
       })}
     </div>
     {totalModels === 0 && <div className="np-empty-panel"><HardDrive size={26}/><h3>{anyLoading ? 'Checking your connections…' : 'Your models will appear here.'}</h3><p>Start Ollama or LM Studio, or add a provider with your API key. Then refresh.</p></div>}
