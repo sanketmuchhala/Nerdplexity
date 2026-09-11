@@ -60,7 +60,7 @@ export function ChatWorkspace({ run, documents, onModels, onDocuments }: { run: 
       </div> : <div className="np-thread">
         {messages.map(message => <Fragment key={message.id}><Message message={{ ...message, timestamp: message.createdAt }} modelId={message.provenance?.modelId} providerName={message.provenance ? connections.find(c => c.id === message.provenance!.connectionId)?.id : undefined} /></Fragment>)}
         {ownRun && run.tools.length > 0 && <div className="np-inline-tools">{run.tools.map((tool, i) => <details key={i}><summary><FileText size={13}/>{tool.name.replaceAll('_',' ')}<span>Step {tool.step}</span></summary><pre>{JSON.stringify({ input: tool.input, output: tool.output }, null, 2)}</pre></details>)}</div>}
-        {ownRun && run.partial && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now() }} modelId={run.model} providerName={connection?.id} />}
+        {ownRun && run.partial && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now() }} modelId={model} providerName={connection?.id} />}
         {ownRun && run.running && <div className="np-live-status" role="status"><span className="np-live-dots"><i/><i/><i/></span>{run.phase}</div>}
         {ownRun && !run.running && run.phase && <div className="np-live-status">{run.phase}</div>}
       </div>}
