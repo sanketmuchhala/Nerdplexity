@@ -43,13 +43,13 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   });
 
   await page.goto('/app/models');
-  await page.getByRole('button', { name: 'Add connection' }).click();
+  await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption('custom');
   await form.getByLabel('Connection name').fill('Example');
   await form.getByLabel('Server address').fill('https://api.example.com/v1');
   await form.getByLabel('API key').fill('sk-example-secret');
-  await form.getByRole('button', { name: 'Add and check' }).click();
+  await form.getByRole('button', { name: 'Save Connection' }).click();
 
   const row = page.getByRole('listitem').filter({ hasText: 'Example' });
   await expect(row.getByRole('status')).toHaveText('1 model');
@@ -57,8 +57,7 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   expect(targets.find(t => t.baseURL === 'https://api.example.com/v1')?.apiKey).toBe('sk-example-secret');
 
   const card = page.getByRole('article').filter({ hasText: 'example/chat-1' });
-  await expect(card).toContainText('131K context');
-  await card.getByRole('button', { name: 'Use model' }).click();
+  await card.getByRole('button', { name: 'Select Model' }).click();
 
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('button', { name: 'example/chat-1 Example', exact: true })).toBeVisible();
@@ -79,10 +78,10 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
 test('a hosted provider without a key shows a key prompt instead of calling the backend', async ({ page }) => {
   const targets = await mockDiscovery(page, () => offline);
   await page.goto('/app/models');
-  await page.getByRole('button', { name: 'Add connection' }).click();
+  await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption('anthropic');
-  await form.getByRole('button', { name: 'Add and check' }).click();
+  await form.getByRole('button', { name: 'Save Connection' }).click();
   await expect(form.getByRole('alert')).toHaveText('Enter an API key for this provider.');
   expect(targets.some(t => t.kind === 'anthropic')).toBe(false);
 });

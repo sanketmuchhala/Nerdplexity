@@ -8,6 +8,19 @@ import { hasKey } from '../lib/credentials';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
 
+function formatModelName(displayName: string, id: string) {
+  if (displayName && displayName !== id && !displayName.includes('/')) return displayName;
+  const withoutProvider = id.includes('/') ? id.split('/').slice(1).join('/') : id;
+  return withoutProvider
+    .split(/[-_]/)
+    .map(w => {
+      if (w.toLowerCase() === 'gpt') return 'GPT';
+      if (w.toLowerCase() === 'llm') return 'LLM';
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ');
+}
+
 interface Preset { id: string; label: string; kind: ConnectionKind; name: string; baseURL?: string; hint: string }
 
 const PRESETS: Preset[] = [
@@ -196,7 +209,7 @@ export function Models({ onChat }: { onChat: () => void }) {
     <div className="np-page-heading"><div><span className="np-eyebrow">MODELS</span><h1>Connect a model. Pick one.</h1><p>Local runtimes and your own API keys, in one catalog.</p></div><span className="np-label"><HardDrive size={13}/> Keys stay in this browser</span></div>
 
     <section className="np-panel" aria-labelledby="connections-title">
-      <div className="np-section-title"><div><h2 id="connections-title">Providers</h2><p>Manage your API keys and local connections.</p></div>
+      <div className="np-section-title"><div><h2 id="connections-title">Connections</h2><p>Manage your API keys and local connections.</p></div>
         <div className="np-conn-actions"><button className="np-button ghost small" onClick={() => void discoverAll()} disabled={anyLoading}><RefreshCw size={13} className={anyLoading ? 'np-spin' : ''}/>Refresh All</button><button className="np-button primary small" onClick={() => setEditing('new')} disabled={editing === 'new'}><Plus size={13}/>Add Provider</button></div></div>
       {editing === 'new' && <ProviderModal onDone={() => setEditing(null)}/>}
       <ul className="np-conn-list">
@@ -264,16 +277,15 @@ export function Models({ onChat }: { onChat: () => void }) {
             
             <div className="np-model-row-info">
               <h3 title={model.id}>
-                {model.displayName}
+                {formatModelName(model.displayName, model.id)}
                 {isActive && <span className="np-label">Active</span>}
               </h3>
-              <p>{model.details || (local ? 'On this machine' : 'Hosted model')} • {model.id}</p>
+              <p>{connection.name} • {model.id}</p>
             </div>
 
             <div className="np-model-row-tags">
-              <span className="np-label">{connection.name}</span>
               {model.loaded && <span className="np-label">Loaded</span>}
-              {model.contextLength && <span className="np-label">{tokensLabel(model.contextLength)} ctx</span>}
+              {model.contextLength ? <span className="np-label">{tokensLabel(model.contextLength)} ctx</span> : null}
               {model.capabilities.tools === true && <span className="np-label">Tools</span>}
               {model.capabilities.vision === true && <span className="np-label">Vision</span>}
               {model.pricing === 'local' && <span className="np-label">Free</span>}
