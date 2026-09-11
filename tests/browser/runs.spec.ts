@@ -96,14 +96,26 @@ test('a rate limit shows retry guidance, and Retry does not repeat the user mess
   await send(page, text);
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('rate limiting');
-  await expect(alert).toContainText('Try again in 7s.');
+  await expect(alert).toContainText('Try again in 30s.');
   await expect(answers(page)).toHaveCount(0);
   await alert.getByRole('button', { name: 'Retry' }).click();
   await expect.poll(async () => (await upstream(page, text)).length).toBe(2);
-  await expect(page.getByRole('alert')).toContainText('Try again in 7s.');
+  await expect(page.getByRole('alert')).toContainText('Try again in 30s.');
   await expect(page.locator('.np-thread').getByText(text, { exact: true })).toHaveCount(1);
   await page.goto('/app/runs');
   await expect(page.locator('.np-run-list').getByRole('button', { name: new RegExp(text) })).toHaveCount(2);
+});
+
+test('a short rate limit is waited out visibly and then answered', async ({ page }) => {
+  const text = prompt('busy');
+  await useFakeModel(page, 'busy-model');
+  await send(page, text);
+  await expect(page.getByRole('status')).toContainText('Retrying in 1s (1 of 2)');
+  await expect(page.getByText('Answered after waiting.')).toBeVisible();
+  expect(await upstream(page, text)).toHaveLength(2);
+  // Quota headers from the provider appear on the connection.
+  await page.goto('/app/models');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Fake' })).toContainText('998 of 1,000 requests left');
 });
 
 test('a dropped stream keeps the partial answer marked as incomplete', async ({ page }) => {

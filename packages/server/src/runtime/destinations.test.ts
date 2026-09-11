@@ -9,6 +9,11 @@ describe('resolveTarget', () => {
     expect(target.headers).toEqual({ Authorization: 'Bearer sk-test-123456' });
   });
 
+  it('pins OpenRouter and Groq to their official endpoints', () => {
+    expect(resolveTarget({ kind: 'openrouter', baseURL: 'https://evil.example/v1', apiKey: 'or' }).baseURL).toBe('https://openrouter.ai/api/v1');
+    expect(resolveTarget({ kind: 'groq', apiKey: 'gsk' })).toMatchObject({ baseURL: 'https://api.groq.com/openai/v1', headers: { Authorization: 'Bearer gsk' } });
+  });
+
   it('requires a key for hosted providers', () => {
     expect(() => resolveTarget({ kind: 'anthropic', apiKey: '  ' })).toThrow(DestinationError);
   });

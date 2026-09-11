@@ -4,7 +4,9 @@ import http from 'node:http';
 
 const port = Number(process.env.FAKE_PROVIDER_PORT) || 5299;
 const log = [];
-const MODELS = ['fast-model', 'slow-model', 'limit-model', 'broken-model', 'reasoning-model'];
+const MODELS = ['fast-model', 'slow-model', 'limit-model', 'busy-model', 'broken-model', 'reasoning-model'];
+// Groq-style rate-limit headers on every successful response.
+const QUOTA = { 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-reset-requests': '1m30s' };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const frame = data => `data: ${JSON.stringify(data)}\n\n`;
 const delta = content => frame({ choices: [{ delta: { content } }] });
@@ -35,11 +37,17 @@ http.createServer(async (req, res) => {
   res.on('close', () => { if (!entry.completed) entry.aborted = true; });
 
   if (body.model === 'limit-model') {
-    res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '7' }).end(JSON.stringify({ error: { message: 'Rate limit reached for limit-model.' } }));
+    res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '30' }).end(JSON.stringify({ error: { message: 'Rate limit reached for limit-model.' } }));
     entry.completed = true;
     return;
   }
-  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  // busy-model: the first request for a prompt is rate limited briefly, then succeeds.
+  if (body.model === 'busy-model' && log.filter(e => e.prompt === prompt).length === 1) {
+    res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '1' }).end(JSON.stringify({ error: { message: 'Busy, try again shortly.' } }));
+    entry.completed = true;
+    return;
+  }
+  res.writeHead(200, { 'content-type': 'text/event-stream', ...QUOTA });
   const send = async (text, ms = 0) => { if (res.destroyed) return false; res.write(text); entry.tokens++; if (ms) await sleep(ms); return !res.destroyed; };
 
   if (body.model === 'slow-model') {
@@ -52,6 +60,8 @@ http.createServer(async (req, res) => {
   } else if (body.model === 'reasoning-model') {
     await send(frame({ choices: [{ delta: { reasoning_content: 'Considering the question. ' } }] }), 20);
     await send(delta('Reasoned answer.'));
+  } else if (body.model === 'busy-model') {
+    await send(delta('Answered after waiting.'));
   } else {
     // Split the answer mid-character to exercise chunk reassembly end to end.
     const bytes = Buffer.from(delta('Hello from fast-model: café, naïve, \u{1F642}.'));

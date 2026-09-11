@@ -24,9 +24,19 @@ export interface ProviderError {
   category: ProviderErrorCategory;
   /** Safe to show: never contains credentials. */
   message: string;
-  /** Whether trying again later may succeed. Nerdplexity never retries automatically. */
+  /** Whether trying again later may succeed. Only short rate-limit waits, before any generation, are retried automatically. */
   retryable: boolean;
   retryAfterMs?: number;
+}
+
+/** Rate-limit state reported in provider response headers. Meaning of the window varies by provider. */
+export interface RateLimitState {
+  requestsLimit?: number;
+  requestsRemaining?: number;
+  requestsResetMs?: number;
+  tokensLimit?: number;
+  tokensRemaining?: number;
+  tokensResetMs?: number;
 }
 
 export interface RunTiming {
@@ -51,6 +61,7 @@ export type RunEventPayload =
   | { type: 'status'; message: string }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
+  | { type: 'quota'; quota: RateLimitState }
   | ({ type: 'tool' } & ToolTrace)
   | { type: 'completed'; usage?: Usage; finishReason?: string; timing: RunTiming }
   | { type: 'failed'; error: ProviderError; timing: RunTiming }

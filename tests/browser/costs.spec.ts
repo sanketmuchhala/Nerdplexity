@@ -1,0 +1,128 @@
+import { expect, Page, test } from '@playwright/test';
+
+type Target = { kind: string; baseURL?: string; apiKey?: string };
+const model = (id: string, extra = {}) => ({ id, displayName: id, capabilities: { tools: null, vision: null }, pricing: 'unknown', source: 'discovered', ...extra });
+const offline = { ok: false, error: { category: 'offline', message: 'Offline.' } };
+const timing = { queuedMs: 0, ttftMs: 400, durationMs: 900 };
+
+async function mockDiscovery(page: Page, byKind: Record<string, unknown[]>) {
+  await page.route('**/v1/models/discover', async route => {
+    const { target } = route.request().postDataJSON() as { target: Target };
+    const models = byKind[target.kind];
+    await route.fulfill({ json: { checkedAt: Date.now(), ...(models ? { ok: true, execution: 'remote', models } : offline) } });
+  });
+}
+
+/** Serve runs from a script: each started run gets the next list of events. */
+async function mockRuns(page: Page, script: object[][]) {
+  const bodies: any[] = [];
+  await page.route('**/v1/runs', async route => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 201, json: { runId: `run-${bodies.length}`, existing: false } });
+  });
+  await page.route('**/v1/runs/*/events**', async route => {
+    const index = Number(/run-(\d+)/.exec(route.request().url())![1]) - 1;
+    const events = [{ type: 'queued', position: 0 }, { type: 'started' }, ...(script[Math.min(index, script.length - 1)])];
+    await route.fulfill({ contentType: 'application/x-ndjson', body: events.map((event, i) => JSON.stringify({ v: 1, runId: `run-${index + 1}`, seq: i + 1, ts: Date.now(), event })).join('\n') + '\n' });
+  });
+  return bodies;
+}
+
+async function addConnection(page: Page, type: string, key: string, billing?: string) {
+  await page.goto('/app/models');
+  await page.getByRole('button', { name: 'Add connection' }).click();
+  const form = page.getByRole('form', { name: 'Add connection' });
+  await form.getByLabel('Connection type').selectOption(type);
+  await form.getByLabel('API key').fill(key);
+  if (billing) await form.getByLabel('Account billing').selectOption(billing);
+  await form.getByRole('button', { name: 'Add and check' }).click();
+}
+
+const card = (page: Page, id: string) => page.getByRole('article').filter({ has: page.getByRole('heading', { name: id, exact: true }) });
+
+test('Free only blocks models that are not confirmed free until the user allows charges', async ({ page }) => {
+  await mockDiscovery(page, { openrouter: [
+    model('meta/llama:free', { pricing: 'zero-price' }),
+    model('vendor/big', { pricing: 'paid', price: { input: 3, output: 15 } }),
+  ] });
+  const runs = await mockRuns(page, [[{ type: 'delta', text: 'Billed answer.' }, { type: 'completed', timing }]]);
+  await addConnection(page, 'openrouter', 'sk-or-test');
+  await expect(card(page, 'meta/llama:free')).toContainText('Free model');
+  await expect(card(page, 'vendor/big')).toContainText('$3 in / $15 out per M tokens');
+
+  await page.getByLabel(/Free only/).check();
+  await expect(card(page, 'vendor/big').getByRole('button', { name: 'Use model' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Free to use' }).click();
+  await expect(page.getByRole('article')).toHaveCount(1);
+
+  // A model ID the catalog does not list has an unknown price, so it is blocked.
+  await page.getByLabel('Connection for model ID').selectOption({ label: 'OpenRouter' });
+  await page.getByLabel('Model ID', { exact: true }).fill('vendor/unlisted');
+  await page.getByRole('button', { name: 'Use model ID' }).click();
+  const notice = page.getByRole('note');
+  await expect(notice).toContainText('Free only is on. Nerdplexity cannot confirm this model is free on OpenRouter.');
+  await page.getByRole('textbox', { name: 'Message' }).fill('Hello');
+  await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
+  expect(runs).toHaveLength(0);
+
+  await notice.getByRole('button', { name: 'Allow charges in this thread' }).click();
+  await expect(page.getByRole('button', { name: 'Charges allowed here' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Message' }).press('Enter');
+  await expect(page.getByText('Billed answer.')).toBeVisible();
+  expect(runs).toHaveLength(1);
+  expect(runs[0]).toMatchObject({ model: 'vendor/unlisted', target: { kind: 'openrouter', apiKey: 'sk-or-test' } });
+});
+
+test('a free model that hits its limit offers free alternatives and never switches on its own', async ({ page }) => {
+  await mockDiscovery(page, { openrouter: [model('a:free', { pricing: 'zero-price' }), model('b:free', { pricing: 'zero-price' }), model('paid', { pricing: 'paid' })] });
+  const runs = await mockRuns(page, [
+    [{ type: 'failed', error: { category: 'quota', message: 'OpenRouter is rate limiting requests or the quota is used up.', retryable: true, retryAfterMs: 45000 }, timing }],
+    [{ type: 'delta', text: 'Answer from b.' }, { type: 'completed', timing }],
+  ]);
+  await addConnection(page, 'openrouter', 'sk-or-test');
+  await card(page, 'a:free').getByRole('button', { name: 'Use model' }).click();
+  await page.getByRole('textbox', { name: 'Message' }).fill('Question');
+  await page.getByRole('textbox', { name: 'Message' }).press('Enter');
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('Try again in 45s.');
+  await expect(alert.getByRole('button', { name: 'Try b:free' })).toBeVisible();
+  await expect(alert.getByRole('button', { name: /Try paid/ })).toHaveCount(0);
+  await page.waitForTimeout(300);
+  expect(runs).toHaveLength(1);
+
+  await alert.getByRole('button', { name: 'Try b:free' }).click();
+  await expect(page.getByText('Answer from b.')).toBeVisible();
+  expect(runs.map(r => r.model)).toEqual(['a:free', 'b:free']);
+  await expect(page.locator('.np-provenance')).toHaveText('b:free · OpenRouter');
+  await expect(page.locator('.np-thread').getByText('Question', { exact: true })).toHaveCount(1);
+});
+
+test('an account marked as having no billing counts as free, and the Gemini data-use notice is shown', async ({ page }) => {
+  await mockDiscovery(page, { gemini: [model('gemini-2.5-flash')] });
+  await page.goto('/app/models');
+  await page.getByRole('button', { name: 'Add connection' }).click();
+  const form = page.getByRole('form', { name: 'Add connection' });
+  await form.getByLabel('Connection type').selectOption('gemini');
+  await expect(form).toContainText('Google may use your prompts to improve its products');
+  await form.getByLabel('API key').fill('AIza-test');
+  await form.getByLabel('Account billing').selectOption('no-billing');
+  await form.getByRole('button', { name: 'Add and check' }).click();
+  await page.getByLabel(/Free only/).check();
+  await expect(card(page, 'gemini-2.5-flash')).toContainText('Free plan');
+  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Use model' })).toBeEnabled();
+});
+
+test('Check proves a model responds, and asks first when it may be billed', async ({ page }) => {
+  await mockDiscovery(page, { openrouter: [model('a:free', { pricing: 'zero-price' }), model('vendor/big', { pricing: 'paid', price: { input: 3, output: 15 } })] });
+  const runs = await mockRuns(page, [[{ type: 'delta', text: 'OK' }, { type: 'completed', timing }]]);
+  await addConnection(page, 'openrouter', 'sk-or-test');
+  await card(page, 'a:free').getByRole('button', { name: 'Check' }).click();
+  await expect(card(page, 'a:free')).toContainText('Check passed · first text in 0.4s');
+  const dialogs: string[] = [];
+  page.on('dialog', dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  await card(page, 'vendor/big').getByRole('button', { name: 'Check' }).click();
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toContain('may bill it');
+  expect(runs).toHaveLength(1);
+  expect(runs[0]).toMatchObject({ model: 'a:free', settings: { maxTokens: 64 } });
+});

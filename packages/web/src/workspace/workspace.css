@@ -197,6 +197,20 @@
 .np-sidebar-backdrop { display: none; }.np-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }.np-skip { position: fixed; left: 10px; top: -100px; z-index: 200; padding: 12px; background: var(--np-accent); color: #182510; border-radius: 5px; }.np-skip:focus { top: 10px; }
 .np-spin { animation: np-spin 1s linear infinite; }@keyframes np-spin { to { transform: rotate(360deg); } }@keyframes np-pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }@keyframes np-appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 /* Connections and catalog */
+.np-policy-block { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 11px 14px; margin-bottom: 10px; border: 1px solid #e3c08f40; border-radius: 8px; background: #e3c08f0a; font-size: 11px; color: #e6cfa8; }
+.np-policy-block > div { display: flex; gap: 6px; flex-wrap: wrap; }
+.np-policy-pill { cursor: pointer; }
+.np-error { flex-wrap: wrap; }
+.np-conn-quota { font-size: 10px; color: var(--np-muted); margin: 6px 0 0 18px; }
+.np-conn-hint a { color: #bdd7a6; display: inline-flex; align-items: center; gap: 4px; }
+.np-policy { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; margin: -4px 0 16px; border: 1px solid var(--np-line); border-radius: 9px; font-size: 10px; color: var(--np-muted); line-height: 1.6; cursor: pointer; }
+.np-policy.on { border-color: #b5df984d; background: #b5df9807; }
+.np-policy input { margin-top: 2px; accent-color: var(--np-accent); }
+.np-policy strong { display: block; font-size: 11px; font-weight: 500; color: #cbd8c0; }
+.np-cost.free { color: #b5df98; border-color: #b5df9840; }
+.np-cost.unknown { color: var(--np-muted); }
+.np-check-result { font-size: 10px; color: #b5df98; margin-top: 10px; overflow-wrap: anywhere; }
+.np-check-result.error { color: #e2b3a2; }
 .np-provenance.partial { color: #d9a98f; }
 .np-provenance { font-size: 9px; color: var(--np-faint); box-sizing: border-box; max-width: 712px; margin: -14px auto 14px; padding-inline: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .np-conn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

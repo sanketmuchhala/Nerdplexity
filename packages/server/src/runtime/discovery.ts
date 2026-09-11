@@ -8,6 +8,8 @@ type FetchFn = typeof fetch;
 const TIMEOUT_MS = 8000;
 // OpenAI lists every model family on one endpoint; these cannot serve chat completions.
 const OPENAI_NON_CHAT = /(embedding|whisper|tts|dall-e|moderation|davinci|babbage|realtime|transcribe|audio|image|search|computer-use|codex-mini)/i;
+// Groq also serves speech models from its model list.
+const GROQ_NON_CHAT = /(whisper|tts|orpheus)/i;
 
 class DiscoveryFailure extends Error {
   constructor(public category: DiscoveryError['category'], message: string) { super(message); }
@@ -76,13 +78,52 @@ async function discoverOpenAIStyle(target: ResolvedTarget, fetchImpl: FetchFn): 
   const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
   if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'This endpoint did not return an OpenAI-compatible model list.');
   const pricing = target.execution === 'local' ? 'local' : 'unknown';
+  const nonChat = target.kind === 'openai' ? OPENAI_NON_CHAT : target.kind === 'groq' ? GROQ_NON_CHAT : null;
   return data.data
-    .filter((m: any) => typeof m?.id === 'string' && !(target.kind === 'openai' && OPENAI_NON_CHAT.test(m.id)))
+    .filter((m: any) => typeof m?.id === 'string' && m.active !== false && !nonChat?.test(m.id))
     .map((m: any) => withDefaults({
       id: m.id,
       displayName: typeof m.name === 'string' ? m.name : m.id,
       contextLength: Number(m.context_length ?? m.context_window) || undefined,
+      maxOutputTokens: Number(m.max_completion_tokens) || undefined,
     }, pricing));
+}
+
+const perMillion = (value: unknown) => {
+  const n = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  return Number.isFinite(n) ? n * 1_000_000 : undefined;
+};
+
+/** OpenRouter's catalog reports per-token prices, so zero-price models can be verified. */
+async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
+  const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
+  if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'OpenRouter did not return a model list.');
+  const now = Date.now();
+  return data.data
+    .filter((m: any) => typeof m?.id === 'string'
+      && (!Array.isArray(m.architecture?.output_modalities) || m.architecture.output_modalities.includes('text'))
+      && !(m.expiration_date && Date.parse(m.expiration_date) <= now))
+    .map((m: any) => {
+      const input = perMillion(m.pricing?.prompt);
+      const output = perMillion(m.pricing?.completion);
+      const perRequest = Number(m.pricing?.request || 0);
+      // Negative or missing prices mean the cost is decided per request (for example, routers).
+      const pricing: ModelDescriptor['pricing'] = input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0
+        ? 'unknown'
+        : input === 0 && output === 0 && perRequest === 0 ? 'zero-price' : 'paid';
+      return withDefaults({
+        id: m.id,
+        displayName: typeof m.name === 'string' ? m.name : m.id,
+        contextLength: Number(m.context_length) || undefined,
+        maxOutputTokens: Number(m.top_provider?.max_completion_tokens) || undefined,
+        capabilities: {
+          tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : null,
+          vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null,
+        },
+        ...(pricing === 'paid' ? { price: { input: input!, output: output! } } : {}),
+        ...(typeof m.expiration_date === 'string' ? { expiresAt: m.expiration_date } : {}),
+      }, pricing);
+    });
 }
 
 async function discoverGemini(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
@@ -153,6 +194,7 @@ export async function discover(input: unknown, fetchImpl: FetchFn = fetch): Prom
     const models = target.kind === 'ollama' ? await discoverOllama(target, fetchImpl)
       : target.kind === 'anthropic' ? await discoverAnthropic(target, fetchImpl)
       : target.kind === 'gemini' ? await discoverGemini(target, fetchImpl)
+      : target.kind === 'openrouter' ? await discoverOpenRouter(target, fetchImpl)
       : await discoverOpenAIStyle(target, fetchImpl);
     models.sort((a, b) => a.id.localeCompare(b.id));
     return {

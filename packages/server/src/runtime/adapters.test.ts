@@ -90,8 +90,11 @@ describe('OpenAI-style streaming', () => {
   });
 
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {
-    const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '7' })).fn)).error);
-    expect(quota).toMatchObject({ category: 'quota', retryable: true, retryAfterMs: 7000 });
+    // A long wait is left to the user rather than retried automatically.
+    const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '30' })).fn)).error);
+    expect(quota).toMatchObject({ category: 'quota', retryable: true, retryAfterMs: 30000 });
+    const credits = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Insufficient credits' } }, 402)).fn)).error);
+    expect(credits).toMatchObject({ category: 'quota', retryable: false });
     const auth = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Incorrect API key sk-compat-secret' } }, 401)).fn)).error);
     expect(auth).toMatchObject({ category: 'auth', retryable: false });
     expect(auth.message).not.toContain('sk-compat-secret');
@@ -101,6 +104,40 @@ describe('OpenAI-style streaming', () => {
     expect(echoed.message).toContain('[redacted]');
     expect(failure((await run(request(compat), fakeFetch(() => json({}, 404)).fn)).error).category).toBe('invalid-request');
     expect(failure((await run(request(compat), fakeFetch(() => json({}, 503)).fn)).error)).toMatchObject({ category: 'unavailable', retryable: true });
+  });
+
+  it('waits out a short rate limit visibly, at most twice, and reports quota headers', async () => {
+    const quotaHeaders = { 'x-ratelimit-limit-requests': '14400', 'x-ratelimit-remaining-requests': '14370', 'x-ratelimit-reset-requests': '2m59.56s', 'x-ratelimit-limit-tokens': '6000', 'x-ratelimit-remaining-tokens': '5800', 'x-ratelimit-reset-tokens': '7.66s' };
+    const ok = () => new Response(chunked(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])), { headers: { 'content-type': 'text/event-stream', ...quotaHeaders } });
+    const limited = () => json({ error: { message: 'slow down' } }, 429, { 'retry-after': '0' });
+    const once = fakeFetch(limited, ok);
+    const result = await run(request({ kind: 'groq', apiKey: 'gsk-key' }), once.fn);
+    expect(once.calls).toHaveLength(2);
+    expect(result.events[0]).toMatchObject({ type: 'status', message: expect.stringContaining('Retrying in 1s (1 of 2)') });
+    expect(result.events.find(e => e.type === 'quota')).toEqual({ type: 'quota', quota: {
+      requestsLimit: 14400, requestsRemaining: 14370, requestsResetMs: 179560, tokensLimit: 6000, tokensRemaining: 5800, tokensResetMs: 7660,
+    } });
+    expect(result.text).toBe('ok');
+    expect(once.calls[0].url).toBe('https://api.groq.com/openai/v1/chat/completions');
+    expect(once.calls[0].body.max_completion_tokens).toBe(100);
+    const always = fakeFetch(limited);
+    expect(failure((await run(request(compat), always.fn)).error).category).toBe('quota');
+    expect(always.calls).toHaveLength(3);
+  });
+
+  it('reads an epoch reset time as the retry wait', async () => {
+    const reset = String(Date.now() + 45_000);
+    const error = failure((await run(request({ kind: 'openrouter', apiKey: 'or' }), fakeFetch(() => json({ error: { message: 'Rate limit exceeded: free-models-per-day' } }, 429, { 'x-ratelimit-reset': reset })).fn)).error);
+    expect(error.retryAfterMs).toBeGreaterThan(40_000);
+    expect(error.retryAfterMs).toBeLessThanOrEqual(45_000);
+  });
+
+  it('reads Groq usage reported under x_groq', async () => {
+    const { fn } = fakeFetch(() => stream(sse([
+      { choices: [{ delta: { content: 'hi' } }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }], x_groq: { usage: { prompt_tokens: 7, completion_tokens: 2 } } },
+    ])));
+    expect((await run(request({ kind: 'groq', apiKey: 'g' }), fn)).done?.usage).toEqual({ prompt_tokens: 7, completion_tokens: 2, total_tokens: 9 });
   });
 
   it('keeps partial text and fails when the stream ends early', async () => {
@@ -177,7 +214,7 @@ describe('Gemini streaming', () => {
     const { fn, calls } = fakeFetch(() => stream(sse([
       { candidates: [{ content: { parts: [{ text: 'plan', thought: true }] } }] },
       { candidates: [{ content: { parts: [{ text: 'Hello ' }] } }] },
-      { candidates: [{ content: { parts: [{ text: 'there' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, totalTokenCount: 10 } },
+      { candidates: [{ content: { parts: [{ text: 'there' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, thoughtsTokenCount: 5, totalTokenCount: 15 } },
     ], false)));
     const req = request({ kind: 'gemini', apiKey: 'AIza-secret' }, {
       model: 'gemini-2.5-flash',
@@ -186,7 +223,8 @@ describe('Gemini streaming', () => {
     const result = await run(req, fn);
     expect(result.text).toBe('Hello there');
     expect(result.events[0]).toEqual({ type: 'reasoning', text: 'plan' });
-    expect(result.done).toEqual({ type: 'done', usage: { prompt_tokens: 8, completion_tokens: 2, total_tokens: 10 }, finishReason: 'stop' });
+    // Thinking tokens are billed as output, so they count toward completion tokens.
+    expect(result.done).toEqual({ type: 'done', usage: { prompt_tokens: 8, completion_tokens: 7, total_tokens: 15 }, finishReason: 'stop' });
     expect(calls[0].url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse');
     expect((calls[0].init.headers as Record<string, string>)['x-goog-api-key']).toBe('AIza-secret');
     expect(calls[0].body).toEqual({

@@ -2,13 +2,30 @@
 // Type-only: the server imports these with `import type`.
 
 /** Adapter family used to reach a connection. */
-export type ConnectionKind = 'ollama' | 'openai-compatible' | 'openai' | 'anthropic' | 'gemini' | 'deepseek';
+export type ConnectionKind = 'ollama' | 'openai-compatible' | 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'openrouter' | 'groq';
 
 /** Where inference runs, as classified by the server's destination policy. */
 export type ExecutionLocation = 'local' | 'remote';
 
 /** 'session' keys live in memory only; 'device' keys are saved in this browser profile. */
 export type KeyStorage = 'none' | 'session' | 'device';
+
+/**
+ * The user's statement about whether this account can be charged. Nerdplexity
+ * cannot read billing settings, so 'no-billing' is recorded as the user's claim.
+ */
+export type BillingStatus = 'unknown' | 'no-billing' | 'paid';
+
+/** Latest rate-limit headers the provider sent, with when they were seen. */
+export interface QuotaSnapshot {
+  requestsLimit?: number;
+  requestsRemaining?: number;
+  requestsResetMs?: number;
+  tokensLimit?: number;
+  tokensRemaining?: number;
+  tokensResetMs?: number;
+  at: number;
+}
 
 export interface Connection {
   id: string;
@@ -17,6 +34,8 @@ export interface Connection {
   /** Required for ollama and openai-compatible. Hosted providers use fixed endpoints. */
   baseURL?: string;
   keyStorage: KeyStorage;
+  billing?: BillingStatus;
+  quota?: QuotaSnapshot;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -53,6 +72,10 @@ export interface ModelDescriptor {
   /** Currently loaded in memory (Ollama only). */
   loaded?: boolean;
   pricing: PricingClass;
+  /** USD per million tokens, only when the provider's catalog reports it. */
+  price?: { input: number; output: number };
+  /** The provider has announced this model's retirement (ISO date). */
+  expiresAt?: string;
   source: 'discovered' | 'manual';
 }
 

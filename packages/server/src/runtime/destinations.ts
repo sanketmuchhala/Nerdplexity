@@ -1,6 +1,6 @@
 import type { ConnectionKind, ConnectionTarget, ExecutionLocation } from '@app/types';
 
-export const CONNECTION_KINDS: readonly ConnectionKind[] = ['ollama', 'openai-compatible', 'openai', 'anthropic', 'gemini', 'deepseek'];
+export const CONNECTION_KINDS: readonly ConnectionKind[] = ['ollama', 'openai-compatible', 'openai', 'anthropic', 'gemini', 'deepseek', 'openrouter', 'groq'];
 
 /** Hosted providers use fixed endpoints so a stored key can only reach its own provider. */
 const HOSTED: Partial<Record<ConnectionKind, string>> = {
@@ -8,6 +8,8 @@ const HOSTED: Partial<Record<ConnectionKind, string>> = {
   anthropic: 'https://api.anthropic.com',
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
   deepseek: 'https://api.deepseek.com',
+  openrouter: 'https://openrouter.ai/api/v1',
+  groq: 'https://api.groq.com/openai/v1',
 };
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', 'host.docker.internal']);

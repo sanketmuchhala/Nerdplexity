@@ -16,6 +16,7 @@ import { enqueueLocal, getLocalQueueStatus } from './queue/localQueue.js';
 import { runsRouter } from './routes/runs.js';
 import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
+import { errorHandler } from './middleware/errors.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -343,10 +344,7 @@ Show your work and explain your reasoning clearly.`;
 });
 
 // Error handling middleware
-app.use((error: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ error: 'Internal server error' });
-});
+app.use(errorHandler);
 
 // ── Serve built web frontend ──────────────────────────────
 // In production (Vercel), the web package is built to packages/web/dist

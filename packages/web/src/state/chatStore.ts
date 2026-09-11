@@ -30,6 +30,7 @@ interface ChatStore {
   selectConversation: (id: string) => void;
   addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata'], conversationId?: string, extra?: MessageExtra) => Promise<void>;
   setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
+  setAllowCharges: (id: string, allow: boolean) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -192,6 +193,14 @@ const useChat = create<ChatStore>((set, get) => ({
     set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
   },
   
+  setAllowCharges: async (id: string, allow: boolean) => {
+    const conversation = get().conversations.find(c => c.id === id);
+    if (!conversation) return;
+    const updated: Conversation = { ...conversation, allowCharges: allow, updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
+  },
+  
   // Update conversation settings (provider, model, etc.)
   updateConversationSettings: async (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => {
     const state = get();
@@ -243,11 +252,12 @@ const useChat = create<ChatStore>((set, get) => ({
     if (!currentSettings) return;
     
     const updatedSettings = { ...currentSettings, ...partial };
-    
+    // Update the screen first so controls respond immediately; restore on a failed save.
+    set({ settings: updatedSettings });
     try {
       await db.settings.put(updatedSettings);
-      set({ settings: updatedSettings });
     } catch (error) {
+      set({ settings: currentSettings });
       console.error('Failed to save settings:', error);
     }
   },

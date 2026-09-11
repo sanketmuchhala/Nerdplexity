@@ -1,5 +1,5 @@
 import Dexie, { Table } from 'dexie';
-import type { Connection, ConnectionKind, ModelRef, ProviderErrorCategory, ToolTrace } from '@app/types';
+import type { Connection, ConnectionKind, ModelRef, ProviderErrorCategory, RateLimitState, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -21,6 +21,8 @@ export interface RunRecord {
   runId?: string; idempotencyKey?: string; lastSeq?: number;
   /** The run this attempt retried. */
   retryOf?: string;
+  /** Rate-limit state the provider reported during this run. */
+  quota?: RateLimitState;
 }
 
 export interface WebSearchResult {
@@ -57,6 +59,8 @@ export interface Conversation {
   runtime?: RuntimeKind;
   /** Connection for the next run. `model` is the model ID on that connection. */
   connectionId?: string;
+  /** The user allowed possibly billed models in this thread while Free only is on. */
+  allowCharges?: boolean;
   createdAt: number;
   updatedAt: number;
   messages: Message[];
@@ -133,6 +137,8 @@ export interface AppSettings {
   favoriteModels?: string[];
   /** Set once legacy provider settings have been converted to connections. */
   connectionsVersion?: number;
+  /** 'free-only' blocks runs that cannot be confirmed free. */
+  costPolicy?: 'any' | 'free-only';
 }
 
 /** A key remembered on this device. Session-only keys never reach IndexedDB. */
@@ -275,7 +281,10 @@ export const migrateFromLocalStorage = async () => {
   }
 };
 
-export const HOSTED_PROVIDERS = ['openai', 'anthropic', 'gemini', 'deepseek'] as const;
+/** Providers that had per-provider key fields before connections existed. */
+export const LEGACY_HOSTED_PROVIDERS = ['openai', 'anthropic', 'gemini', 'deepseek'] as const;
+/** Connection kinds that always need an API key. */
+export const KEYED_KINDS: readonly ConnectionKind[] = [...LEGACY_HOSTED_PROVIDERS, 'openrouter', 'groq'];
 export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   ollama: 'Ollama',
   'openai-compatible': 'OpenAI compatible',
@@ -283,6 +292,8 @@ export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   anthropic: 'Anthropic',
   gemini: 'Google Gemini',
   deepseek: 'DeepSeek',
+  openrouter: 'OpenRouter',
+  groq: 'Groq',
 };
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_COMPATIBLE_URL = 'http://127.0.0.1:1234/v1';
@@ -294,7 +305,10 @@ export const legacyConnectionId = (provider: string, runtime?: RuntimeKind) =>
 
 /** Legacy provider label for a connection kind, for screens that still read `provider`. */
 export const legacyProvider = (kind: ConnectionKind): Provider =>
-  kind === 'ollama' || kind === 'openai-compatible' ? 'local-ollama' : kind;
+  kind === 'ollama' || kind === 'openai-compatible' ? 'local-ollama'
+  // Legacy screens predate these providers; the label is informational only.
+  : kind === 'openrouter' || kind === 'groq' ? 'openai'
+  : kind;
 
 /**
  * Convert per-provider settings into connections. Idempotent: adds only missing
@@ -318,7 +332,7 @@ export async function migrateLegacyData(database: ChatDatabase = db) {
     const conversations = await database.conversations.toArray();
     const referenced = new Set<string>(conversations.map(c => c.provider));
     if (settings?.selectedProvider) referenced.add(settings.selectedProvider);
-    for (const provider of HOSTED_PROVIDERS) {
+    for (const provider of LEGACY_HOSTED_PROVIDERS) {
       const key = settings?.apiKeys?.[provider]?.trim();
       if (key) await database.credentials.put({ connectionId: provider, key, savedAt: now });
       if (key || referenced.has(provider)) {

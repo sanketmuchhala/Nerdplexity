@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { ProviderErrorCategory, RunMessage, TerminalPayload, ToolTrace } from '@app/types';
+import type { DiscoveryResult, ModelRef, ProviderErrorCategory, RunMessage, TerminalPayload, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
 import { db, RunRecord, WorkspaceDocument } from '../lib/db';
-import useConnections, { isLocal, targetFor } from '../state/connections';
+import { costStatus, freeAlternatives } from '../lib/cost';
+import useConnections, { isLocal, latestResult, targetFor } from '../state/connections';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 
 export interface RunError {
@@ -11,6 +12,10 @@ export interface RunError {
   category?: ProviderErrorCategory;
   retryAfterMs?: number;
   retryable: boolean;
+  /** Blocked by the Free only setting; nothing was sent. */
+  policy?: boolean;
+  /** Free models the user may choose instead. Never used automatically. */
+  suggestions?: ModelRef[];
 }
 
 interface Attempt {
@@ -30,6 +35,21 @@ const RESUME_WINDOW_MS = 15 * 60_000;
 const PERSIST_MS = 1000;
 const CANCEL_GRACE_MS = 3000;
 
+function costOf(ref: ModelRef) {
+  const { connections, catalog } = useConnections.getState();
+  const result = latestResult(catalog[ref.connectionId]);
+  return costStatus(connections.find(c => c.id === ref.connectionId), result?.ok ? result.models.find(m => m.id === ref.modelId) : undefined, result?.ok ? result.execution : undefined);
+}
+
+/** Why Free only blocks this model in this thread, or null when it may run. */
+export function policyBlock(ref: ModelRef, conversationId?: string): string | null {
+  const chat = useChat.getState();
+  if (chat.settings?.costPolicy !== 'free-only') return null;
+  if (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) return null;
+  const status = costOf(ref);
+  return status.free ? null : `Free only is on. ${status.detail}`;
+}
+
 const historyOf = (conversationId: string): RunMessage[] =>
   (useChat.getState().conversations.find(c => c.id === conversationId)?.messages ?? []).map(({ role, content }) => ({ role, content }));
 
@@ -42,6 +62,8 @@ export function useRun() {
   const [tools, setTools] = useState<ToolTrace[]>([]);
   const [runConversationId, setRunConversationId] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
+  /** Server run shown in the live bubble; the saved message for it replaces the bubble. */
+  const [streamRunId, setStreamRunId] = useState<string | null>(null);
   const active = useRef<{ record: RunRecord; controller: AbortController; cancelRequested: boolean } | null>(null);
   const lastAttempt = useRef<(Attempt & { recordId: string }) | null>(null);
 
@@ -89,7 +111,12 @@ export function useRun() {
     setRunning(false); setPartial(''); setReasoning('');
     setPhase(status === 'canceled' ? 'Stopped' : '');
     if (outcome.type === 'failed') {
-      setError({ message: outcome.error.message, category: outcome.error.category, retryAfterMs: outcome.error.retryAfterMs, retryable: outcome.error.retryable });
+      const ref = { connectionId: record.connectionId || '', modelId: record.model };
+      // When a free route runs out of quota, offer other free routes rather than switching silently.
+      const suggestions = outcome.error.category === 'quota' && costOf(ref).free
+        ? freeAlternatives(useConnections.getState().connections, Object.fromEntries(Object.entries(useConnections.getState().catalog).map(([id, state]) => [id, latestResult(state)])) as Record<string, DiscoveryResult | undefined>, ref)
+        : undefined;
+      setError({ message: outcome.error.message, category: outcome.error.category, retryAfterMs: outcome.error.retryAfterMs, retryable: outcome.error.retryable, ...(suggestions?.length ? { suggestions } : {}) });
     } else if (status === 'interrupted') {
       setError({ message: `${outcome.type === 'local' && outcome.message ? outcome.message : 'The run was interrupted.'}${record.output ? ' The partial answer was kept.' : ''}`, retryable: true });
     } else if (outcome.type === 'local' && outcome.status === 'failed') {
@@ -122,6 +149,7 @@ export function useRun() {
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'delta': record.output += event.text; setPhase('Generating'); break;
           case 'tool': record.tools.push({ name: event.name, input: event.input, output: event.output, step: event.step }); setTools([...record.tools]); break;
+          case 'quota': record.quota = event.quota; if (record.connectionId) useConnections.getState().setQuota(record.connectionId, event.quota); break;
         }
         if ((event.type === 'delta' || event.type === 'reasoning') && !frame) frame = requestAnimationFrame(render);
       }, controller.signal);
@@ -159,6 +187,7 @@ export function useRun() {
         agent: attempt.agent, documents: attempt.agent ? attempt.documents : [],
       }, controller.signal);
       record.runId = runId;
+      setStreamRunId(runId);
       await db.runs.update(record.id, { runId });
     } catch (err) {
       const canceled = active.current?.cancelRequested;
@@ -181,6 +210,8 @@ export function useRun() {
     if (!conversation.model || !conversation.connectionId) { setError({ message: 'Choose a model in Models first.', retryable: false }); return; }
     if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
     if (agent && !isLocal(connection)) { setError({ message: 'Document agents run only on models on this machine.', retryable: false }); return; }
+    const blocked = policyBlock({ connectionId: connection.id, modelId: conversation.model }, conversation.id);
+    if (blocked) { setError({ message: blocked, retryable: false, policy: true }); return; }
     await state.addMessage('user', prompt, undefined, conversation.id);
     await execute({
       conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, agent, documents,
@@ -188,11 +219,15 @@ export function useRun() {
     });
   };
 
-  /** Try the last attempt again as a linked run; the user message is not repeated. */
-  const retry = async () => {
+  /** Try the last attempt again as a linked run, optionally on a model the user chose. The user message is not repeated. */
+  const retry = async (override?: ModelRef) => {
     const attempt = lastAttempt.current;
     if (!attempt || active.current) return;
-    await execute(attempt, attempt.recordId);
+    const next = override ? { ...attempt, connectionId: override.connectionId, model: override.modelId } : attempt;
+    const blocked = policyBlock({ connectionId: next.connectionId, modelId: next.model }, next.conversationId);
+    if (blocked) { setError({ message: blocked, retryable: false, policy: true }); return; }
+    if (override) await useChat.getState().setConversationModel(attempt.conversationId, override);
+    await execute(next, attempt.recordId);
   };
 
   const stop = () => {
@@ -226,6 +261,7 @@ export function useRun() {
           messages: historyOf(record.conversationId), agent: record.mode === 'agent', documents: [], recordId: record.id,
         };
         showRunning(record, 'Reconnecting');
+        setStreamRunId(record.runId);
         void follow(record, controller);
       }
     })();
@@ -238,7 +274,7 @@ export function useRun() {
   useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
 
   return {
-    send, retry, stop, running, partial, reasoning, phase, error, tools, runConversationId,
+    send, retry, stop, running, partial, reasoning, phase, error, tools, runConversationId, streamRunId,
     canRetry: canRetry && !!lastAttempt.current && !running,
     clearError: () => setError(null),
   };

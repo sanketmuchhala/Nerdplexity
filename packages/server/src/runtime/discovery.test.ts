@@ -123,6 +123,38 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
     expect(failure(await discover({ kind: 'anthropic', apiKey: 'sk-ant-bad' }, denied.fn)).category).toBe('auth');
   });
 
+  it('classifies OpenRouter prices, capabilities, and retirements from its catalog', async () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const { fn, calls } = fakeFetch({ '/api/v1/models': () => json({ data: [
+      { id: 'meta/llama:free', name: 'Llama (free)', context_length: 131072, pricing: { prompt: '0', completion: '0', request: '0' }, supported_parameters: ['tools', 'max_tokens'], architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'vendor/big', name: 'Big', pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] }, top_provider: { max_completion_tokens: 64000 }, expiration_date: future },
+      { id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } },
+      { id: 'vendor/retired', pricing: { prompt: '0', completion: '0' }, expiration_date: past },
+      { id: 'vendor/image-gen', pricing: { prompt: '0', completion: '0' }, architecture: { output_modalities: ['image'] } },
+    ] }) });
+    const [llama, auto, big, ...rest] = models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn));
+    expect(rest).toEqual([]);
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/models');
+    expect(llama).toMatchObject({ id: 'meta/llama:free', pricing: 'zero-price', contextLength: 131072, capabilities: { tools: true, vision: false } });
+    expect(llama.price).toBeUndefined();
+    expect(big).toMatchObject({ pricing: 'paid', maxOutputTokens: 64000, capabilities: { tools: null, vision: true }, expiresAt: future });
+    expect(big.price!.input).toBeCloseTo(3);
+    expect(big.price!.output).toBeCloseTo(15);
+    expect(auto).toMatchObject({ id: 'openrouter/auto', pricing: 'unknown' });
+  });
+
+  it('hides inactive and speech-only Groq models and keeps limits', async () => {
+    const { fn } = fakeFetch({ '/openai/v1/models': () => json({ data: [
+      { id: 'llama-3.3-70b-versatile', active: true, context_window: 131072, max_completion_tokens: 32768 },
+      { id: 'old-model', active: false, context_window: 8192 },
+      { id: 'whisper-large-v3', active: true },
+    ] }) });
+    expect(models(await discover({ kind: 'groq', apiKey: 'gsk' }, fn))).toEqual([
+      expect.objectContaining({ id: 'llama-3.3-70b-versatile', contextLength: 131072, maxOutputTokens: 32768, pricing: 'unknown' }),
+    ]);
+  });
+
   it('reports policy violations without making a request', async () => {
     const { fn, calls } = fakeFetch({});
     expect(failure(await discover({ kind: 'openai-compatible', baseURL: 'http://api.example.com/v1' }, fn)).category).toBe('invalid-destination');

@@ -6,7 +6,7 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek), a bounded document agent for local models, run history, and analytics pages.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, a bounded document agent for local models, run history, and analytics pages.
 
 Files, comparisons, and general tool execution are planned work. Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
@@ -36,7 +36,15 @@ pnpm dev:ollama
 
 To run a second checkout beside another, give it different ports: `WEB_PORT=5273 PORT=5274 pnpm dev`.
 
-Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, or any OpenAI-compatible endpoint (for example `https://openrouter.ai/api/v1`) with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models. Listing models does not prove a model can run; the first chat does.
+Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible endpoint with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models, plus the rate-limit allowance the provider last reported. Listing models does not prove a model can run: use **Check** on a model card to send one short prompt.
+
+## Free use
+
+Each model shows what is known about its cost: **On this machine** (no hosted fee), **Free model** (the provider's catalog lists it at $0, as OpenRouter does), **Free plan** (you marked the account as having no billing enabled), a catalog price, or **Price unknown**. Nerdplexity cannot read billing settings; the account billing choice on a connection is your statement.
+
+Turn on **Free only** in Models to run only models in the first three groups. Anything else, including a model ID typed by hand, is blocked before it is sent, with two choices: pick a free model, or allow charges for that thread. When a free model hits its limit, Nerdplexity suggests other free models; it never switches models or providers on its own.
+
+Provider notes: OpenRouter free models are limited per minute and per day, and a negative balance blocks them too. Groq's free plan has per-model request and token limits. On Gemini's free tier, Google may use your prompts to improve its products, and free availability varies by model.
 
 ## Commands
 
@@ -72,7 +80,7 @@ Alternatively, use an installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
 
-Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, streaming before completion, Unicode split across chunks, Stop, reload during a run, a run lost by a server restart, rate limits and Retry, a dropped stream, and reasoning display.
+Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, a short rate limit waited out, streaming before completion, Unicode split across chunks, Stop, reload during a run, a run lost by a server restart, rate limits and Retry, a dropped stream, and reasoning display.
 
 Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
 
@@ -88,7 +96,7 @@ Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/
 
 ## How runs work
 
-Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. Nerdplexity never resends a request automatically; **Retry** starts a new attempt without repeating your message. The one exception is a model that rejects the temperature setting before generating anything: the request is sent once more without it, and the chat says so.
+Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends a request on its own only when the model never started: a rate limit that asks to wait 10 seconds or less (at most twice), or a model that rejects the temperature setting. Both are shown in the chat. Longer waits are shown with the time to wait.
 
 Run history records queue time, time to first text, total time, reported token usage, finish reason, errors, and reasoning when the model reports it.
 

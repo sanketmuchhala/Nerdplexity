@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { Connection, ConnectionKind, ConnectionTarget, DiscoveryResult } from '@app/types';
-import { db, HOSTED_PROVIDERS } from '../lib/db';
+import type { BillingStatus, Connection, ConnectionKind, ConnectionTarget, DiscoveryResult, ProviderError, RateLimitState } from '@app/types';
+import { db, KEYED_KINDS } from '../lib/db';
 import * as credentials from '../lib/credentials';
+import { isLocal, usesBaseURL } from '../lib/cost';
+import { followRun, startRun } from '../workspace/runClient';
+
+export { isLocal, usesBaseURL };
 
 export type CatalogState =
   | { status: 'loading'; previous?: DiscoveryResult }
@@ -16,18 +20,16 @@ export interface ConnectionInput {
   /** undefined keeps the current key; '' clears it. */
   key?: string;
   remember: boolean;
+  billing?: BillingStatus;
 }
 
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', 'host.docker.internal']);
+/** Result of sending a short test prompt to one model. */
+export type CheckState =
+  | { status: 'running' }
+  | { status: 'passed'; at: number; ttftMs?: number; durationMs: number }
+  | { status: 'failed'; at: number; error: Pick<ProviderError, 'category' | 'message'> };
 
-export const requiresKey = (kind: ConnectionKind) => (HOSTED_PROVIDERS as readonly string[]).includes(kind);
-export const usesBaseURL = (kind: ConnectionKind) => kind === 'ollama' || kind === 'openai-compatible';
-
-/** Best-effort label before discovery; the server's destination policy is authoritative. */
-export function isLocal(connection: Pick<Connection, 'kind' | 'baseURL'>) {
-  if (!usesBaseURL(connection.kind)) return false;
-  try { return LOOPBACK.has(new URL(connection.baseURL || '').hostname); } catch { return false; }
-}
+export const requiresKey = (kind: ConnectionKind) => KEYED_KINDS.includes(kind);
 
 export const targetFor = (connection: Connection): ConnectionTarget => ({
   kind: connection.kind,
@@ -36,6 +38,9 @@ export const targetFor = (connection: Connection): ConnectionTarget => ({
 });
 
 export const modelKey = (connectionId: string, modelId: string) => `${connectionId}::${modelId}`;
+
+/** The newest discovery result, including one shown while a refresh is in progress. */
+export const latestResult = (state?: CatalogState): DiscoveryResult | undefined => state?.status === 'done' ? state.result : state?.previous;
 
 async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
   try {
@@ -55,6 +60,11 @@ interface ConnectionStore {
   catalog: Record<string, CatalogState>;
   /** Incremented when keys change so components re-read credential state. */
   keyVersion: number;
+  /** Latest rate-limit headers seen per connection, also saved on the connection record. */
+  quota: Record<string, RateLimitState & { at: number }>;
+  checks: Record<string, CheckState>;
+  setQuota: (connectionId: string, quota: RateLimitState) => void;
+  checkModel: (connectionId: string, modelId: string) => Promise<void>;
   load: () => Promise<void>;
   save: (input: ConnectionInput) => Promise<Connection>;
   remove: (id: string) => Promise<void>;
@@ -68,12 +78,47 @@ const useConnections = create<ConnectionStore>((set, get) => ({
   connections: [],
   catalog: {},
   keyVersion: 0,
+  quota: {},
+  checks: {},
+
+  setQuota: (connectionId, quota) => {
+    const snapshot = { ...quota, at: Date.now() };
+    set(state => ({ quota: { ...state.quota, [connectionId]: snapshot } }));
+    void db.connections.update(connectionId, { quota: snapshot }).catch(() => undefined);
+  },
+
+  checkModel: async (connectionId, modelId) => {
+    const connection = get().connections.find(c => c.id === connectionId);
+    const key = modelKey(connectionId, modelId);
+    if (!connection || get().checks[key]?.status === 'running') return;
+    const finish = (result: CheckState) => set(state => ({ checks: { ...state.checks, [key]: result } }));
+    finish({ status: 'running' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('The check timed out after 60 seconds.')), 60_000);
+    try {
+      // A short prompt proves the model can run, which listing models cannot.
+      const { runId } = await startRun({
+        idempotencyKey: uuidv4(), target: targetFor(connection), model: modelId,
+        messages: [{ role: 'user', content: 'Reply with the word OK.' }], settings: { maxTokens: 64 },
+      }, controller.signal);
+      const terminal = await followRun(runId, 0, envelope => {
+        if (envelope.event.type === 'quota') get().setQuota(connectionId, envelope.event.quota);
+      }, controller.signal);
+      if (terminal.type === 'completed') finish({ status: 'passed', at: Date.now(), ttftMs: terminal.timing.ttftMs, durationMs: terminal.timing.durationMs });
+      else finish({ status: 'failed', at: Date.now(), error: terminal.type === 'failed' ? terminal.error : { category: 'unknown', message: 'The check was canceled.' } });
+    } catch (error) {
+      finish({ status: 'failed', at: Date.now(), error: { category: 'transport', message: controller.signal.aborted ? 'The check timed out after 60 seconds.' : (error as Error).message } });
+    } finally {
+      clearTimeout(timer);
+    }
+  },
 
   load: async () => {
     await credentials.loadRememberedKeys();
     const connections = await db.connections.orderBy('id').toArray();
     connections.sort((a, b) => a.createdAt - b.createdAt || a.name.localeCompare(b.name));
-    set(state => ({ connections, keyVersion: state.keyVersion + 1 }));
+    const quota = Object.fromEntries(connections.filter(c => c.quota).map(c => [c.id, c.quota!]));
+    set(state => ({ connections, quota, keyVersion: state.keyVersion + 1 }));
   },
 
   save: async input => {
@@ -90,6 +135,8 @@ const useConnections = create<ConnectionStore>((set, get) => ({
       id, kind: input.kind, name,
       ...(usesBaseURL(input.kind) ? { baseURL: input.baseURL!.trim() } : {}),
       keyStorage: credentials.hasKey(id) ? (input.remember ? 'device' : 'session') : 'none',
+      ...(requiresKey(input.kind) ? { billing: input.billing ?? existing?.billing ?? 'unknown' } : {}),
+      ...(existing?.quota ? { quota: existing.quota } : {}),
       enabled: true,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
