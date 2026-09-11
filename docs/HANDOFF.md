@@ -5,7 +5,7 @@ Branch: `codex/local-workspace`. Original base: `caefdbcf7b43fe88e1b34d645f672a9
 
 ## Current status
 
-The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 (toolchain and browser baseline) and P1 (connections and model discovery) are complete as of 2026-09-10; this document describes the earlier checkpoint.
+The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 (toolchain and browser baseline), P1 (connections and model discovery), and P2 (streaming run engine) are complete as of 2026-09-10; this document describes the earlier checkpoint. The `/v1/local/*` run flow below has been replaced by `/v1/runs`.
 
 ## Read this first
 

@@ -8,12 +8,13 @@ import { openaiProvider } from './providers/openai.js';
 import { anthropicProvider } from './providers/anthropic.js';
 import { deepseekProvider } from './providers/deepseek.js';
 import { geminiProvider } from './providers/gemini.js';
-import { localOllamaProvider, pingOllama, chatWithOllama } from './providers/local-ollama.js';
+import { localOllamaProvider, pingOllama } from './providers/local-ollama.js';
 import { performWebSearch, extractSearchQuery, enhancePromptWithWebResults } from './services/webSearch.js';
 import { orchestrator } from './orchestrator/index.js';
 import { localMetrics } from './routes/localMetrics.js';
 import { enqueueLocal, getLocalQueueStatus } from './queue/localQueue.js';
-import { localRuntime } from './routes/localRuntime.js';
+import { runsRouter } from './routes/runs.js';
+import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
 
 dotenv.config({ path: '.env.local' });
@@ -44,7 +45,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
-app.use('/v1/local', localRuntime);
+// Run engine: start, stream ordered events with replay, cancel.
+app.use('/v1/runs', runsRouter(new RunRegistry()));
 
 // Provider registry
 const providers = {

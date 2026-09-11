@@ -3,8 +3,8 @@
 set -euo pipefail
 
 echo "Starting Nerdplexity..."
-echo "Server will run on http://localhost:5174"
-echo "Web app will run on http://localhost:5173"
+echo "Server will run on http://127.0.0.1:${PORT:-5174}"
+echo "Web app will run on http://127.0.0.1:${WEB_PORT:-5173}"
 echo ""
 echo "Ollama is optional. Start it separately with pnpm dev:ollama when needed."
 echo ""

@@ -1,17 +1,26 @@
 import Dexie, { Table } from 'dexie';
-import type { Connection, ConnectionKind, ModelRef } from '@app/types';
+import type { Connection, ConnectionKind, ModelRef, ProviderErrorCategory, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
 export type RuntimeKind = 'ollama' | 'openai-compatible';
 export interface WorkspaceDocument { id: string; title: string; content: string; updatedAt: number }
+/** 'stopped' is the legacy name for 'canceled'. 'interrupted' means the client lost the run. */
+export type RunStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted' | 'stopped';
 export interface RunRecord {
   id: string; conversationId: string; model: string; provider: string;
+  connectionId?: string;
   prompt: string; startedAt: number; durationMs: number;
-  status: 'completed' | 'stopped' | 'failed'; mode: 'chat' | 'agent';
-  output: string; error?: string; ttftMs?: number;
+  status: RunStatus; mode: 'chat' | 'agent';
+  output: string; reasoning?: string;
+  error?: string; errorCategory?: ProviderErrorCategory; retryAfterMs?: number;
+  ttftMs?: number; queuedMs?: number; finishReason?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-  tools: { name: string; input: unknown; output: unknown; step: number }[];
+  tools: ToolTrace[];
+  /** Server run ID, start key, and last applied event, used to reattach after a reload. */
+  runId?: string; idempotencyKey?: string; lastSeq?: number;
+  /** The run this attempt retried. */
+  retryOf?: string;
 }
 
 export interface WebSearchResult {
@@ -33,6 +42,10 @@ export interface Message {
   };
   /** Which model produced an assistant message. Absent on legacy messages: unknown. */
   provenance?: ModelRef;
+  runId?: string;
+  /** Set when an assistant message is a partial answer from a run that did not complete. */
+  runStatus?: 'canceled' | 'failed' | 'interrupted';
+  finishReason?: string;
 }
 
 export interface Conversation {

@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const output = 'docs/screenshots/baseline';
+const web = `http://127.0.0.1:${Number(process.env.WEB_PORT) || 5173}`;
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
 const observations = [];
@@ -15,7 +16,7 @@ try {
       return ['127.0.0.1', 'localhost'].includes(url.hostname) ? route.continue() : route.abort();
     });
     for (const [name, path] of [['landing', '/'], ['chat', '/app'], ['dashboard', '/app/analytics/dashboard'], ['events', '/app/analytics/events']]) {
-      await page.goto(`http://127.0.0.1:5173${path}`);
+      await page.goto(`${web}${path}`);
       await page.locator('#root').waitFor();
       await page.waitForFunction(() => !document.body.innerText.includes('Loading…'));
       await page.screenshot({ path: `${output}/${name}-${label}.png`, fullPage: true });
@@ -48,12 +49,12 @@ try {
       }
     });
     for (const name of ['dashboard', 'events']) {
-      await page.goto(`http://127.0.0.1:5173/app/analytics/${name}`);
+      await page.goto(`${web}/app/analytics/${name}`);
       await page.getByRole('heading', { level: 1 }).waitFor();
       await page.screenshot({ path: `${output}/${name}-populated-${label}.png`, fullPage: true });
     }
     await page.route('**/v1/metrics', route => route.fulfill({ status: 503, json: { error: 'Synthetic baseline outage' } }));
-    await page.goto('http://127.0.0.1:5173/app/analytics/dashboard');
+    await page.goto(`${web}/app/analytics/dashboard`);
     await page.getByRole('heading', { level: 1 }).waitFor();
     await page.screenshot({ path: `${output}/metrics-unavailable-${label}.png`, fullPage: true });
     await context.close();

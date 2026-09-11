@@ -31,15 +31,20 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
     ? { ok: true, execution: 'remote', models: [model('example/chat-1', { contextLength: 131072 })] }
     : offline);
   let runBody: any;
-  await page.route('**/v1/local/run', async route => {
+  await page.route('**/v1/runs', async route => {
     runBody = route.request().postDataJSON();
+    await route.fulfill({ status: 201, json: { runId: 'run-1', existing: false } });
+  });
+  await page.route('**/v1/runs/run-1/events**', async route => {
+    const timing = { queuedMs: 0, ttftMs: 5, durationMs: 12 };
     const events = [
-      { type: 'status', message: 'Queued' },
+      { type: 'queued', position: 0 },
+      { type: 'started' },
       { type: 'delta', text: 'Hello from ' },
       { type: 'delta', text: 'the endpoint.' },
-      { type: 'done', duration_ms: 12, usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 } },
-    ];
-    await route.fulfill({ contentType: 'application/x-ndjson', body: events.map(e => JSON.stringify(e)).join('\n') + '\n' });
+      { type: 'completed', usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 }, finishReason: 'stop', timing },
+    ].map((event, i) => JSON.stringify({ v: 1, runId: 'run-1', seq: i + 1, ts: Date.now(), event }));
+    await route.fulfill({ contentType: 'application/x-ndjson', body: events.join('\n') + '\n' });
   });
 
   await page.goto('/app/models');
@@ -68,7 +73,7 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   await expect(page.getByText('example/chat-1 · Example')).toBeVisible();
 
   // The run is routed by connection, and the key travels only in the request body.
-  expect(runBody).toMatchObject({ target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-example-secret' }, model: 'example/chat-1' });
+  expect(runBody).toMatchObject({ idempotencyKey: expect.any(String), target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-example-secret' }, model: 'example/chat-1' });
   expect(runBody.provider).toBeUndefined();
 
   // Session-only keys are forgotten on reload.

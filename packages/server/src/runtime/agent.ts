@@ -31,7 +31,7 @@ export function executeWorkspaceTool(name: string, args: any, documents: Workspa
 }
 
 /** Bounded local agent: real tool calls, visible results, no ambient filesystem/network tools. */
-export async function* runWorkspaceAgent(request: LocalRequest, documents: WorkspaceDocument[], signal: AbortSignal): AsyncGenerator<RunEvent> {
+export async function* runWorkspaceAgent(request: LocalRequest, documents: WorkspaceDocument[], signal: AbortSignal, fetchImpl: typeof fetch = fetch): AsyncGenerator<RunEvent> {
   const start = Date.now();
   let usage: Usage | undefined;
   const messages: RuntimeMessage[] = [
@@ -42,7 +42,7 @@ export async function* runWorkspaceAgent(request: LocalRequest, documents: Works
   for (let step = 1; step <= 6; step++) {
     signal.throwIfAborted();
     yield { type: 'status', message: `Document agent · step ${step} of 6` };
-    const result = await requestCompletion({ ...request, messages }, signal, workspaceTools);
+    const result = await requestCompletion({ ...request, messages }, signal, workspaceTools, fetchImpl);
     if (result.usage) {
       usage ??= { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
       usage.prompt_tokens += result.usage.prompt_tokens;

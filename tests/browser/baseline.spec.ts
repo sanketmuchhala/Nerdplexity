@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('backend starts without an Ollama service', async ({ request }) => {
-  const response = await request.get('http://127.0.0.1:5174/health');
+  const response = await request.get(`http://127.0.0.1:${Number(process.env.PORT) || 5174}/health`);
   expect(response.ok()).toBeTruthy();
   expect(await response.json()).toMatchObject({ status: 'ok' });
 });

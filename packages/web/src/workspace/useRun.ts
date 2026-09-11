@@ -1,87 +1,245 @@
 import { useEffect, useRef, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import type { ProviderErrorCategory, RunMessage, TerminalPayload, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
 import { db, RunRecord, WorkspaceDocument } from '../lib/db';
-import { getKey } from '../lib/credentials';
-import useConnections, { isLocal, targetFor, usesBaseURL } from '../state/connections';
-import { consumeRun } from './api';
+import useConnections, { isLocal, targetFor } from '../state/connections';
+import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
+
+export interface RunError {
+  message: string;
+  category?: ProviderErrorCategory;
+  retryAfterMs?: number;
+  retryable: boolean;
+}
+
+interface Attempt {
+  conversationId: string;
+  connectionId: string;
+  model: string;
+  prompt: string;
+  messages: RunMessage[];
+  agent: boolean;
+  documents: WorkspaceDocument[];
+}
+
+type LocalOutcome = { type: 'local'; status: 'failed' | 'canceled' | 'interrupted'; message?: string };
+
+/** Runs older than this are not reattached after a reload. */
+const RESUME_WINDOW_MS = 15 * 60_000;
+const PERSIST_MS = 1000;
+const CANCEL_GRACE_MS = 3000;
+
+const historyOf = (conversationId: string): RunMessage[] =>
+  (useChat.getState().conversations.find(c => c.id === conversationId)?.messages ?? []).map(({ role, content }) => ({ role, content }));
 
 export function useRun() {
   const [running, setRunning] = useState(false);
   const [partial, setPartial] = useState('');
+  const [reasoning, setReasoning] = useState('');
   const [phase, setPhase] = useState('');
-  const [error, setError] = useState('');
-  const [tools, setTools] = useState<RunRecord['tools']>([]);
+  const [error, setError] = useState<RunError | null>(null);
+  const [tools, setTools] = useState<ToolTrace[]>([]);
   const [runConversationId, setRunConversationId] = useState<string | null>(null);
-  const controller = useRef<AbortController | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
+  const [canRetry, setCanRetry] = useState(false);
+  const active = useRef<{ record: RunRecord; controller: AbortController; cancelRequested: boolean } | null>(null);
+  const lastAttempt = useRef<(Attempt & { recordId: string }) | null>(null);
 
-  const send = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
-    if (controller.current || !prompt.trim()) return;
-    const ac = new AbortController();
-    controller.current = ac;
-    setRunning(true); setPartial(''); setPhase('Preparing'); setError(''); setTools([]);
-    let provenance: { connectionId: string; modelId: string } | undefined;
-    const record: RunRecord = { id: crypto.randomUUID(), conversationId: '', provider: '', model: '', prompt, startedAt: Date.now(), durationMs: 0, status: 'failed', mode: agent ? 'agent' : 'chat', output: '', tools: [] };
+  const showRunning = (record: RunRecord, phaseText: string) => {
+    setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools);
+    setError(null); setCanRetry(false); setPhase(phaseText); setRunConversationId(record.conversationId);
+  };
+
+  /** Record the outcome exactly once, even if another tab follows the same run. */
+  const finalize = async (record: RunRecord, outcome: TerminalPayload | LocalOutcome) => {
+    const status = outcome.type === 'local' ? outcome.status : outcome.type;
+    const timing = outcome.type === 'local' ? undefined : outcome.timing;
+    const final: RunRecord = {
+      ...record,
+      status,
+      durationMs: timing?.durationMs ?? Date.now() - record.startedAt,
+      ...(timing ? { queuedMs: timing.queuedMs, ttftMs: timing.ttftMs } : {}),
+      ...(outcome.type === 'completed' ? { usage: outcome.usage, finishReason: outcome.finishReason } : {}),
+      ...(outcome.type === 'failed' ? { error: outcome.error.message, errorCategory: outcome.error.category, retryAfterMs: outcome.error.retryAfterMs } : {}),
+      ...(outcome.type === 'local' && outcome.message ? { error: outcome.message } : {}),
+    };
+    let claimed = false;
     try {
-      let state = useChat.getState();
-      if (!state.activeConversation()) { await state.newConversation(); state = useChat.getState(); }
-      const conversation = state.activeConversation();
-      if (!conversation) throw new Error('Unable to create a thread. Check browser storage.');
-      const connection = useConnections.getState().connections.find(c => c.id === conversation.connectionId);
-      if (!conversation.model || !conversation.connectionId) throw new Error('Choose a model in Models first.');
-      if (!connection) throw new Error('This thread’s connection was removed. Choose another model in Models.');
-      // Ollama and compatible endpoints stream through the run route; hosted providers use the legacy JSON route until P2.
-      const streaming = usesBaseURL(connection.kind);
-      if (agent && !isLocal(connection)) throw new Error('Document agents run only on models on this machine.');
-      provenance = { connectionId: connection.id, modelId: conversation.model };
-      record.conversationId = conversation.id;
-      record.provider = connection.name;
-      record.model = conversation.model;
-      setRunConversationId(conversation.id);
-      await state.addMessage('user', prompt, undefined, conversation.id);
-      const messages = [...conversation.messages.map(({ role, content }) => ({ role, content })), { role: 'user', content: prompt }];
-      const request = streaming ? {
-        target: targetFor(connection), model: conversation.model,
-        messages, temperature: state.settings?.temperature ?? 0.7, max_tokens: state.settings?.max_tokens ?? 2048,
-        ...(connection.kind === 'ollama' ? { num_ctx: state.settings?.num_ctx ?? 8192 } : {}),
-        agent, documents: agent ? documents : [],
-      } : {
-        provider: connection.kind, model: conversation.model, messages,
-        api_key: getKey(connection.id), temperature: state.settings?.temperature ?? 0.7,
-        max_tokens: state.settings?.max_tokens ?? 2048,
-      };
-      setPhase('Connecting to model');
-      const response = await fetch(streaming ? '/v1/local/run' : '/v1/chat', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal: ac.signal,
+      claimed = await db.transaction('rw', db.runs, async () => {
+        const current = await db.runs.get(record.id);
+        if (current && current.status !== 'running') return false;
+        await db.runs.put(final);
+        return true;
       });
-      if (streaming) {
-        await consumeRun(response, event => {
-          if (event.type === 'status') setPhase(event.message);
-          if (event.type === 'delta') { record.output += event.text; setPartial(record.output); setPhase('Generating'); }
-          if (event.type === 'tool') { record.tools.push({ name: event.name, input: event.input, output: event.output, step: event.step }); setTools([...record.tools]); }
-          if (event.type === 'done') { record.usage = event.usage; record.ttftMs = event.ttft_ms; }
+      const chat = useChat.getState();
+      if (claimed && record.output) {
+        await chat.addMessage('assistant', record.output, record.reasoning ? { reasoning: record.reasoning } : undefined, record.conversationId, {
+          ...(record.connectionId ? { provenance: { connectionId: record.connectionId, modelId: record.model } } : {}),
+          ...(record.runId ? { runId: record.runId } : {}),
+          ...(status !== 'completed' ? { runStatus: status as 'canceled' | 'failed' | 'interrupted' } : {}),
+          ...(final.finishReason ? { finishReason: final.finishReason } : {}),
         });
-      } else {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.details || data.error || 'Cloud request failed.');
-        if (typeof data.message?.content !== 'string') throw new Error('Provider returned no answer.');
-        record.output = data.message.content;
-        record.usage = data.usage;
+      } else if (!claimed) {
+        await chat.loadConversations();
       }
-      record.status = 'completed';
+    } catch {
+      setError({ message: 'Browser storage failed. Copy the visible answer before leaving.', retryable: false });
+    }
+    if (active.current?.record.id === record.id) active.current = null;
+    setRunning(false); setPartial(''); setReasoning('');
+    setPhase(status === 'canceled' ? 'Stopped' : '');
+    if (outcome.type === 'failed') {
+      setError({ message: outcome.error.message, category: outcome.error.category, retryAfterMs: outcome.error.retryAfterMs, retryable: outcome.error.retryable });
+    } else if (status === 'interrupted') {
+      setError({ message: `${outcome.type === 'local' && outcome.message ? outcome.message : 'The run was interrupted.'}${record.output ? ' The partial answer was kept.' : ''}`, retryable: true });
+    } else if (outcome.type === 'local' && outcome.status === 'failed') {
+      setError({ message: outcome.message || 'The run could not start.', retryable: true });
+    } else if (status === 'completed' && !record.output) {
+      setError({ message: 'The model finished without an answer.', retryable: true });
+    }
+    setCanRetry(status !== 'completed' || !record.output);
+    window.dispatchEvent(new Event('nerdplexity:runs'));
+  };
+
+  const follow = async (record: RunRecord, controller: AbortController) => {
+    let frame = 0;
+    let dirty = false;
+    // Batch rendering to animation frames and storage writes to intervals, not per token.
+    const render = () => { frame = 0; setPartial(record.output); setReasoning(record.reasoning || ''); };
+    const persist = setInterval(() => {
+      if (!dirty) return;
+      dirty = false;
+      void db.runs.update(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools }).catch(() => undefined);
+    }, PERSIST_MS);
+    try {
+      const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
+        record.lastSeq = seq;
+        dirty = true;
+        switch (event.type) {
+          case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
+          case 'started': setPhase('Waiting for the model'); break;
+          case 'status': setPhase(event.message); break;
+          case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
+          case 'delta': record.output += event.text; setPhase('Generating'); break;
+          case 'tool': record.tools.push({ name: event.name, input: event.input, output: event.output, step: event.step }); setTools([...record.tools]); break;
+        }
+        if ((event.type === 'delta' || event.type === 'reasoning') && !frame) frame = requestAnimationFrame(render);
+      }, controller.signal);
+      await finalize(record, terminal);
     } catch (err) {
-      record.status = ac.signal.aborted ? 'stopped' : 'failed';
-      if (!ac.signal.aborted) { record.error = (err as Error).message; setError(record.error); }
+      if (err instanceof RunUnavailable) await finalize(record, { type: 'local', status: 'interrupted', message: err.message });
+      else if (!controller.signal.aborted) await finalize(record, { type: 'local', status: 'interrupted', message: (err as Error).message });
+      else if (active.current?.record.id === record.id && active.current.cancelRequested) await finalize(record, { type: 'local', status: 'canceled' });
+      // Otherwise the page is unmounting; the record stays 'running' so a reload can reattach.
     } finally {
-      record.durationMs = Date.now() - record.startedAt;
-      try {
-        if (record.output && record.conversationId) await useChat.getState().addMessage('assistant', record.output, undefined, record.conversationId, provenance);
-        if (record.conversationId) { await db.runs.put(record); window.dispatchEvent(new Event('nerdplexity:runs')); }
-        setPartial('');
-      } catch { setError('Browser storage failed. Copy the visible answer before leaving.'); }
-      controller.current = null;
-      setRunning(false); setPhase(record.status === 'stopped' ? 'Run stopped' : '');
+      clearInterval(persist);
+      if (frame) cancelAnimationFrame(frame);
     }
   };
-  return { send, running, partial, phase, error, tools, runConversationId, stop: () => controller.current?.abort(), clearError: () => setError('') };
+
+  const execute = async (attempt: Attempt, retryOf?: string) => {
+    const connection = useConnections.getState().connections.find(c => c.id === attempt.connectionId);
+    if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
+    const controller = new AbortController();
+    const record: RunRecord = {
+      id: uuidv4(), conversationId: attempt.conversationId, connectionId: connection.id, provider: connection.name, model: attempt.model,
+      prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.agent ? 'agent' : 'chat',
+      output: '', reasoning: '', tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
+    };
+    active.current = { record, controller, cancelRequested: false };
+    lastAttempt.current = { ...attempt, recordId: record.id };
+    showRunning(record, 'Starting');
+    const settings = useChat.getState().settings;
+    try {
+      // Durable before contacting the model, so a reload can find this run.
+      await db.runs.put(record);
+      const { runId } = await startRun({
+        idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: attempt.model, messages: attempt.messages,
+        settings: { temperature: settings?.temperature ?? 0.7, maxTokens: settings?.max_tokens ?? 2048, ...(connection.kind === 'ollama' ? { numCtx: settings?.num_ctx ?? 8192 } : {}) },
+        agent: attempt.agent, documents: attempt.agent ? attempt.documents : [],
+      }, controller.signal);
+      record.runId = runId;
+      await db.runs.update(record.id, { runId });
+    } catch (err) {
+      const canceled = active.current?.cancelRequested;
+      await finalize(record, { type: 'local', status: canceled ? 'canceled' : 'failed', message: canceled ? undefined : (err as Error).message });
+      return;
+    }
+    if (active.current?.cancelRequested) void cancelRun(record.runId);
+    await follow(record, controller);
+  };
+
+  const send = async (prompt: string, agent: boolean, documents: WorkspaceDocument[]) => {
+    if (active.current || !prompt.trim()) return;
+    let state = useChat.getState();
+    try {
+      if (!state.activeConversation()) { await state.newConversation(); state = useChat.getState(); }
+    } catch { setError({ message: 'Unable to create a thread. Check browser storage.', retryable: false }); return; }
+    const conversation = state.activeConversation();
+    if (!conversation) { setError({ message: 'Unable to create a thread. Check browser storage.', retryable: false }); return; }
+    const connection = useConnections.getState().connections.find(c => c.id === conversation.connectionId);
+    if (!conversation.model || !conversation.connectionId) { setError({ message: 'Choose a model in Models first.', retryable: false }); return; }
+    if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
+    if (agent && !isLocal(connection)) { setError({ message: 'Document agents run only on models on this machine.', retryable: false }); return; }
+    await state.addMessage('user', prompt, undefined, conversation.id);
+    await execute({
+      conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, agent, documents,
+      messages: historyOf(conversation.id),
+    });
+  };
+
+  /** Try the last attempt again as a linked run; the user message is not repeated. */
+  const retry = async () => {
+    const attempt = lastAttempt.current;
+    if (!attempt || active.current) return;
+    await execute(attempt, attempt.recordId);
+  };
+
+  const stop = () => {
+    const current = active.current;
+    if (!current || current.cancelRequested) return;
+    current.cancelRequested = true;
+    setPhase('Stopping');
+    // The server confirms with a canceled event; stop following if it cannot be reached.
+    if (current.record.runId) void cancelRun(current.record.runId);
+    setTimeout(() => { if (active.current === current) current.controller.abort(); }, current.record.runId ? CANCEL_GRACE_MS : 0);
+  };
+
+  // Reattach to a run that was in progress when the page was reloaded.
+  useEffect(() => {
+    let disposed = false;
+    let mine: AbortController | null = null;
+    void (async () => {
+      const pending = (await db.runs.where('status').equals('running').toArray().catch(() => [])).sort((a, b) => b.startedAt - a.startedAt);
+      if (disposed) return;
+      for (const record of pending) {
+        if (active.current) break;
+        if (!record.runId || Date.now() - record.startedAt > RESUME_WINDOW_MS) {
+          await finalize(record, { type: 'local', status: 'interrupted', message: 'This run was interrupted before it finished.' });
+          continue;
+        }
+        const controller = new AbortController();
+        mine = controller;
+        active.current = { record, controller, cancelRequested: false };
+        lastAttempt.current = {
+          conversationId: record.conversationId, connectionId: record.connectionId || '', model: record.model, prompt: record.prompt,
+          messages: historyOf(record.conversationId), agent: record.mode === 'agent', documents: [], recordId: record.id,
+        };
+        showRunning(record, 'Reconnecting');
+        void follow(record, controller);
+      }
+    })();
+    return () => {
+      disposed = true;
+      if (mine) { mine.abort(); if (active.current?.controller === mine) active.current = null; }
+    };
+  }, []);
+
+  useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
+
+  return {
+    send, retry, stop, running, partial, reasoning, phase, error, tools, runConversationId,
+    canRetry: canRetry && !!lastAttempt.current && !running,
+    clearError: () => setError(null),
+  };
 }

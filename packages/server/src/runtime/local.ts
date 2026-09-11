@@ -1,4 +1,3 @@
-import { readLines } from './streams.js';
 import { redact, resolveTarget } from './destinations.js';
 
 export type RuntimeKind = 'ollama' | 'openai-compatible';
@@ -27,8 +26,8 @@ export function runtimeURL(kind: RuntimeKind, input?: string): string {
   return resolveTarget({ kind, baseURL: input || (kind === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:1234/v1') }).baseURL;
 }
 
-export async function fetchRuntime(url: string, init: RequestInit = {}): Promise<Response> {
-  const response = await fetch(url, { ...init, redirect: 'error' });
+export async function fetchRuntime(url: string, init: RequestInit = {}, fetchImpl: typeof fetch = fetch): Promise<Response> {
+  const response = await fetchImpl(url, { ...init, redirect: 'error' });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) throw new Error('The endpoint rejected the API key.');
     // Remote endpoints may echo request details; strip auth values and bound the text for the UI.
@@ -59,51 +58,15 @@ export function extractUsage(data: any, runtime: RuntimeKind): Usage | undefined
   }
 }
 
-export async function requestCompletion(request: LocalRequest, signal: AbortSignal, tools?: unknown[]) {
+export async function requestCompletion(request: LocalRequest, signal: AbortSignal, tools?: unknown[], fetchImpl: typeof fetch = fetch) {
   const base = runtimeURL(request.runtime, request.baseURL);
   const response = await fetchRuntime(`${base}/${request.runtime === 'ollama' ? 'api/chat' : 'chat/completions'}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...request.headers },
     body: JSON.stringify(generationBody(request, false, tools)), signal,
-  });
+  }, fetchImpl);
   const data = await response.json();
   if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Runtime failed.');
   const message = request.runtime === 'ollama' ? data.message : data.choices?.[0]?.message;
   if (!message || typeof message !== 'object') throw new Error('Runtime returned no assistant message.');
   return { message, usage: extractUsage(data, request.runtime) };
-}
-
-export async function* streamChat(request: LocalRequest, signal: AbortSignal): AsyncGenerator<RunEvent> {
-  const start = Date.now();
-  const base = runtimeURL(request.runtime, request.baseURL);
-  let firstToken: number | undefined;
-  let usage: Usage | undefined;
-  let completed = false;
-  yield { type: 'status', message: 'Waiting for the model' };
-  const response = await fetchRuntime(`${base}/${request.runtime === 'ollama' ? 'api/chat' : 'chat/completions'}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...request.headers },
-    body: JSON.stringify(generationBody(request, true)), signal,
-  });
-  if (!response.body) throw new Error('Runtime returned an empty stream.');
-  for await (const line of readLines(response.body)) {
-    signal.throwIfAborted();
-    let payload = line;
-    if (request.runtime === 'openai-compatible') {
-      if (!line.startsWith('data:')) continue;
-      payload = line.slice(5).trim();
-      if (payload === '[DONE]') { completed = true; break; }
-      if (!payload) continue;
-    }
-    const data = JSON.parse(payload);
-    if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Generation failed.');
-    const text = request.runtime === 'ollama' ? data.message?.content : data.choices?.[0]?.delta?.content;
-    if (typeof text === 'string' && text) {
-      firstToken ??= Date.now() - start;
-      yield { type: 'delta', text };
-    }
-    usage = extractUsage(data, request.runtime) ?? usage;
-    if (data.done || data.choices?.[0]?.finish_reason) completed = true;
-    if (data.done) break;
-  }
-  if (!completed) throw new Error('The model stream ended before completion. The partial answer has been kept.');
-  yield { type: 'done', usage, duration_ms: Date.now() - start, ttft_ms: firstToken };
 }

@@ -6,9 +6,9 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for Ollama and OpenAI-compatible endpoints, a bounded document agent for local models, run history, and analytics pages.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek), a bounded document agent for local models, run history, and analytics pages.
 
-Hosted providers (OpenAI, Anthropic, Gemini, DeepSeek) list their models through discovery, but their chat responses are still returned whole rather than streamed. Streaming for them, files, comparisons, and general tool execution are planned work. Provider adapters have been tested against fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
+Files, comparisons, and general tool execution are planned work. Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
 ## Setup
 
@@ -34,6 +34,8 @@ Cloud-only development does not start or require Ollama. For local inference, st
 pnpm dev:ollama
 ```
 
+To run a second checkout beside another, give it different ports: `WEB_PORT=5273 PORT=5274 pnpm dev`.
+
 Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, or any OpenAI-compatible endpoint (for example `https://openrouter.ai/api/v1`) with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models. Listing models does not prove a model can run; the first chat does.
 
 ## Commands
@@ -51,7 +53,7 @@ Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM 
 | `pnpm -r test` | Run server and web unit tests (Vitest) |
 | `pnpm lint` | Run the existing source emoji policy check |
 
-Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. Unit tests cover the destination policy, model discovery per provider, stream line reassembly, and the browser storage migration.
+Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. Unit tests cover the destination policy, model discovery and streaming per provider, the run engine (ordering, replay, idempotency, cancellation), stream reassembly, and the browser storage migration.
 
 If using the npm bootstrap, prefix a command with `npm exec --yes --package=pnpm@9.0.0 --`, for example `npm exec --yes --package=pnpm@9.0.0 -- pnpm test`.
 
@@ -70,7 +72,9 @@ Alternatively, use an installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
 
-Playwright starts local web/backend processes as needed. Tests use isolated browser contexts and do not require real API keys or a running model; discovery and runs are served from fixtures. They cover backend health, thread persistence, empty event history, offline versus empty connections, adding a custom endpoint through to a streamed answer, and hosted providers without a key.
+Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, streaming before completion, Unicode split across chunks, Stop, reload during a run, a run lost by a server restart, rate limits and Retry, a dropped stream, and reasoning display.
+
+Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
 
 With `pnpm dev` already running, capture the UI using synthetic events:
 
@@ -81,6 +85,12 @@ PLAYWRIGHT_CHANNEL=chrome node scripts/capture-baseline.mjs
 ```
 
 Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/baseline.md) for results and known gaps.
+
+## How runs work
+
+Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. Nerdplexity never resends a request automatically; **Retry** starts a new attempt without repeating your message. The one exception is a model that rejects the temperature setting before generating anything: the request is sent once more without it, and the chat says so.
+
+Run history records queue time, time to first text, total time, reported token usage, finish reason, errors, and reasoning when the model reports it.
 
 ## App routes
 

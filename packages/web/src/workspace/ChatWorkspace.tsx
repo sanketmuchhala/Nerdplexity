@@ -8,6 +8,8 @@ import useConnections, { isLocal, requiresKey } from '../state/connections';
 import { exportText } from './api';
 import { useRun } from './useRun';
 
+const RUN_STATUS_LABEL = { canceled: 'Stopped · partial answer', failed: 'Failed · partial answer', interrupted: 'Interrupted · partial answer' } as const;
+
 export function ChatWorkspace({ run, documents, onModels, onDocuments }: { run: ReturnType<typeof useRun>; documents: WorkspaceDocument[]; onModels: () => void; onDocuments: () => void }) {
   const { activeConversation, settings, saveSettings } = useChat();
   const connections = useConnections(state => state.connections);
@@ -33,7 +35,7 @@ export function ChatWorkspace({ run, documents, onModels, onDocuments }: { run: 
   useEffect(() => { setInput(''); setAgent(false); sticky.current = true; }, [conversation?.id]);
   useEffect(() => {
     if (sticky.current && scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages.length, run.partial, run.tools.length]);
+  }, [messages.length, run.partial, run.reasoning, run.tools.length]);
   useEffect(() => {
     if (textarea.current) { textarea.current.style.height = 'auto'; textarea.current.style.height = Math.min(textarea.current.scrollHeight, 180) + 'px'; }
   }, [input]);
@@ -58,16 +60,16 @@ export function ChatWorkspace({ run, documents, onModels, onDocuments }: { run: 
         <div className="np-suggestions">{suggestions.map(({icon: Icon, title, text}) => <button key={title} onClick={() => { if (title === 'Work with my notes' && (!documents.length || !local)) { onDocuments(); return; } setAgent(title === 'Work with my notes'); setInput(text); textarea.current?.focus(); }}><Icon size={18}/><span>{title}</span><ArrowRight size={13}/></button>)}</div>
         {!ready && <button className="np-connect-prompt" onClick={onModels}>{needsKey ? `Add your ${connection?.name} API key to get started` : model && !connection ? 'This thread’s connection was removed. Choose a model' : 'Choose a model to get started'}<ArrowRight size={14}/></button>}
       </div> : <div className="np-thread">
-        {messages.map(message => <Fragment key={message.id}><Message message={{ ...message, timestamp: message.createdAt }}/ >{message.role === 'assistant' && message.provenance && <p className="np-provenance">{message.provenance.modelId} · {connections.find(c => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}</p>}</Fragment>)}
+        {messages.map(message => <Fragment key={message.id}><Message message={{ ...message, timestamp: message.createdAt }} animate={!message.runId}/ >{message.role === 'assistant' && (message.provenance || message.runStatus || message.finishReason === 'length' || message.finishReason === 'max_tokens') && <p className={`np-provenance ${message.runStatus ? 'partial' : ''}`}>{[message.provenance && `${message.provenance.modelId} · ${connections.find(c => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`, message.runStatus && RUN_STATUS_LABEL[message.runStatus], (message.finishReason === 'length' || message.finishReason === 'max_tokens') && 'Stopped at the output limit'].filter(Boolean).join(' · ')}</p>}</Fragment>)}
         {ownRun && run.tools.length > 0 && <div className="np-inline-tools">{run.tools.map((tool, i) => <details key={i}><summary><FileText size={13}/>{tool.name.replaceAll('_',' ')}<span>Step {tool.step}</span></summary><pre>{JSON.stringify({ input: tool.input, output: tool.output }, null, 2)}</pre></details>)}</div>}
-        {ownRun && run.partial && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now() }}/ >}
+        {ownRun && (run.partial || run.reasoning) && <Message message={{ id: 'stream', role: 'assistant', content: run.partial, timestamp: Date.now(), metadata: run.reasoning ? { reasoning: run.reasoning } : undefined }}/ >}
         {ownRun && run.running && <div className="np-live-status" role="status"><span className="np-live-dots"><i/><i/><i/></span>{run.phase}</div>}
         {ownRun && !run.running && run.phase && <div className="np-live-status">{run.phase}</div>}
       </div>}
     </div>
     {showScroll && <button className="np-scroll-bottom np-icon-button" aria-label="Scroll to latest message" onClick={() => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; sticky.current = true; setShowScroll(false); }}><ArrowDown size={16}/></button>}
     <div className="np-composer-area">
-      {run.error && <div className="np-error np-chat-error" role="alert"><span>{run.error}</span><button aria-label="Dismiss error" className="np-icon-button" onClick={run.clearError}><X size={14}/></button></div>}
+      {run.error && <div className="np-error np-chat-error" role="alert"><span>{run.error.message}{run.error.retryAfterMs !== undefined && ` Try again in ${Math.ceil(run.error.retryAfterMs / 1000)}s.`}</span>{run.canRetry && run.error.retryable && <button className="np-button small" onClick={() => void run.retry()}>Retry</button>}<button aria-label="Dismiss error" className="np-icon-button" onClick={run.clearError}><X size={14}/></button></div>}
       <form className="np-composer" onSubmit={e => { e.preventDefault(); submit(); }}>
         <textarea ref={textarea} rows={2} aria-label="Message" placeholder={agent ? 'Ask your workspace a question…' : 'Where do you want to start?'} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}/>
         <div className="np-composer-toolbar"><div className="np-composer-modes"><button type="button" className={`np-mode ${!agent ? 'selected' : ''}`} onClick={() => setAgent(false)}>Chat</button><button type="button" className={`np-mode ${agent ? 'selected' : ''}`} aria-pressed={agent} onClick={() => { if (!local) { onModels(); return; } if (!documents.length) { onDocuments(); return; } setAgent(!agent); }}><Workflow size={13}/>Document agent</button></div><div className="np-composer-send">{local && <span className="np-local-label"><i/>Local</span>}{run.running ? <button type="button" className="np-send stop" aria-label="Stop generation" title="Stop generation" onClick={run.stop}><Square size={14} fill="currentColor"/></button> : <button type="submit" className="np-send" aria-label="Send message" title="Send message" disabled={!input.trim() || !ready}><ArrowUp size={18}/></button>}</div></div>

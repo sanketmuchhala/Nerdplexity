@@ -2,16 +2,17 @@ import { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { CodeBlock } from './ui/CodeBlock';
 import { ChatMessage } from '../hooks/useChat';
-import { sanitizeDisplayText } from '../lib/stripEmojis';
 import { WebSearchResult } from '../lib/db';
 
 interface Props {
   message: ChatMessage & { metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
+  /** Skip the entrance animation when the message replaces text already on screen. */
+  animate?: boolean;
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
 
-export function Message({ message }: Props) {
+export function Message({ message, animate = true }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -31,7 +32,7 @@ export function Message({ message }: Props) {
             <div className="max-w-[78%] px-4 py-3 rounded-2xl rounded-tr-sm"
               style={{ background: 'var(--s3)', border: '1px solid var(--b-hi)' }}>
               <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
-                {sanitizeDisplayText(message.content)}
+                {message.content}
               </p>
               <p className="text-[10px] mt-1.5 text-right" style={{ color: 'var(--t4)' }}>{ts}</p>
             </div>
@@ -43,7 +44,7 @@ export function Message({ message }: Props) {
 
   /* ── Assistant ── */
   return (
-    <div className="w-full px-4 py-6 animate-message-in">
+    <div className={`w-full px-4 py-6 ${animate ? 'animate-message-in' : ''}`}>
       <div className={COL}>
         {/* Label */}
         <div className="flex items-center gap-2 mb-3.5">
@@ -78,7 +79,8 @@ export function Message({ message }: Props) {
 
         {/* Content */}
         <div className="text-sm leading-[1.8]" style={{ color: 'var(--t1)' }}>
-          {formatContent(sanitizeDisplayText(message.content))}
+          {/* Show model output exactly as received. */}
+          {formatContent(message.content)}
         </div>
 
         {/* Reasoning */}

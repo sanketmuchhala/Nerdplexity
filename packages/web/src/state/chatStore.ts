@@ -11,6 +11,8 @@ const providerFor = (connectionId: string | undefined, fallback: Provider): Prov
   return connection ? legacyProvider(connection.kind) : fallback;
 };
 
+type MessageExtra = Partial<Pick<Message, 'provenance' | 'runId' | 'runStatus' | 'finishReason'>>;
+
 interface ChatStore {
   // State
   conversations: Conversation[];
@@ -26,7 +28,7 @@ interface ChatStore {
   loadSettings: () => Promise<void>;
   newConversation: (defaults?: Partial<Conversation>) => Promise<void>;
   selectConversation: (id: string) => void;
-  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string, provenance?: ModelRef) => Promise<void>;
+  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata'], conversationId?: string, extra?: MessageExtra) => Promise<void>;
   setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
@@ -116,7 +118,7 @@ const useChat = create<ChatStore>((set, get) => ({
   },
   
   // Add message to active conversation
-  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string, provenance?: ModelRef) => {
+  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata'], conversationId?: string, extra?: MessageExtra) => {
     const state = get();
     const activeConv = conversationId ? state.conversations.find(c => c.id === conversationId) : state.activeConversation();
     
@@ -131,7 +133,7 @@ const useChat = create<ChatStore>((set, get) => ({
       content,
       createdAt: Date.now(),
       ...(metadata && { metadata }),
-      ...(provenance && { provenance })
+      ...extra
     };
     
     const updatedConversation: Conversation = {

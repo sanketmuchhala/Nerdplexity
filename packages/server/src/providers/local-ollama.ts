@@ -1,5 +1,5 @@
 import { ChatRequest, ChatResponse, ProviderAdapter } from '../types.js';
-import { requestCompletion, streamChat, Usage } from '../runtime/local.js';
+import { requestCompletion } from '../runtime/local.js';
 import { discover } from '../runtime/discovery.js';
 
 export type OllamaMsg = { role: 'system' | 'user' | 'assistant'; content: string };
@@ -17,17 +17,9 @@ export async function pingOllama(baseURL?: string) {
 export async function chatWithOllama(opts: { config: OllamaConfig; messages: OllamaMsg[]; signal?: AbortSignal }) {
   const request = { ...opts.config, runtime: 'ollama' as const, messages: opts.messages };
   const signal = opts.signal || AbortSignal.timeout(600_000);
-  if (opts.config.stream === false) {
-    const result = await requestCompletion(request, signal);
-    return { text: result.message.content || '', usage: result.usage, raw: result.message };
-  }
-  let text = '';
-  let usage: Usage | undefined;
-  for await (const event of streamChat(request, signal)) {
-    if (event.type === 'delta') text += event.text;
-    if (event.type === 'done') usage = event.usage;
-  }
-  return { text, usage, raw: null };
+  // Streaming runs use the run engine (/v1/runs); this legacy path returns whole responses.
+  const result = await requestCompletion(request, signal);
+  return { text: result.message.content || '', usage: result.usage, raw: result.message };
 }
 
 export const localOllamaProvider: ProviderAdapter = {
