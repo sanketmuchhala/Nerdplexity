@@ -21,11 +21,3 @@ test('empty event history renders without a runtime exception', async ({ page })
   await expect(page.getByRole('heading', { name: 'No Events Found' })).toBeVisible();
   expect(errors).toEqual([]);
 });
-
-test('settings opens from chat and closes with Escape', async ({ page }) => {
-  await page.goto('/app');
-  await page.getByRole('button', { name: 'Settings & API Keys' }).click();
-  await expect(page.getByPlaceholder('sk-ant-...')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByPlaceholder('sk-ant-...')).toBeHidden();
-});

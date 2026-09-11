@@ -1,7 +1,15 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { db, Conversation, Message, AppSettings, Provider } from '../lib/db';
-import { getDefaultModelForProvider } from '../constants/models';
+import type { ModelRef } from '@app/types';
+import { db, Conversation, Message, AppSettings, Provider, legacyProvider } from '../lib/db';
+import * as credentials from '../lib/credentials';
+import useConnections from './connections';
+
+/** Legacy provider label for a connection, for screens that still read `provider`. */
+const providerFor = (connectionId: string | undefined, fallback: Provider): Provider => {
+  const connection = useConnections.getState().connections.find(c => c.id === connectionId);
+  return connection ? legacyProvider(connection.kind) : fallback;
+};
 
 interface ChatStore {
   // State
@@ -18,7 +26,8 @@ interface ChatStore {
   loadSettings: () => Promise<void>;
   newConversation: (defaults?: Partial<Conversation>) => Promise<void>;
   selectConversation: (id: string) => void;
-  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string) => Promise<void>;
+  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string, provenance?: ModelRef) => Promise<void>;
+  setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -74,14 +83,15 @@ const useChat = create<ChatStore>((set, get) => ({
     await get().persistActiveIfDirty();
     
     const id = uuidv4();
-    const currentProvider = get().getCurrentProvider();
+    // New threads use the chosen model; with none chosen, the thread waits for a selection.
+    const active = get().settings?.activeModel;
     
     const conversation: Conversation = {
       id,
       title: "New chat",
-      provider: currentProvider,
-      model: currentProvider === 'local-ollama' ? (get().settings?.localModels?.[get().settings?.localRuntime || 'ollama'] || '') : getDefaultModelForProvider(currentProvider),
-      runtime: get().settings?.localRuntime || 'ollama',
+      provider: providerFor(active?.connectionId, get().getCurrentProvider()),
+      model: active?.modelId || '',
+      connectionId: active?.connectionId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
@@ -106,7 +116,7 @@ const useChat = create<ChatStore>((set, get) => ({
   },
   
   // Add message to active conversation
-  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string) => {
+  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }, conversationId?: string, provenance?: ModelRef) => {
     const state = get();
     const activeConv = conversationId ? state.conversations.find(c => c.id === conversationId) : state.activeConversation();
     
@@ -120,7 +130,8 @@ const useChat = create<ChatStore>((set, get) => ({
       role,
       content,
       createdAt: Date.now(),
-      ...(metadata && { metadata })
+      ...(metadata && { metadata }),
+      ...(provenance && { provenance })
     };
     
     const updatedConversation: Conversation = {
@@ -162,6 +173,21 @@ const useChat = create<ChatStore>((set, get) => ({
     } catch (error) {
       console.error('Failed to update conversation title:', error);
     }
+  },
+  
+  // Point a thread at a connection and model for its next run. History keeps its provenance.
+  setConversationModel: async (id: string, ref: ModelRef) => {
+    const conversation = get().conversations.find(c => c.id === id);
+    if (!conversation) return;
+    const updated: Conversation = {
+      ...conversation,
+      connectionId: ref.connectionId,
+      model: ref.modelId,
+      provider: providerFor(ref.connectionId, conversation.provider),
+      updatedAt: Date.now()
+    };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
   },
   
   // Update conversation settings (provider, model, etc.)
@@ -224,20 +250,13 @@ const useChat = create<ChatStore>((set, get) => ({
     }
   },
   
-  // Set API key for provider
+  // Legacy helpers: hosted provider connections use the provider name as their ID.
   setApiKey: async (provider: Provider, key: string) => {
-    const state = get();
-    if (!state.settings) return;
-    
-    const updatedApiKeys = { ...state.settings.apiKeys, [provider]: key };
-    await get().saveSettings({ apiKeys: updatedApiKeys });
+    await credentials.setKey(provider, key, true);
+    await useConnections.getState().load();
   },
   
-  // Get API key for provider
-  getApiKey: (provider: Provider) => {
-    const state = get();
-    return state.settings?.apiKeys[provider] || '';
-  },
+  getApiKey: (provider: Provider) => credentials.getKey(provider),
   
   // Test API key
   testApiKey: async (provider: Provider, model?: string) => {
@@ -250,17 +269,12 @@ const useChat = create<ChatStore>((set, get) => ({
     try {
       let response: Response;
       
-      // Use specific GET endpoint for DeepSeek
-      if (provider === 'deepseek') {
-        response = await fetch(`/v1/ping?provider=deepseek&api_key=${encodeURIComponent(apiKey)}`);
-      } else {
-        // Use existing POST endpoint for other providers
-        response = await fetch('/v1/ping', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, model, api_key: apiKey })
-        });
-      }
+      // Keys travel in the request body, never the URL.
+      response = await fetch('/v1/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, model, api_key: apiKey })
+      });
       
       const data = await response.json();
       
@@ -290,8 +304,8 @@ const useChat = create<ChatStore>((set, get) => ({
   
   // Helper: get current provider from settings
   getCurrentProvider: (): Provider => {
-    const state = get();
-    return state.settings?.selectedProvider || 'local-ollama';
+    const settings = get().settings;
+    return providerFor(settings?.activeModel?.connectionId, settings?.selectedProvider || 'local-ollama');
   },
   
   // Helper: get default settings

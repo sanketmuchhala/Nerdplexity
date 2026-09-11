@@ -3,6 +3,10 @@
 Checkpoint: 2026-09-10. Repository: sanketmuchhala/Nerdplexity.
 Branch: `codex/local-workspace`. Original base: `caefdbcf7b43fe88e1b34d645f672a9f037df170`.
 
+## Current status
+
+The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 (toolchain and browser baseline) and P1 (connections and model discovery) are complete as of 2026-09-10; this document describes the earlier checkpoint.
+
 ## Read this first
 
 The owner wanted a structured product and implementation plan for an ambitious local AI harness inspired by Odysseus. An earlier assistant started implementing before the owner reviewed that plan. This branch preserves that work for inspection; it does not represent an approved final architecture or a finished product. No separate repository was created in this checkout.

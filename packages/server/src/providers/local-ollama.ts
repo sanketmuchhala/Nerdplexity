@@ -1,5 +1,6 @@
 import { ChatRequest, ChatResponse, ProviderAdapter } from '../types.js';
-import { discoverModels, requestCompletion, streamChat, Usage } from '../runtime/local.js';
+import { requestCompletion, streamChat, Usage } from '../runtime/local.js';
+import { discover } from '../runtime/discovery.js';
 
 export type OllamaMsg = { role: 'system' | 'user' | 'assistant'; content: string };
 export type OllamaConfig = {
@@ -8,8 +9,8 @@ export type OllamaConfig = {
 };
 
 export async function pingOllama(baseURL?: string) {
-  try { await discoverModels('ollama', baseURL); return { ok: true }; }
-  catch (error) { return { ok: false, error: (error as Error).message }; }
+  const result = await discover({ kind: 'ollama', baseURL: baseURL || 'http://127.0.0.1:11434' });
+  return result.ok ? { ok: true } : { ok: false, error: result.error.message };
 }
 
 // The compatibility endpoint shares generation options with the workspace.

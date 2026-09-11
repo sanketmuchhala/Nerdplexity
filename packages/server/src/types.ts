@@ -8,7 +8,7 @@ export interface ChatMessage {
 
 export interface ChatRequest {
   messages: ChatMessage[];
-  provider: 'openai' | 'anthropic' | 'deepseek' | 'gemini' | 'local-ollama' | 'auto';
+  provider: 'openai' | 'anthropic' | 'deepseek' | 'gemini' | 'local-ollama';
   model: string;
   temperature?: number;
   max_tokens?: number;

@@ -1,4 +1,5 @@
 import { readLines } from './streams.js';
+import { redact, resolveTarget } from './destinations.js';
 
 export type RuntimeKind = 'ollama' | 'openai-compatible';
 export type RuntimeMessage = { role: string; content: string; tool_calls?: unknown[]; tool_call_id?: string; tool_name?: string };
@@ -17,43 +18,28 @@ export interface LocalRequest {
   temperature?: number;
   max_tokens?: number;
   num_ctx?: number;
+  /** Auth headers from the resolved connection. Never logged or echoed. */
+  headers?: Record<string, string>;
 }
 
-/** Local endpoints are explicit. Arbitrary remote URLs never receive local documents. */
+/** Validates a runtime address against the shared destination policy. */
 export function runtimeURL(kind: RuntimeKind, input?: string): string {
-  const url = new URL(input || (kind === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:1234/v1'));
-  const hosts = new Set(['localhost', '127.0.0.1', '[::1]', 'host.docker.internal']);
-  if (!['http:', 'https:'].includes(url.protocol) || !hosts.has(url.hostname) || url.username || url.password || url.search || url.hash) {
-    throw new Error('Use a local runtime URL, such as http://127.0.0.1:11434 or http://127.0.0.1:1234/v1.');
-  }
-  const pathname = url.pathname.replace(/\/+$/, '');
-  if (pathname !== '' && !(kind === 'openai-compatible' && pathname === '/v1')) {
-    throw new Error(kind === 'ollama' ? 'Use the Ollama server URL without /api.' : 'Use the server URL ending in /v1.');
-  }
-  url.pathname = kind === 'openai-compatible' ? '/v1' : '';
-  return url.toString().replace(/\/+$/, '');
+  return resolveTarget({ kind, baseURL: input || (kind === 'ollama' ? 'http://127.0.0.1:11434' : 'http://127.0.0.1:1234/v1') }).baseURL;
 }
 
 export async function fetchRuntime(url: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(url, { ...init, redirect: 'error' });
   if (!response.ok) {
-    // Runtime error messages contain no credentials, but bound them for the UI.
-    const detail = (await response.text()).slice(0, 300);
+    if (response.status === 401 || response.status === 403) throw new Error('The endpoint rejected the API key.');
+    // Remote endpoints may echo request details; strip auth values and bound the text for the UI.
+    let detail = (await response.text()).slice(0, 300);
+    for (const value of Object.values((init.headers ?? {}) as Record<string, string>)) {
+      const secret = value.replace(/^Bearer /, '');
+      if (secret.length >= 8) detail = redact(detail, secret);
+    }
     throw new Error(`Runtime returned ${response.status}${detail ? `: ${detail}` : ''}`);
   }
   return response;
-}
-
-export async function discoverModels(kind: RuntimeKind, baseURL?: string) {
-  const base = runtimeURL(kind, baseURL);
-  const response = await fetchRuntime(`${base}/${kind === 'ollama' ? 'api/tags' : 'models'}`, { signal: AbortSignal.timeout(6000) });
-  const data = await response.json();
-  if (kind === 'ollama') {
-    if (!Array.isArray(data.models)) throw new Error('This endpoint did not return an Ollama model list.');
-    return data.models.map((m: any) => ({ id: m.name || m.model, size: m.size, family: m.details?.family, parameters: m.details?.parameter_size, quantization: m.details?.quantization_level }));
-  }
-  if (!Array.isArray(data.data)) throw new Error('This endpoint did not return an OpenAI-compatible model list.');
-  return data.data.map((m: any) => ({ id: m.id }));
 }
 
 export function generationBody(request: LocalRequest, stream: boolean, tools?: unknown[]) {
@@ -76,7 +62,7 @@ export function extractUsage(data: any, runtime: RuntimeKind): Usage | undefined
 export async function requestCompletion(request: LocalRequest, signal: AbortSignal, tools?: unknown[]) {
   const base = runtimeURL(request.runtime, request.baseURL);
   const response = await fetchRuntime(`${base}/${request.runtime === 'ollama' ? 'api/chat' : 'chat/completions'}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...request.headers },
     body: JSON.stringify(generationBody(request, false, tools)), signal,
   });
   const data = await response.json();
@@ -92,9 +78,9 @@ export async function* streamChat(request: LocalRequest, signal: AbortSignal): A
   let firstToken: number | undefined;
   let usage: Usage | undefined;
   let completed = false;
-  yield { type: 'status', message: 'Waiting for the local model' };
+  yield { type: 'status', message: 'Waiting for the model' };
   const response = await fetchRuntime(`${base}/${request.runtime === 'ollama' ? 'api/chat' : 'chat/completions'}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...request.headers },
     body: JSON.stringify(generationBody(request, true)), signal,
   });
   if (!response.body) throw new Error('Runtime returned an empty stream.');

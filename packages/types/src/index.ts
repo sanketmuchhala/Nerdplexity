@@ -133,3 +133,4 @@ export interface APIError {
   provider?: Provider;
   status?: number;
 }
+export * from "./connections";

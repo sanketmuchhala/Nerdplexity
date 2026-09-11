@@ -6,9 +6,9 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The existing app includes browser-persisted conversations, provider settings, local Ollama integration, and analytics pages. The first implementation phase establishes startup, build checks, and browser regression tests.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for Ollama and OpenAI-compatible endpoints, a bounded document agent for local models, run history, and analytics pages.
 
-True end-to-end streaming, unified model discovery, richer provider connections, files, comparisons, and tool execution are planned work. Existing provider adapters have not all been validated against live services; model availability depends on the provider and account.
+Hosted providers (OpenAI, Anthropic, Gemini, DeepSeek) list their models through discovery, but their chat responses are still returned whole rather than streamed. Streaming for them, files, comparisons, and general tool execution are planned work. Provider adapters have been tested against fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
 ## Setup
 
@@ -34,7 +34,7 @@ Cloud-only development does not start or require Ollama. For local inference, st
 pnpm dev:ollama
 ```
 
-Configure the endpoint in Settings. The current selector still uses a fixed model list; dynamic discovery is the next phase.
+Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, or any OpenAI-compatible endpoint (for example `https://openrouter.ai/api/v1`) with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models. Listing models does not prove a model can run; the first chat does.
 
 ## Commands
 
@@ -48,9 +48,10 @@ Configure the endpoint in Settings. The current selector still uses a fixed mode
 | `pnpm build` | Build all packages |
 | `pnpm start` | Serve the production build from the backend on port 5174 |
 | `pnpm test` | Run the Playwright browser regression suite |
+| `pnpm -r test` | Run server and web unit tests (Vitest) |
 | `pnpm lint` | Run the existing source emoji policy check |
 
-Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. The package-level Vitest scripts are noninteractive, but unit-test coverage has not yet been established.
+Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. Unit tests cover the destination policy, model discovery per provider, stream line reassembly, and the browser storage migration.
 
 If using the npm bootstrap, prefix a command with `npm exec --yes --package=pnpm@9.0.0 --`, for example `npm exec --yes --package=pnpm@9.0.0 -- pnpm test`.
 
@@ -69,7 +70,7 @@ Alternatively, use an installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
 
-Playwright starts local web/backend processes as needed. Tests use isolated browser contexts and do not require real API keys. They cover backend health, conversation creation/persistence, settings, and empty event history.
+Playwright starts local web/backend processes as needed. Tests use isolated browser contexts and do not require real API keys or a running model; discovery and runs are served from fixtures. They cover backend health, thread persistence, empty event history, offline versus empty connections, adding a custom endpoint through to a streamed answer, and hosted providers without a key.
 
 With `pnpm dev` already running, capture the UI using synthetic events:
 
@@ -92,11 +93,11 @@ Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/
 
 ## Data and credentials
 
-Conversations, settings, and analytics currently live in browser IndexedDB. Provider keys saved in Settings are stored on that browser profile. Local browser storage is not an encrypted credential vault.
+Threads, settings, connections, and analytics live in browser IndexedDB. API keys are kept for the current tab session unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. Keys saved by earlier versions were migrated as remembered keys; use **Forget key** to remove one. Keys are sent to the local backend in request bodies, never in URLs.
 
-Online provider requests send messages and required context through the local backend to the selected provider. Web search also uses external services. Local storage does not make those workflows offline.
+Requests to an online connection send your messages through the local backend to that provider. Hosted providers are pinned to their official endpoints. Custom endpoints must use https unless they are on this machine. The document agent runs only on models on this machine; documents are never sent to remote endpoints. Web search also uses external services.
 
-Do not commit keys or personal conversation exports. The new connection design will add session-only credentials by default and an explicit remember option while preserving existing saved settings.
+Do not commit keys or personal conversation exports.
 
 ## Repository
 

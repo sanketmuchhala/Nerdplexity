@@ -1,6 +1,6 @@
 # Nerdplexity: model workbench and harness plan
 
-Status: P0 complete; P1 next.
+Status: P0 and P1 complete; P2 next.
 Updated: 2026-09-10.
 User direction: make Nerdplexity an excellent interface for running local models and online models using personal API keys, including free offerings. Keep the Nerdplexity identity.
 
@@ -220,6 +220,17 @@ Files: shared types; frontend database/store/settings/model selector; server val
 
 Done: all installed Ollama models appear; custom endpoint works through the same picker; migration preserves data; auth/offline/empty-catalog states are distinct. Provider discovery alone never claims inference success.
 
+Reconciled scope (2026-09-10, after checkpoint `323d763`). Already present: Ollama and localhost OpenAI-compatible discovery, buffered NDJSON/SSE line reading, local chat streaming (`runtime/local.ts`, `runtime/streams.ts`, `routes/localRuntime.ts`). Remaining:
+
+1. Shared `Connection`, `ModelRef`, `ModelDescriptor` (tri-state capabilities), and categorized discovery results in `@app/types`, imported by web and server.
+2. Dexie v4: `connections` and `credentials` tables; legacy runtime URLs and saved keys become connections; conversations gain `connectionId`; new assistant messages record provenance; legacy messages stay unknown. Fixture-tested.
+3. Connection presets (Ollama, LM Studio, OpenAI, Anthropic, Gemini, DeepSeek, custom compatible). New keys session-only unless "Remember on this device"; migrated keys stay remembered. Cloud endpoints require HTTPS. Keys never travel in URLs.
+4. Server discovery for every connection kind; the Models page becomes the single catalog with search, favorites, manual model IDs, and distinct offline/auth/empty/not-found states. Live code stops using `DEFAULT_MODELS` and the Settings modal list.
+5. Runs resolve through `connectionId`; model-name provider detection is removed; custom endpoints stream through the existing run path; document-agent runs remain local-only.
+6. Tests: discovery and URL-policy fixtures, migration fixture, Playwright connection flow.
+
+Out of P1: unrouted legacy components (`components/Chat.tsx`, `pages/Landing.tsx`, etc.), analytics, benchmark, cloud streaming (P2), OpenRouter/Groq presets and pricing (P3), per-turn switching (P4).
+
 ### P2 — Real streaming run engine
 
 Depends on P1.
@@ -342,4 +353,7 @@ Paste after switching:
 - Validation attempted: `pnpm typecheck`; command unavailable on PATH.
 - Confirmed: the user chose the general model workbench (chat, files, comparisons, optional tools) for the first release.
 - P0 complete (2026-09-10): Ollama-optional startup, loopback binding, Playwright suite (4/4 passing), UI capture script and screenshots, README rewrite. Typecheck, build, and lint pass; Vitest has no test files. Details in [baseline notes](baseline.md).
-- Next: P1, shared contracts, connections, and model discovery.
+- P1 complete (2026-09-10): shared connection/model contracts in `@app/types`; server destination policy (`runtime/destinations.ts`) and discovery for Ollama, OpenAI-compatible, OpenAI, Anthropic (official SDK), Gemini, and DeepSeek (`runtime/discovery.ts`, `POST /v1/models/discover`); Dexie v4 with `connections` and `credentials`, idempotent legacy migration, and a retryable startup error; session-only keys by default with opt-in device storage; Models page as the single catalog (connections, search, filters, favorites, manual model IDs); runs routed by `connectionId`; custom endpoints stream through the run route; assistant answers record and show provenance; model-name provider detection and the key-in-URL ping removed; Settings modal replaced by Connections.
+- P1 verification: typecheck, build, lint pass. Vitest 28/28 (server 21: policy, discovery fixtures per provider, key redaction, chunk and UTF-8 splits; web 7: v3 to v4 migration, idempotency, fresh install, credential storage). Playwright 6/6. Unmocked smoke through the real backend to a local fake OpenAI-compatible server: discovery, wrong-key auth, streamed answer split into 7-byte chunks, remembered key after reload, no phone overflow. No live provider account or real Ollama model was used.
+- Open after P1: hosted providers do not stream yet (P2); the message renderer strips emoji from model output, contrary to "preserve exact output" (P2); the workspace UI from `323d763` uses a green palette and low-contrast answer text rather than the blue identity (P4); unrouted legacy components (`components/Chat.tsx`, `ChatHeader.tsx`, `hooks/useLocalKeys.ts`, `pages/Landing.tsx`) still compile against compatibility shims; LAN runtimes over plain http are not allowed by the destination policy.
+- Next: P2, real streaming run engine.

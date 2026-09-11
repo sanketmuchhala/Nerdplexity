@@ -1,10 +1,5 @@
-import type { AppSettings, RuntimeKind, RunRecord } from '../lib/db';
+import type { RunRecord } from '../lib/db';
 
-export interface LocalModel { id: string; size?: number; parameters?: string; quantization?: string; family?: string }
-export interface RuntimeStatus {
-  runtime: RuntimeKind; baseURL: string; models: LocalModel[];
-  host: { platform: string; arch: string; memory: number; freeMemory: number; cpus: number };
-}
 export type RunEvent =
   | { type: 'status'; message: string }
   | { type: 'delta'; text: string }
@@ -12,16 +7,8 @@ export type RunEvent =
   | { type: 'done'; usage?: RunRecord['usage']; duration_ms: number; ttft_ms?: number }
   | { type: 'error'; message: string };
 
-export const runtimeName = (kind: RuntimeKind) => kind === 'ollama' ? 'Ollama' : 'LM Studio / llama.cpp';
-export const runtimeBase = (settings: AppSettings | null, kind: RuntimeKind) => kind === 'ollama' ? settings?.baseURL || 'http://127.0.0.1:11434' : settings?.compatibleBaseURL || 'http://127.0.0.1:1234/v1';
 export const sizeLabel = (bytes?: number) => bytes === undefined ? 'Size not reported' : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-
-export async function getModels(runtime: RuntimeKind, baseURL: string, signal?: AbortSignal): Promise<RuntimeStatus> {
-  const response = await fetch(`/v1/local/models?${new URLSearchParams({ runtime, baseURL })}`, { signal });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Unable to connect to the local runtime.');
-  return data;
-}
+export const tokensLabel = (n?: number) => n === undefined ? undefined : n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}K`;
 
 export async function consumeRun(response: Response, onEvent: (event: RunEvent) => void) {
   if (!response.ok) {

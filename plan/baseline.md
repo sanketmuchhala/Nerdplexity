@@ -48,6 +48,8 @@ Observations:
 
 ## Known gaps carried into later phases
 
+Recorded before checkpoint `323d763` and P1. Local streaming, the model lists, provider routing, and unit tests have since changed; see the progress log in [the implementation plan](implementation-plan.md).
+
 - Chat waits for the full response; there is no end-to-end streaming (P2).
 - Two separate hardcoded model lists; the shared local list contains one model (P1).
 - Provider routing infers provider from model-name substrings (P1).

@@ -14,6 +14,7 @@ import { orchestrator } from './orchestrator/index.js';
 import { localMetrics } from './routes/localMetrics.js';
 import { enqueueLocal, getLocalQueueStatus } from './queue/localQueue.js';
 import { localRuntime } from './routes/localRuntime.js';
+import { discover } from './runtime/discovery.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -54,36 +55,14 @@ const providers = {
   'local-ollama': localOllamaProvider
 };
 
-// Auto-detect provider from model name
-function detectProvider(model: string): keyof typeof providers {
-  const modelLower = model.toLowerCase();
-  
-  if (modelLower.includes('claude') || modelLower.includes('anthropic')) {
-    return 'anthropic';
-  }
-  
-  if (modelLower.includes('deepseek') || modelLower.includes('deekseek') || modelLower.includes('r1')) {
-    return 'deepseek';
-  }
-  
-  if (modelLower.includes('gemini') || modelLower.includes('google')) {
-    return 'gemini';
-  }
-  
-  // Check for local Ollama models
-  if (modelLower.includes('mistral') || modelLower.includes('llama') || modelLower.includes('codellama') || 
-      modelLower.includes('qwen') || modelLower.includes('phi') || modelLower.includes('gemma') || 
-      modelLower.includes('tinyllama') || modelLower.includes('deepseek-llm')) {
-    return 'local-ollama';
-  }
-  
-  // Default to OpenAI for GPT models and others
-  return 'openai';
-}
-
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Model discovery for a configured connection. Keys travel in the body, never the URL.
+app.post('/v1/models/discover', async (req, res) => {
+  res.json(await discover(req.body?.target));
 });
 
 // Local metrics endpoint
@@ -96,33 +75,7 @@ app.get('/v1/queue/status', (req, res) => {
 
 // Provider ping test endpoint  
 app.get('/v1/ping', async (req, res) => {
-  if (req.query.provider === 'deepseek') {
-    const apiKey = req.query.api_key as string || req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!apiKey) {
-      return res.json({ ok: false, message: 'API key required' });
-    }
-    
-    try {
-      const testRequest: ChatRequest = {
-        provider: 'deepseek',
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: 'ping', id: 'ping', timestamp: Date.now() }],
-        api_key: apiKey,
-        temperature: 0.1,
-        max_tokens: 5
-      };
-      
-      await deepseekProvider.chat(testRequest);
-      res.json({ ok: true });
-    } catch (error: any) {
-      if (error.code === 'AUTH') {
-        res.json({ ok: false, message: 'Invalid DeepSeek API key' });
-      } else {
-        res.json({ ok: false, message: 'Invalid key or DeepSeek error' });
-      }
-    }
-  } else if (req.query.provider === 'local-ollama') {
+  if (req.query.provider === 'local-ollama') {
     const baseURL = req.query.baseURL as string || 'http://localhost:11434';
     
     try {
@@ -132,14 +85,14 @@ app.get('/v1/ping', async (req, res) => {
       res.json({ ok: false, error: error.message });
     }
   } else {
-    res.status(400).json({ error: 'DeepSeek and local-ollama providers supported on this endpoint' });
+    res.status(400).json({ error: 'Only local-ollama is supported on this endpoint. Use POST /v1/models/discover to check a connection.' });
   }
 });
 
 // Key validation endpoint
 app.post('/v1/ping', async (req, res) => {
   try {
-    let { provider, model, api_key } = req.body;
+    const { provider, model, api_key } = req.body;
     
     if (!provider) {
       return res.status(400).json({ error: 'Provider is required' });
@@ -150,12 +103,7 @@ app.post('/v1/ping', async (req, res) => {
       return res.status(400).json({ error: 'API key is required for this provider' });
     }
     
-    // Auto-detect provider if set to 'auto'
-    if (provider === 'auto') {
-      provider = detectProvider(model || '');
-    }
-    
-    if (!providers[provider as keyof typeof providers]) {
+    if (!Object.hasOwn(providers, provider)) {
       return res.status(400).json({ error: 'Invalid provider' });
     }
     
@@ -218,14 +166,10 @@ app.post('/v1/chat', async (req, res) => {
       return res.status(400).json({ error: 'Messages array is required' });
     }
     
-    // Auto-detect provider if set to 'auto'
-    let providerName: keyof typeof providers = chatRequest.provider as keyof typeof providers;
-    if (chatRequest.provider === 'auto') {
-      providerName = detectProvider(chatRequest.model || '');
-    }
-    
-    if (!providerName || !providers[providerName]) {
-      return res.status(400).json({ error: 'Valid provider is required (openai, anthropic, deepseek, gemini, local-ollama, or auto)' });
+    // Routing is explicit: the client resolves its connection to a provider.
+    const providerName = chatRequest.provider as keyof typeof providers;
+    if (!Object.hasOwn(providers, providerName)) {
+      return res.status(400).json({ error: 'Valid provider is required (openai, anthropic, deepseek, gemini, local-ollama)' });
     }
     
     // Skip API key validation for local-ollama
