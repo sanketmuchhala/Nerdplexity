@@ -48,8 +48,7 @@ export function Message({ message, animate = true }: Props) {
       <div className={COL}>
         {/* Label */}
         <div className="flex items-center gap-2 mb-3.5">
-          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
-            style={{ background: 'var(--blue-dark)', boxShadow: '0 0 8px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
+          <img src="/brand/nerdplexity-mark.svg" alt="" width={20} height={20} className="w-5 h-5 rounded-md flex-shrink-0" />
           <span className="t-caps" style={{ letterSpacing: '.1em' }}>Nerdplexity</span>
         </div>
 

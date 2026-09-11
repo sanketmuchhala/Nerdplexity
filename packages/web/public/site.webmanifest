@@ -1,0 +1,14 @@
+{
+  "name": "Nerdplexity",
+  "short_name": "Nerdplexity",
+  "description": "A local-first model workbench for local runtimes and your own API keys.",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#b5df98",
+  "icons": [
+    { "src": "/brand/nerdplexity-mark.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/brand/nerdplexity-mark-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/brand/nerdplexity-mark-512.png", "type": "image/png", "sizes": "512x512" }
+  ]
+}

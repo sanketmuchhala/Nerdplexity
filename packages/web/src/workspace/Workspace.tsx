@@ -70,7 +70,7 @@ export default function Workspace() {
     <a href="#workspace-content" className="np-skip">Skip to content</a>
     {sidebar && <button className="np-sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebar(false)}/>}
     <aside className={`np-sidebar ${sidebar ? 'open' : ''}`}>
-      <button className="np-brand" onClick={() => go('/app')}><span className="np-brand-mark">n<span>.</span></span><span>Nerdplexity<small>INDEPENDENT INTELLIGENCE</small></span></button>
+      <button className="np-brand" onClick={() => go('/app')} aria-label="Nerdplexity home"><img src="/brand/nerdplexity-lockup-on-dark.svg" alt="Nerdplexity" width={184} height={42}/></button>
       <button className="np-new-thread" onClick={() => void newThread()}><Plus size={16}/><span>New thread</span></button>
       <button className="np-search-trigger" onClick={() => { setQuery(''); setPalette(true); }}><Search size={15}/><span>Search anything</span><kbd>⌘ K</kbd></button>
       <div className="np-sidebar-label">WORKSPACE</div><nav aria-label="Main navigation">{destinations.map(({ id, label, icon: Icon, path }) => <button key={id} className={`np-nav-item ${current.id === id ? 'active' : ''}`} aria-current={current.id === id ? 'page' : undefined} onClick={() => go(path)}><Icon size={16}/><span>{label}</span>{id === 'workspace' && documents.length > 0 && <small>{documents.length}</small>}{current.id === id && <span className="np-nav-indicator"/>}</button>)}</nav>
