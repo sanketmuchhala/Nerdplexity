@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -30,6 +30,7 @@ import useConnections, {
   latestResult,
   modelKey,
   requiresKey,
+  targetFor,
   usesBaseURL,
 } from '../state/connections';
 import { hasKey } from '../lib/credentials';
@@ -193,6 +194,8 @@ function checkLine(check?: CheckState) {
 type Entry = { connection: Connection; model: ModelDescriptor; local: boolean };
 
 const latest = latestResult;
+
+type PullState = { connectionId: string; status: string; completed?: number; total?: number; error?: string } | null;
 
 function keyBadge(connection: Connection) {
   if (!hasKey(connection.id))
@@ -487,6 +490,10 @@ export function Models({
   const [source, setSource] = useState('all');
   const [manual, setManual] = useState({ connectionId: '', modelId: '' });
   const [actionError, setActionError] = useState('');
+  const [pullModel, setPullModel] = useState('');
+  const [pullConnection, setPullConnection] = useState('');
+  const [pull, setPull] = useState<PullState>(null);
+  const pullController = useRef<AbortController | null>(null);
   const favorites = useMemo(
     () => new Set(settings?.favoriteModels ?? []),
     [settings?.favoriteModels],
@@ -576,6 +583,54 @@ export function Models({
     )
       return;
     await remove(connection.id);
+  };
+  const installModel = async (event: FormEvent) => {
+    event.preventDefault();
+    const connection = connections.find(c => c.id === pullConnection && c.kind === 'ollama');
+    const model = pullModel.trim();
+    if (!connection || !model || pull) return;
+    setActionError('');
+    setPull({ connectionId: connection.id, status: 'Starting download' });
+    const controller = new AbortController();
+    pullController.current = controller;
+    try {
+      const response = await fetch('/v1/models/ollama/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model }), signal: controller.signal });
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Download failed (${response.status}).`);
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let failure = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+        let newline: number;
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
+          if (!line.trim()) continue;
+          const progress = JSON.parse(line);
+          if (progress.error) failure = progress.error;
+          setPull({ connectionId: connection.id, status: progress.status || 'Downloading', completed: progress.completed, total: progress.total, error: progress.error });
+        }
+        if (done) break;
+      }
+      if (failure) throw new Error(failure);
+      setPullModel('');
+      await discover(connection.id);
+    } catch (error) { setActionError(controller.signal.aborted ? 'Download canceled.' : (error as Error).message); }
+    finally { pullController.current = null; setPull(null); }
+  };
+  const deleteLocalModel = async (connection: Connection, model: ModelDescriptor) => {
+    if (!window.confirm(`Remove “${model.id}” from ${connection.name}? This deletes its local Ollama files.`)) return;
+    setActionError('');
+    try {
+      const response = await fetch('/v1/models/ollama', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model: model.id }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Removal failed (${response.status}).`);
+      await discover(connection.id);
+    } catch (error) { setActionError((error as Error).message); }
   };
 
   return (
@@ -740,6 +795,20 @@ export function Models({
         )}
       </section>
 
+      {!connectionsOnly && connections.some(c => c.kind === 'ollama') && (
+        <section className="np-panel np-ollama-manager" aria-labelledby="ollama-manager-title">
+          <div className="np-section-title">
+            <div><h2 id="ollama-manager-title">Install an Ollama model</h2><p>Downloads stay on the machine running Ollama. Progress comes directly from the runtime.</p></div>
+          </div>
+          <form className="np-inline-form" onSubmit={installModel}>
+            <label className="np-field"><span>Ollama connection</span><select aria-label="Ollama connection" value={pullConnection} required onChange={e => setPullConnection(e.target.value)}><option value="">Choose…</option>{connections.filter(c => c.kind === 'ollama').map(c => <option value={c.id} key={c.id}>{c.name}</option>)}</select></label>
+            <label className="np-field"><span>Model name</span><input aria-label="Ollama model name" placeholder="qwen3:8b" value={pullModel} onChange={e => setPullModel(e.target.value)} /></label>
+            <button className="np-button primary" disabled={!!pull}>Install</button>
+          </form>
+          {pull && <div className="np-pull-progress" role="status"><div><span>{pull.status}</span><small>{pull.total ? `${Math.floor(((pull.completed ?? 0) / pull.total) * 100)}% · ${sizeLabel(pull.completed ?? 0)} of ${sizeLabel(pull.total)}` : 'Preparing layers…'}</small></div>{pull.total && <progress value={pull.completed ?? 0} max={pull.total} />}<button className="np-button ghost small" type="button" onClick={() => pullController.current?.abort()}>Cancel download</button></div>}
+        </section>
+      )}
+
       {!connectionsOnly && (
         <>
           <div className="np-section-title np-model-title">
@@ -900,6 +969,9 @@ export function Models({
                     </p>
                   )}
                   <div className="np-model-card-bottom">
+                    {connection.kind === 'ollama' && (
+                      <button className="np-button ghost small" onClick={() => void deleteLocalModel(connection, model)}><Trash2 size={12} /> Remove</button>
+                    )}
                     <button
                       className="np-button ghost small"
                       disabled={checks[key]?.status === 'running'}

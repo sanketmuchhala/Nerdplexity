@@ -9,6 +9,7 @@ import {
   FileText,
   GitBranch,
   Lightbulb,
+  Paperclip,
   Pencil,
   RotateCcw,
   SlidersHorizontal,
@@ -28,6 +29,7 @@ import useConnections, {
 import { exportText } from './api';
 import { policyBlock, useRun } from './useRun';
 import {
+  attachmentFromFile,
   buildContext,
   exportConversation,
   workbenchSettings,
@@ -60,6 +62,8 @@ export function ChatWorkspace({
     setAllowCharges,
     forkConversation,
     updateConversationTitle,
+    addAttachment,
+    removeAttachment,
   } = useChat();
   const connections = useConnections((state) => state.connections);
   useConnections((state) => state.keyVersion);
@@ -88,6 +92,7 @@ export function ChatWorkspace({
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const branchDraft = useRef<string | null>(null);
+  const attachmentInput = useRef<HTMLInputElement>(null);
   const discovered = ref ? latestResult(catalog[ref.connectionId]) : undefined;
   const descriptor = discovered?.ok
     ? discovered.models.find((m) => m.id === model)
@@ -99,6 +104,7 @@ export function ChatWorkspace({
     configured,
     descriptor,
     connection,
+    conversation?.attachments,
   );
 
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -678,6 +684,25 @@ export function ChatWorkspace({
             </div>
           </div>
         )}
+        {!!conversation?.attachments?.length && (
+          <div className="np-attachments" aria-label="Thread attachments">
+            {conversation.attachments.map((file) => (
+              <details key={file.id} className="np-attachment">
+                <summary>
+                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · inspect</small>
+                </summary>
+                <div>
+                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
+                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                    <X size={12} /> Remove from context
+                  </button>
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
         <form
           className="np-composer"
           onSubmit={(e) => {
@@ -709,6 +734,43 @@ export function ChatWorkspace({
           />
           <div className="np-composer-toolbar">
             <div className="np-composer-modes">
+              <button
+                type="button"
+                className="np-mode"
+                disabled={run.running}
+                onClick={() => attachmentInput.current?.click()}
+              >
+                <Paperclip size={13} /> Attach
+              </button>
+              <input
+                ref={attachmentInput}
+                className="np-visually-hidden"
+                tabIndex={-1}
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif,text/*,.md,.markdown,.csv,.json,.jsonl,.log,.xml,.yaml,.yml,.toml,.ini,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.rs,.go,.java,.kt,.c,.h,.cpp,.hpp,.cs,.php,.swift,.sql,.sh,.zsh,.fish,.html,.css,.scss,.less,.vue,.svelte"
+                aria-label="Attach files"
+                onChange={async (event) => {
+                  const control = event.currentTarget;
+                  const files = [...(control.files ?? [])];
+                  try {
+                    if (!conversation) await newConversation();
+                    const current = useChat.getState().activeConversation();
+                    if (!current) throw new Error('Unable to create a thread.');
+                    let existing = current.attachments ?? [];
+                    for (const file of files) {
+                      const attachment = await attachmentFromFile(file, existing);
+                      await addAttachment(current.id, attachment);
+                      existing = [...existing, attachment];
+                    }
+                    setActionNotice(`${files.length} file${files.length === 1 ? '' : 's'} attached to this thread.`);
+                  } catch (error) {
+                    setActionError((error as Error).message);
+                  } finally {
+                    control.value = '';
+                  }
+                }}
+              />
               <button
                 type="button"
                 className={`np-mode ${!agent ? 'selected' : ''}`}

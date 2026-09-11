@@ -19,7 +19,7 @@ export type AdapterEvent =
   | { type: 'reasoning'; text: string }
   | { type: 'status'; message: string }
   | { type: 'quota'; quota: RateLimitState }
-  | { type: 'done'; usage?: Usage; finishReason?: string };
+  | { type: 'done'; usage?: Usage; finishReason?: string; loadMs?: number };
 
 export class ProviderFailure extends Error {
   constructor(public error: ProviderError) { super(error.message); }
@@ -177,11 +177,18 @@ const normalizeUsage = (prompt: unknown, completion: unknown): Usage | undefined
     ? { prompt_tokens: prompt as number, completion_tokens: completion as number, total_tokens: (prompt as number) + (completion as number) }
     : undefined;
 
+const partsOf = (message: RunMessage) => typeof message.content === 'string' ? [{ type: 'text' as const, text: message.content }] : message.content;
+const textOf = (message: RunMessage) => partsOf(message).filter((part): part is Extract<(typeof part), { type: 'text' }> => part.type === 'text').map(part => part.text).join('\n');
+const openAIMessage = (message: RunMessage) => typeof message.content === 'string' ? message : {
+  ...message,
+  content: message.content.map(part => part.type === 'text' ? { type: 'text', text: part.text } : { type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } }),
+};
+
 /** OpenAI, DeepSeek, and OpenAI-compatible servers share the chat completions SSE format. */
 async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const body: Record<string, unknown> = {
-    model: req.model, messages: req.messages, stream: true, stream_options: { include_usage: true },
+    model: req.model, messages: req.messages.map(openAIMessage), stream: true, stream_options: { include_usage: true },
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -225,7 +232,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
 async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const response = yield* sendWithRetry(target, () => post(fetchImpl, `${target.baseURL}/api/chat`, target, {
-    model: req.model, messages: req.messages, stream: true,
+    model: req.model, messages: req.messages.map(message => ({ role: message.role, content: textOf(message), ...(partsOf(message).some(part => part.type === 'image') ? { images: partsOf(message).filter((part): part is Extract<(typeof part), { type: 'image' }> => part.type === 'image').map(part => part.data) } : {}) })), stream: true,
     options: { num_predict: req.maxTokens ?? DEFAULT_MAX_TOKENS, num_ctx: req.numCtx ?? 8192, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
   }, signal), signal);
   for await (const line of bodyLines(response, signal)) {
@@ -236,7 +243,9 @@ async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: 
     const text = data.message?.content;
     if (typeof text === 'string' && text) yield { type: 'delta', text };
     if (data.done) {
-      yield { type: 'done', usage: normalizeUsage(data.prompt_eval_count, data.eval_count), finishReason: data.done_reason };
+      // load_duration is in nanoseconds; it is near zero when the model was already in memory.
+      const loadMs = Number.isFinite(data.load_duration) && data.load_duration >= 0 ? Math.round(data.load_duration / 1e6) : undefined;
+      yield { type: 'done', usage: normalizeUsage(data.prompt_eval_count, data.eval_count), finishReason: data.done_reason, ...(loadMs !== undefined ? { loadMs } : {}) };
       return;
     }
   }
@@ -245,18 +254,19 @@ async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: 
 
 /** Gemini needs alternating roles; merge consecutive turns from the same side. */
 function geminiContents(messages: RunMessage[]) {
-  const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
+  const contents: { role: 'user' | 'model'; parts: ({ text: string } | { inlineData: { mimeType: string; data: string } })[] }[] = [];
   for (const message of messages) {
     if (message.role === 'system') continue;
     const role = message.role === 'assistant' ? 'model' : 'user';
     const last = contents[contents.length - 1];
-    if (last?.role === role) last.parts[0].text += `\n\n${message.content}`;
-    else contents.push({ role, parts: [{ text: message.content }] });
+    const parts = partsOf(message).map(part => part.type === 'text' ? { text: part.text } : { inlineData: { mimeType: part.mimeType, data: part.data } });
+    if (last?.role === role) last.parts.push({ text: '\n\n' }, ...parts);
+    else contents.push({ role, parts });
   }
   return contents;
 }
 
-const systemText = (messages: RunMessage[]) => messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+const systemText = (messages: RunMessage[]) => messages.filter(m => m.role === 'system').map(textOf).join('\n\n');
 const GEMINI_BLOCKED = new Set(['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION']);
 
 async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
@@ -322,7 +332,7 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
   const params: Anthropic.MessageStreamParams = {
     model: req.model,
     max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
-    messages: req.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    messages: req.messages.filter(m => m.role !== 'system').map(m => ({ role: m.role as 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : m.content.map(part => part.type === 'text' ? { type: 'text' as const, text: part.text } : { type: 'image' as const, source: { type: 'base64' as const, media_type: part.mimeType, data: part.data } }) })),
     ...(system ? { system } : {}),
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
   };

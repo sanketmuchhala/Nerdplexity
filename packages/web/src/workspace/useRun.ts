@@ -218,13 +218,14 @@ export function useRun() {
     const result = latestResult(useConnections.getState().catalog[connection.id]);
     const descriptor = result?.ok ? result.models.find(m => m.id === conversation.model) : undefined;
     const configured = workbenchSettings(conversation, state.settings);
-    const context = buildContext(conversation.messages, prompt, configured, descriptor, connection);
+    const context = buildContext(conversation.messages, prompt, configured, descriptor, connection, conversation.attachments);
     if (context.warnings.length || (agent && descriptor?.capabilities.tools === false)) {
       setError({ message: context.warnings[0] || 'This model does not support tools. Switch to Chat or another model.', retryable: false }); return;
     }
     const input: InputSnapshot = { messages: context.messages, settings: context.effective, configured,
       context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown },
       documents: agent ? documents.map(({ id, title, content }) => ({ id, title, content })) : [],
+      attachments: (conversation.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })),
     };
     try { await state.addMessage('user', prompt, undefined, conversation.id); }
     catch { setError({ message: 'Unable to save your message. Check browser storage.', retryable: false }); return; }

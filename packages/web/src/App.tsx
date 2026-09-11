@@ -9,7 +9,6 @@ import { initializeDatabase } from './lib/db';
 import MetricsDashboard  from './promptops/MetricsDashboard';
 import EventsPage        from './promptops/EventsPage';
 import PromptOpsLanding  from './promptops/PromptOpsLanding';
-import BenchmarkPage     from './promptops/BenchmarkPage';
 
 export default function App() {
   const [initialized,   setInitialized]   = useState(false);
@@ -69,13 +68,13 @@ export default function App() {
         <Route path="/app/analytics"           element={<PromptOpsLanding />} />
         <Route path="/app/analytics/dashboard" element={<MetricsDashboard />} />
         <Route path="/app/analytics/events"    element={<EventsPage />} />
-        <Route path="/app/analytics/benchmark" element={<BenchmarkPage />} />
+        <Route path="/app/analytics/benchmark" element={<Navigate to="/app/compare" replace />} />
 
         {/* Legacy redirects — old routes still work */}
         <Route path="/promptops" element={<PromptOpsLanding />} />
         <Route path="/dashboard" element={<MetricsDashboard />} />
         <Route path="/events"    element={<EventsPage />} />
-        <Route path="/benchmark" element={<BenchmarkPage />} />
+        <Route path="/benchmark" element={<Navigate to="/app/compare" replace />} />
       </Routes>
     </BrowserRouter>
   );

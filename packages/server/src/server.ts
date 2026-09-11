@@ -17,6 +17,7 @@ import { runsRouter } from './routes/runs.js';
 import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
 import { errorHandler } from './middleware/errors.js';
+import { modelsRouter } from './routes/models.js';
 
 dotenv.config({ path: '.env.local' });
 
@@ -48,6 +49,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 // Run engine: start, stream ordered events with replay, cancel.
 app.use('/v1/runs', runsRouter(new RunRegistry()));
+app.use('/v1/models', modelsRouter());
 
 // Provider registry
 const providers = {

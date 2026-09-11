@@ -11,7 +11,7 @@ export interface RunContext {
   emit: (payload: ProgressPayload) => void;
 }
 
-export type RunExecutor = (ctx: RunContext) => Promise<{ usage?: Usage; finishReason?: string }>;
+export type RunExecutor = (ctx: RunContext) => Promise<{ usage?: Usage; finishReason?: string; loadMs?: number }>;
 
 export interface RunRegistryOptions {
   /** Cancel a run when no client has been subscribed for this long. */

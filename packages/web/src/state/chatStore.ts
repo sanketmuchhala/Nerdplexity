@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { ModelRef } from '@app/types';
-import { db, Conversation, Message, AppSettings, Provider, legacyProvider } from '../lib/db';
+import { db, Conversation, Message, AppSettings, Provider, legacyProvider, type ThreadAttachment } from '../lib/db';
 import * as credentials from '../lib/credentials';
 import useConnections from './connections';
 import { parseConversation, settingsErrors, workbenchSettings, type Preset, type WorkbenchSettings } from '../lib/workbench';
@@ -36,6 +36,8 @@ interface ChatStore {
   applyPreset: (preset: Preset) => Promise<void>;
   forkConversation: (id: string, beforeMessageId: string) => Promise<void>;
   importThread: (text: string) => Promise<void>;
+  addAttachment: (conversationId: string, attachment: ThreadAttachment) => Promise<void>;
+  removeAttachment: (conversationId: string, attachmentId: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -236,6 +238,7 @@ const useChat = create<ChatStore>((set, get) => ({
       provider: conversation.provider, settings: structuredClone(conversation.settings),
       workbench: structuredClone(workbenchSettings(conversation, get().settings)),
       messages: structuredClone(conversation.messages.slice(0, index)), branchOf: { conversationId: id, messageId: beforeMessageId },
+      attachments: structuredClone(conversation.attachments ?? []),
       // A new branch does not inherit permission to charge an account.
       allowCharges: false,
     });
@@ -245,6 +248,22 @@ const useChat = create<ChatStore>((set, get) => ({
     const imported = parseConversation(text);
     // Imported IDs and model destinations cannot overwrite or auto-route a local thread.
     await get().newConversation({ ...imported, connectionId: undefined, model: '', allowCharges: false });
+  },
+
+  addAttachment: async (conversationId, attachment) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) throw new Error('Create a thread before attaching a file.');
+    const updated = { ...conversation, attachments: [...(conversation.attachments ?? []), attachment], updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
+  },
+
+  removeAttachment: async (conversationId, attachmentId) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) return;
+    const updated = { ...conversation, attachments: (conversation.attachments ?? []).filter(file => file.id !== attachmentId), updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
   },
 
   // Update conversation settings (provider, model, etc.)

@@ -5,7 +5,7 @@ import type { Server } from 'http';
 import type { RunEnvelope } from '@app/types';
 import { ProviderFailure } from './adapters.js';
 import { RunExecutor, RunRegistry } from './runs.js';
-import { runsRouter } from '../routes/runs.js';
+import { runsRouter, validateRunRequest } from '../routes/runs.js';
 
 const tick = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -209,5 +209,16 @@ describe('runs routes', () => {
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ code: 'unknown-run' });
     expect((await post(`${base}/nope/cancel`, {})).status).toBe(404);
+  });
+});
+
+describe('multimodal run validation', () => {
+  const base = { idempotencyKey: 'vision-key-001', target: { kind: 'ollama', baseURL: 'http://127.0.0.1:11434' }, model: 'vision', messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe' }, { type: 'image', mimeType: 'image/png', data: 'aW1n' }] }] };
+  it('accepts bounded user images and keeps their content', () => {
+    expect(validateRunRequest(base).request.messages[0].content).toEqual(base.messages[0].content);
+  });
+  it('rejects image blocks on system messages and in document-agent mode', () => {
+    expect(() => validateRunRequest({ ...base, messages: [{ ...base.messages[0], role: 'system' }] })).toThrow('valid text or image');
+    expect(() => validateRunRequest({ ...base, agent: true, documents: [{ id: 'd', title: 'd', content: 'x' }] })).toThrow('not available in document agent');
   });
 });

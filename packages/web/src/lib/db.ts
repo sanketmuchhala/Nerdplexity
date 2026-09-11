@@ -6,6 +6,15 @@ export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-o
 export type Role = "system" | "user" | "assistant";
 export type RuntimeKind = 'ollama' | 'openai-compatible';
 export interface WorkspaceDocument { id: string; title: string; content: string; updatedAt: number }
+export interface ThreadAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  content: string;
+  kind: 'text' | 'image';
+  createdAt: number;
+}
 /** 'stopped' is the legacy name for 'canceled'. 'interrupted' means the client lost the run. */
 export type RunStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted' | 'stopped';
 export interface RunRecord {
@@ -27,6 +36,35 @@ export interface RunRecord {
   /** Immutable, credential-free request context and configured settings. */
   input?: InputSnapshot;
   notices?: string[];
+}
+
+export interface ComparisonSide {
+  connectionId: string;
+  modelId: string;
+  runId?: string;
+  runRecordId?: string;
+  /** 'queued': waiting behind another run on this machine's local queue. */
+  status: 'idle' | 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
+  output: string;
+  reasoning?: string;
+  error?: string;
+  /** Includes queuedMs; subtract it for the model's own run time. */
+  durationMs?: number;
+  queuedMs?: number;
+  ttftMs?: number;
+  /** Runtime-reported model load time (Ollama only). */
+  loadMs?: number;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+}
+
+export interface ComparisonRecord {
+  id: string;
+  prompt: string;
+  createdAt: number;
+  updatedAt: number;
+  sourceConversationId?: string;
+  input: InputSnapshot;
+  sides: [ComparisonSide, ComparisonSide];
 }
 
 export interface WebSearchResult {
@@ -67,6 +105,7 @@ export interface Conversation {
   allowCharges?: boolean;
   workbench?: WorkbenchSettings;
   branchOf?: { conversationId: string; messageId: string };
+  attachments?: ThreadAttachment[];
   createdAt: number;
   updatedAt: number;
   messages: Message[];
@@ -165,6 +204,7 @@ export class ChatDatabase extends Dexie {
   connections!: Table<Connection>;
   credentials!: Table<StoredCredential>;
   presets!: Table<Preset>;
+  comparisons!: Table<ComparisonRecord>;
 
   constructor() {
     super('ChatDatabase');
@@ -197,6 +237,7 @@ export class ChatDatabase extends Dexie {
     });
     // Additive upgrade: all existing stores and historical data are retained.
     this.version(5).stores({ presets: 'id, name, updatedAt' });
+    this.version(6).stores({ comparisons: 'id, createdAt, updatedAt' });
   }
 }
 

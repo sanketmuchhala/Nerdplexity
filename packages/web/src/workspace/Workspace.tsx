@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronRight,
   Clock3,
+  GitCompare,
   Command,
   Cpu,
   FolderOpen,
@@ -31,6 +32,7 @@ import { Models } from './Models';
 import { Documents } from './Documents';
 import { Runs } from './Runs';
 import { useRun } from './useRun';
+import { Compare } from './Compare';
 import './workspace.css';
 
 const destinations = [
@@ -49,6 +51,7 @@ const destinations = [
     path: '/app/workspace',
   },
   { id: 'runs', label: 'Run history', icon: Clock3, path: '/app/runs' },
+  { id: 'compare', label: 'Compare', icon: GitCompare, path: '/app/compare' },
 ];
 
 export default function Workspace() {
@@ -434,6 +437,8 @@ export default function Workspace() {
           <Documents documents={documents} refresh={refreshDocuments} />
         ) : current.id === 'runs' ? (
           <Runs openConversation={openConversation} />
+        ) : current.id === 'compare' ? (
+          <Compare onChat={() => go('/app')} />
         ) : (
           <ChatWorkspace
             run={run}

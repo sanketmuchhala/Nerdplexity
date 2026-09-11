@@ -53,9 +53,10 @@ http
     }
 
     const body = await readJSON(req);
-    const prompt =
-      [...body.messages].reverse().find((m) => m.role === 'user')?.content ??
-      '';
+    const userContent = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const prompt = Array.isArray(userContent)
+      ? userContent.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
+      : userContent;
     const entry = {
       prompt,
       model: body.model,
@@ -65,9 +66,12 @@ http
       aborted: false,
       completed: false,
       tokens: 0,
+      startedAt: Date.now(),
+      endedAt: 0,
     };
     log.push(entry);
     res.on('close', () => {
+      entry.endedAt = Date.now();
       if (!entry.completed) entry.aborted = true;
     });
 

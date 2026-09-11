@@ -5,7 +5,7 @@ Branch: `codex/engine`. P4 base: `988dae9f8df4563e7e98c63aee2fbcf24e804104` (`cl
 
 ## Current status
 
-The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 through P4 are complete as of 2026-09-11. The current workbench adds inline model switching, immutable request snapshots, presets, explicit context construction, thread branching, safe import/export, persisted themes, and responsive accessible dialogs on top of the P3 engine. The historical checkpoint below remains useful background; `/v1/local/*` has been replaced by `/v1/runs`, and the next phase is P5.
+The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 through P5 are complete as of 2026-09-11. The current workbench adds inline model switching, immutable request snapshots, presets, explicit context construction, thread branching, safe import/export, bounded text/image attachments, Ollama pull/removal controls, and persisted two-model comparisons. The historical checkpoint below predates these phases and remains background only; `/v1/local/*` has been replaced by `/v1/runs`, Dexie is at v6, every configured provider streams, and the next phase is P6.
 
 ## Read this first
 

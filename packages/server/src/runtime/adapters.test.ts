@@ -50,6 +50,7 @@ const failure = (error: unknown) => {
 };
 
 const compat = { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-compat-secret' };
+const imageMessage = { role: 'user' as const, content: [{ type: 'text' as const, text: 'Describe' }, { type: 'image' as const, mimeType: 'image/png' as const, data: 'aW1n' }] };
 
 describe('OpenAI-style streaming', () => {
   it('streams text and reasoning, and reads usage sent after the finish chunk', async () => {
@@ -75,6 +76,12 @@ describe('OpenAI-style streaming', () => {
     expect(calls[0].url).toBe('https://api.openai.com/v1/chat/completions');
     expect(calls[0].body.max_completion_tokens).toBe(100);
     expect(calls[0].body.max_tokens).toBeUndefined();
+  });
+
+  it('maps image parts to OpenAI-compatible data URLs', async () => {
+    const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])));
+    await run(request(compat, { messages: [imageMessage] }), fn);
+    expect(calls[0].body.messages[0].content).toEqual([{ type: 'text', text: 'Describe' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1n' } }]);
   });
 
   it('resends once without temperature when the model rejects it, and says so', async () => {
@@ -198,14 +205,15 @@ describe('Ollama streaming', () => {
       { message: { role: 'assistant', content: '', thinking: 'hmm' }, done: false },
       { message: { role: 'assistant', content: 'Grüße ' }, done: false },
       { message: { role: 'assistant', content: 'world' }, done: false },
-      { message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 9, eval_count: 4 },
+      { message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 9, eval_count: 4, load_duration: 2_345_600_000 },
     ].map(l => JSON.stringify(l)).join('\n') + '\n';
     const { fn, calls } = fakeFetch(() => stream(lines, 'application/x-ndjson'));
-    const result = await run(request({ kind: 'ollama', baseURL: 'http://127.0.0.1:11434' }, { numCtx: 4096 }), fn);
+    const result = await run(request({ kind: 'ollama', baseURL: 'http://127.0.0.1:11434' }, { numCtx: 4096, messages: [imageMessage] }), fn);
     expect(result.text).toBe('Grüße world');
     expect(result.events[0]).toEqual({ type: 'reasoning', text: 'hmm' });
-    expect(result.done).toEqual({ type: 'done', usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }, finishReason: 'stop' });
+    expect(result.done).toEqual({ type: 'done', usage: { prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 }, finishReason: 'stop', loadMs: 2346 });
     expect(calls[0].body).toMatchObject({ stream: true, options: { num_predict: 100, num_ctx: 4096, temperature: 0.7 } });
+    expect(calls[0].body.messages).toEqual([{ role: 'user', content: 'Describe', images: ['aW1n'] }]);
   });
 });
 
@@ -218,7 +226,7 @@ describe('Gemini streaming', () => {
     ], false)));
     const req = request({ kind: 'gemini', apiKey: 'AIza-secret' }, {
       model: 'gemini-2.5-flash',
-      messages: [{ role: 'system', content: 'Sys' }, { role: 'user', content: 'a' }, { role: 'user', content: 'b' }, { role: 'assistant', content: 'c' }, { role: 'user', content: 'd' }],
+      messages: [{ role: 'system', content: 'Sys' }, { role: 'user', content: 'a' }, { role: 'user', content: 'b' }, { role: 'assistant', content: 'c' }, imageMessage],
     });
     const result = await run(req, fn);
     expect(result.text).toBe('Hello there');
@@ -228,7 +236,7 @@ describe('Gemini streaming', () => {
     expect(calls[0].url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse');
     expect((calls[0].init.headers as Record<string, string>)['x-goog-api-key']).toBe('AIza-secret');
     expect(calls[0].body).toEqual({
-      contents: [{ role: 'user', parts: [{ text: 'a\n\nb' }] }, { role: 'model', parts: [{ text: 'c' }] }, { role: 'user', parts: [{ text: 'd' }] }],
+      contents: [{ role: 'user', parts: [{ text: 'a' }, { text: '\n\n' }, { text: 'b' }] }, { role: 'model', parts: [{ text: 'c' }] }, { role: 'user', parts: [{ text: 'Describe' }, { inlineData: { mimeType: 'image/png', data: 'aW1n' } }] }],
       systemInstruction: { parts: [{ text: 'Sys' }] },
       generationConfig: { maxOutputTokens: 100, temperature: 0.7 },
     });
@@ -257,10 +265,10 @@ describe('Anthropic streaming (SDK)', () => {
 
   it('streams text deltas and reports usage and stop reason', async () => {
     const { fn, calls } = fakeFetch(() => stream(events(['Hel', 'lo'])));
-    const result = await run(request({ kind: 'anthropic', apiKey: 'sk-ant-key' }, { model: 'claude-opus-5' }), fn);
+    const result = await run(request({ kind: 'anthropic', apiKey: 'sk-ant-key' }, { model: 'claude-opus-5', messages: [{ role: 'system', content: 'Be brief.' }, imageMessage] }), fn);
     expect(result.text).toBe('Hello');
     expect(result.done).toEqual({ type: 'done', usage: { prompt_tokens: 11, completion_tokens: 6, total_tokens: 17 }, finishReason: 'end_turn' });
-    expect(calls[0].body).toMatchObject({ model: 'claude-opus-5', max_tokens: 100, system: 'Be brief.', messages: [{ role: 'user', content: 'Hi' }], stream: true });
+    expect(calls[0].body).toMatchObject({ model: 'claude-opus-5', max_tokens: 100, system: 'Be brief.', messages: [{ role: 'user', content: [{ type: 'text', text: 'Describe' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aW1n' } }] }], stream: true });
     expect(new Headers(calls[0].init.headers).get('x-api-key')).toBe('sk-ant-key');
   });
 

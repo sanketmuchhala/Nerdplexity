@@ -302,7 +302,7 @@ export function RunSettings({
               {preview.messages.map((m, i) => (
                 <div key={i}>
                   <strong>{m.role}</strong>
-                  <pre>{m.content}</pre>
+                  <pre>{typeof m.content === 'string' ? m.content : m.content.map(part => part.type === 'text' ? part.text : `[Image: ${part.mimeType}, ${Math.ceil(part.data.length * 3 / 4 / 1024)} KB]`).join('\n')}</pre>
                 </div>
               ))}
             </div>

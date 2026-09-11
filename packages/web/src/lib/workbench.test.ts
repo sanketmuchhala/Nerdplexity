@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Connection, ModelDescriptor } from '@app/types';
 import type { Conversation } from './db';
 import {
+  attachmentFromFile,
   buildContext,
   exportConversation,
   parseConversation,
@@ -82,6 +83,22 @@ describe('explicit request context', () => {
     expect(known.warnings.join(' ')).toContain('does not accept temperature');
   });
 
+  it('adds bounded attachments as visibly delimited user context', async () => {
+    const attachment = await attachmentFromFile(new File(['const value = 42;'], 'example.ts', { type: 'text/typescript' }), []);
+    const preview = buildContext([], 'Explain it', settings, undefined, undefined, [attachment]);
+    expect(preview.messages).toEqual([
+      { role: 'system', content: expect.stringContaining('--- BEGIN FILE: example.ts ---') },
+      { role: 'user', content: 'Explain it' },
+    ]);
+    expect(preview.messages[0].content).toContain('const value = 42;');
+    await expect(attachmentFromFile(new File(['x'.repeat(100_001)], 'large.txt'), [])).rejects.toThrow('100 KB');
+    await expect(attachmentFromFile(new File(['x'], 'archive.zip', { type: 'application/zip' }), [])).rejects.toThrow('supported');
+    const image = await attachmentFromFile(new File(['image-bytes'], 'image.png', { type: 'image/png' }), []);
+    const blocked = buildContext([], 'Describe it', settings, { capabilities: { vision: false } } as ModelDescriptor, undefined, [image]);
+    expect(blocked.messages.at(-1)?.content).toEqual([{ type: 'text', text: 'Describe it' }, expect.objectContaining({ type: 'image', mimeType: 'image/png' })]);
+    expect(blocked.warnings.join(' ')).toContain('not confirmed to accept images');
+  });
+
   it.each([
     { maxTokens: 0 },
     { contextBudget: 1 },
@@ -133,7 +150,14 @@ describe('portable thread imports', () => {
     expect(parsed.messages[0].id).not.toBe(
       parseConversation(text).messages[0].id,
     );
-    expect(Object.keys(parsed).sort()).toEqual(['messages', 'title']);
+    expect(Object.keys(parsed).sort()).toEqual(['attachments', 'messages', 'title']);
+  });
+
+  it('round-trips attachments without exporting a connection or charge permission', () => {
+    const source = { ...conversation, attachments: [{ id: 'private-file-id', name: 'notes.md', mimeType: 'text/markdown', size: 7, content: '# Notes', kind: 'text' as const, createdAt: 2 }] };
+    const text = exportConversation(source);
+    expect(text).not.toMatch(/private-file-id|destination|allowCharges/);
+    expect(parseConversation(text).attachments).toMatchObject([{ name: 'notes.md', content: '# Notes' }]);
   });
 
   it('ignores injected routing fields and refuses unsupported messages or excessive data', () => {
@@ -154,6 +178,6 @@ describe('portable thread imports', () => {
         JSON.stringify({ ...data, messages: [{ role: 'tool', content: 'x' }] }),
       ),
     ).toThrow('invalid');
-    expect(() => parseConversation('x'.repeat(2_000_001))).toThrow('2 MB');
+    expect(() => parseConversation('x'.repeat(8_000_001))).toThrow('8 MB');
   });
 });

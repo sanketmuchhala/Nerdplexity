@@ -22,8 +22,12 @@ export function validateRunRequest(body: any): ValidRun {
   const target: ResolvedTarget = resolveTarget(body.target);
   if (typeof body.model !== 'string' || !body.model.trim() || body.model.length > 200) throw new Error('Select a model.');
   const messages = body.messages;
-  if (!Array.isArray(messages) || !messages.length || messages.length > 200 || messages.some((m: any) => !m || !['user', 'assistant', 'system'].includes(m.role) || typeof m.content !== 'string')) throw new Error('Provide 1–200 text messages.');
-  if (messages.reduce((n: number, m: any) => n + m.content.length, 0) > 200_000) throw new Error('This conversation is too long. Start a new thread.');
+  const contentValid = (message: any) => typeof message.content === 'string' || (message.role === 'user' && Array.isArray(message.content) && message.content.length > 0 && message.content.length <= 5 && message.content.every((part: any) => part && (part.type === 'text' ? typeof part.text === 'string' : part.type === 'image' && ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(part.mimeType) && typeof part.data === 'string' && /^[A-Za-z0-9+/]*={0,2}$/.test(part.data))));
+  if (!Array.isArray(messages) || !messages.length || messages.length > 200 || messages.some((m: any) => !m || !['user', 'assistant', 'system'].includes(m.role) || !contentValid(m))) throw new Error('Provide 1–200 valid text or image messages.');
+  const textLength = messages.reduce((n: number, m: any) => n + (typeof m.content === 'string' ? m.content.length : m.content.reduce((sum: number, part: any) => sum + (part.type === 'text' ? part.text.length : 0), 0)), 0);
+  const imageBytes = messages.reduce((n: number, m: any) => n + (Array.isArray(m.content) ? m.content.reduce((sum: number, part: any) => sum + (part.type === 'image' ? Math.floor(part.data.length * 3 / 4) : 0), 0) : 0), 0);
+  if (textLength > 200_000) throw new Error('This conversation is too long. Start a new thread.');
+  if (imageBytes > 5_000_000) throw new Error('Images exceed the 5 MB request limit.');
   const settings = body.settings ?? {};
   if (typeof settings !== 'object') throw new Error('Settings must be an object.');
   for (const [name, min, max, integer] of LIMITS) {
@@ -36,6 +40,7 @@ export function validateRunRequest(body: any): ValidRun {
   if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
   const agent = body.agent === true;
   if (agent) {
+    if (imageBytes) throw new Error('Image input is not available in document agent mode.');
     if (!documents.length) throw new Error('Add a document in Workspace before starting a document agent.');
     if (target.execution !== 'local' || (target.kind !== 'ollama' && target.kind !== 'openai-compatible')) throw new Error('Document agents run only on models on this machine. Documents are not sent to remote endpoints.');
   }
@@ -43,7 +48,7 @@ export function validateRunRequest(body: any): ValidRun {
     key: body.idempotencyKey,
     request: {
       target, model: body.model,
-      messages: messages.map(({ role, content }: RunMessage) => ({ role, content })),
+      messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
       temperature: settings.temperature, maxTokens: settings.maxTokens, numCtx: settings.numCtx,
     },
     agent,
@@ -55,7 +60,7 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn): RunExecutor {
   if (!run.agent) {
     return async ({ signal, emit }) => {
       for await (const event of streamModel(run.request, signal, fetchImpl)) {
-        if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason };
+        if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason, ...(event.loadMs !== undefined ? { loadMs: event.loadMs } : {}) };
         emit(event);
       }
       throw new Error('The model stream ended without a result.');
@@ -63,7 +68,7 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn): RunExecutor {
   }
   const { target, model, messages, temperature, maxTokens, numCtx } = run.request;
   return async ({ signal, emit }) => {
-    const local = { runtime: target.kind as 'ollama' | 'openai-compatible', baseURL: target.baseURL, headers: target.headers, model, messages, temperature, max_tokens: maxTokens, num_ctx: numCtx };
+    const local = { runtime: target.kind as 'ollama' | 'openai-compatible', baseURL: target.baseURL, headers: target.headers, model, messages: messages.map(message => ({ role: message.role, content: typeof message.content === 'string' ? message.content : message.content.filter(part => part.type === 'text').map(part => part.text).join('\n') })), temperature, max_tokens: maxTokens, num_ctx: numCtx };
     for await (const event of runWorkspaceAgent(local, run.documents, signal, fetchImpl)) {
       if (event.type === 'done') return { usage: event.usage };
       if (event.type === 'error') throw new Error(event.message);

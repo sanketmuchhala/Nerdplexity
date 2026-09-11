@@ -63,7 +63,8 @@ export type RunEventPayload =
   | { type: 'reasoning'; text: string }
   | { type: 'quota'; quota: RateLimitState }
   | ({ type: 'tool' } & ToolTrace)
-  | { type: 'completed'; usage?: Usage; finishReason?: string; timing: RunTiming }
+  /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */
+  | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; timing: RunTiming }
   | { type: 'failed'; error: ProviderError; timing: RunTiming }
   | { type: 'canceled'; reason: 'user' | 'no-client' | 'timeout'; timing: RunTiming };
 
@@ -80,8 +81,12 @@ export interface RunEnvelope {
 
 export interface RunMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | RunContentPart[];
 }
+
+export type RunContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; data: string };
 
 export interface RunStartRequest {
   /** Client-generated; repeating a start with the same key returns the same run. */

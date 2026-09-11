@@ -290,3 +290,90 @@ test('theme, keyboard dialogs, mobile navigation, and responsive layouts', async
   await expect(page.getByLabel('Search pages and threads')).toBeFocused();
   await page.keyboard.press('Escape');
 });
+
+test('attachments are inspectable and comparisons run identical frozen context', async ({ page }) => {
+  await page.route('**/v1/models/discover', async route => {
+    const body = route.request().postDataJSON();
+    const connected = String(body.target.baseURL ?? '').includes(String(Number(process.env.FAKE_PROVIDER_PORT) || 5299));
+    await route.fulfill({ json: { ok: true, execution: 'local', checkedAt: Date.now(), models: connected ? ['fast-model', 'reasoning-model'].map(id => ({ id, displayName: id, capabilities: { tools: null, vision: true }, pricing: 'local', source: 'discovered' })) : [] } });
+  });
+  await setup(page);
+  await page.getByLabel('Attach files').setInputFiles([
+    { name: 'facts.md', mimeType: 'text/markdown', buffer: Buffer.from('# Fact\nThe answer is forty-two.') },
+    { name: 'pixel.png', mimeType: 'image/png', buffer: Buffer.from('image') },
+  ]);
+  const attachment = page.locator('.np-attachment').filter({ hasText: 'facts.md' });
+  await expect(attachment).toContainText('facts.md');
+  await attachment.locator('summary').click();
+  await expect(attachment).toContainText('The answer is forty-two.');
+
+  const contextPrompt = unique('attached');
+  await send(page, contextPrompt, 1);
+  const attachedRequest = await upstream(page, contextPrompt);
+  expect(attachedRequest[0].messages[0].content).toContain('--- BEGIN FILE: facts.md ---');
+  expect(attachedRequest[0].messages.at(-1).content[1]).toMatchObject({ type: 'image_url', image_url: { url: expect.stringContaining('data:image/png;base64,') } });
+
+  await page.getByRole('button', { name: 'Compare', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/compare$/);
+  await page.getByLabel('Comparison model A').selectOption({ label: 'fast-model · Workbench fake' });
+  await page.getByLabel('Comparison model B').selectOption({ label: 'reasoning-model · Workbench fake' });
+  const comparePrompt = unique('compare');
+  await page.getByLabel('Comparison prompt').fill(comparePrompt);
+  await page.getByRole('button', { name: 'Run comparison' }).click();
+  await expect(page.locator('.np-compare-side')).toHaveCount(2);
+  await expect(page.locator('.np-compare-side .np-label')).toHaveText(['completed', 'completed']);
+  const compared = await upstream(page, comparePrompt);
+  expect(compared).toHaveLength(2);
+  expect(compared[0].messages).toEqual(compared[1].messages);
+  expect(compared[0].messages[0].content).toContain('facts.md');
+  // Both models are on this machine: the second request starts only after the first finishes.
+  const [firstRun, secondRun] = [...compared].sort((a, b) => a.startedAt - b.startedAt);
+  expect(secondRun.startedAt).toBeGreaterThanOrEqual(firstRun.endedAt);
+  await expect(page.locator('.np-compare-settings')).toContainText('Shared settings: Temperature');
+  await expect(page.locator('.np-compare-settings')).toContainText('one at a time');
+  await expect(page.locator('.np-compare-side').first()).toContainText('Provider-reported tokens');
+  await expect(page.locator('.np-compare-side').first()).toContainText('Runtime-reported model load');
+  await page.reload();
+  await page.getByRole('button', { name: new RegExp(comparePrompt) }).click();
+  await expect(page.locator('.np-compare-side')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Continue in chat' }).nth(1).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole('button', { name: 'Choose model', exact: true })).toContainText('reasoning-model');
+  await expect(page.locator('.np-thread')).toContainText(comparePrompt);
+  let remaining = await page.locator('.np-attachment').count();
+  while (remaining > 0) {
+    const item = page.locator('.np-attachment').first();
+    await item.locator('summary').click();
+    await item.getByRole('button', { name: 'Remove from context' }).click();
+    remaining -= 1;
+    await expect(page.locator('.np-attachment')).toHaveCount(remaining);
+  }
+  await expect(page.locator('.np-attachment')).toHaveCount(0);
+});
+
+test('Ollama install progress and removal reflect runtime state', async ({ page }) => {
+  const installed = ['qwen3:8b'];
+  await page.route('**/v1/models/discover', async route => {
+    const body = route.request().postDataJSON();
+    const ollama = body.target.kind === 'ollama';
+    await route.fulfill({ json: { ok: true, execution: 'local', checkedAt: Date.now(), models: ollama ? installed.map(id => ({ id, displayName: id, capabilities: { tools: null, vision: null }, pricing: 'local', source: 'discovered' })) : [] } });
+  });
+  await page.route('**/v1/models/ollama/pull', async route => {
+    const body = route.request().postDataJSON();
+    installed.push(body.model);
+    await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: '{"status":"downloading","total":100,"completed":50,"done":false}\n{"status":"success","done":true}\n' });
+  });
+  await page.route('**/v1/models/ollama', async route => {
+    const body = route.request().postDataJSON();
+    installed.splice(installed.indexOf(body.model), 1);
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.goto('/app/models');
+  await page.getByLabel('Ollama connection').selectOption({ label: 'Ollama' });
+  await page.getByLabel('Ollama model name').fill('gemma3:4b');
+  await page.getByRole('button', { name: 'Install', exact: true }).click();
+  await expect(page.getByRole('article').filter({ hasText: 'gemma3:4b' })).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('article').filter({ hasText: 'gemma3:4b' }).getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(page.getByRole('article').filter({ hasText: 'gemma3:4b' })).toHaveCount(0);
+});

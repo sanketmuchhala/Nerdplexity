@@ -5,7 +5,7 @@ import type {
   RunMessage,
   RunStartRequest,
 } from '@app/types';
-import type { AppSettings, Conversation, Message } from './db';
+import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
 
 export interface WorkbenchSettings {
   systemPrompt: string;
@@ -36,6 +36,40 @@ export interface InputSnapshot {
     limitKnown: boolean;
   };
   documents: { id: string; title: string; content: string }[];
+  attachments?: { id: string; name: string; mimeType: string; size: number; content: string; kind: 'text' | 'image' }[];
+}
+
+export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 100_000, imageBytes: 2_000_000, totalBytes: 5_000_000 } as const;
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'jsonl', 'log', 'xml', 'yaml', 'yml', 'toml', 'ini', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'rs', 'go', 'java', 'kt', 'c', 'h', 'cpp', 'hpp', 'cs', 'php', 'swift', 'sql', 'sh', 'zsh', 'fish', 'html', 'css', 'scss', 'less', 'vue', 'svelte']);
+
+export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
+  const extension = file.name.toLowerCase().split('.').pop() ?? '';
+  const image = IMAGE_TYPES.has(file.type);
+  if (!file.name.trim() || file.name.length > 200) return 'Use a file name under 200 characters.';
+  if (!image && !file.type.startsWith('text/') && !TEXT_EXTENSIONS.has(extension)) return 'Attach a supported image, text, Markdown, data, or source-code file.';
+  if (!image && file.size > ATTACHMENT_LIMITS.textBytes) return 'Keep each text attachment under 100 KB.';
+  if (image && file.size > ATTACHMENT_LIMITS.imageBytes) return 'Keep each image attachment under 2 MB.';
+  if (current.length >= ATTACHMENT_LIMITS.count) return 'Attach up to 8 files to a thread.';
+  if (image && current.filter(item => item.kind === 'image').length >= ATTACHMENT_LIMITS.images) return 'Attach up to 4 images to a thread.';
+  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 5 MB total.';
+  return null;
+}
+
+export async function attachmentFromFile(file: File, current: ThreadAttachment[]): Promise<ThreadAttachment> {
+  const error = validateAttachment(file, current);
+  if (error) throw new Error(error);
+  const image = IMAGE_TYPES.has(file.type);
+  let content: string;
+  if (image) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 32_768)
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+    content = btoa(binary);
+  } else content = await file.text();
+  if (!image && content.includes('\0')) throw new Error('This file does not appear to be plain text.');
+  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now() };
 }
 
 export function workbenchSettings(
@@ -61,7 +95,9 @@ export function estimateTokens(messages: RunMessage[]): number {
   return messages.reduce(
     (total, message) =>
       total +
-      Math.ceil(new TextEncoder().encode(message.content).length / 3) +
+      (typeof message.content === 'string'
+        ? Math.ceil(new TextEncoder().encode(message.content).length / 3)
+        : message.content.reduce((n, part) => n + (part.type === 'text' ? Math.ceil(new TextEncoder().encode(part.text).length / 3) : 768), 0)) +
       8,
     0,
   );
@@ -104,11 +140,12 @@ export function settingsErrors(settings: WorkbenchSettings): string[] {
 }
 
 export function buildContext(
-  history: Pick<Message, 'role' | 'content'>[],
+  history: RunMessage[],
   prompt: string,
   settings: WorkbenchSettings,
   model?: ModelDescriptor,
   connection?: Connection,
+  attachments: ThreadAttachment[] = [],
 ) {
   const system = history.filter((m) => m.role === 'system');
   const dialog = history.filter((m) => m.role !== 'system');
@@ -120,13 +157,21 @@ export function buildContext(
     const start = starts[Math.max(0, starts.length - settings.recentTurns)];
     included = start === undefined ? dialog : dialog.slice(start);
   }
+  const textAttachments = attachments.filter(file => file.kind !== 'image');
+  const imageAttachments = attachments.filter(file => file.kind === 'image');
+  const userContent: RunMessage['content'] = imageAttachments.length
+    ? [{ type: 'text', text: prompt }, ...imageAttachments.map(file => ({ type: 'image' as const, mimeType: file.mimeType as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif', data: file.content }))]
+    : prompt;
   const messages: RunMessage[] = [
     ...system.map(({ role, content }) => ({ role, content })),
     ...(settings.systemPrompt.trim()
       ? [{ role: 'system' as const, content: settings.systemPrompt }]
       : []),
+    ...(textAttachments.length
+      ? [{ role: 'system' as const, content: `Attached files (user-provided context):\n\n${textAttachments.map((file) => `--- BEGIN FILE: ${file.name} ---\n${file.content}\n--- END FILE: ${file.name} ---`).join('\n\n')}` }]
+      : []),
     ...included.map(({ role, content }) => ({ role, content })),
-    ...(prompt.trim() ? [{ role: 'user' as const, content: prompt }] : []),
+    ...(prompt.trim() ? [{ role: 'user' as const, content: userContent }] : []),
   ];
   const budget = Math.min(
     settings.contextBudget,
@@ -146,11 +191,14 @@ export function buildContext(
     );
   if (
     messages.length > 200 ||
-    messages.reduce((n, m) => n + m.content.length, 0) > 200_000
+    messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : m.content.reduce((sum, part) => sum + (part.type === 'text' ? part.text.length : 0), 0)), 0) > 200_000
   )
     warnings.push(
       'This request exceeds the app’s message or text limit. Include fewer recent turns.',
     );
+  if (
+    imageAttachments.length && model?.capabilities.vision !== true
+  ) warnings.push('This model is not confirmed to accept images. Choose a model with Vision support or remove the image.');
   if (
     settings.temperatureMode === 'custom' &&
     model?.capabilities.temperature === false
@@ -187,8 +235,9 @@ export function exportConversation(conversation: Conversation): string {
   return JSON.stringify(
     {
       format: 'nerdplexity-thread',
-      version: 1,
+      version: 2,
       title: conversation.title,
+      attachments: (conversation.attachments ?? []).map(({ name, mimeType, size, content, kind, createdAt }) => ({ name, mimeType, size, content, kind, createdAt })),
       messages: conversation.messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -211,9 +260,9 @@ export function exportConversation(conversation: Conversation): string {
 
 export function parseConversation(
   text: string,
-): Pick<Conversation, 'title' | 'messages'> {
-  if (new TextEncoder().encode(text).length > 2_000_000)
-    throw new Error('Import a thread smaller than 2 MB.');
+): Pick<Conversation, 'title' | 'messages' | 'attachments'> {
+  if (new TextEncoder().encode(text).length > 8_000_000)
+    throw new Error('Import a thread smaller than 8 MB.');
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -225,7 +274,7 @@ export function parseConversation(
   const value = data as Record<string, unknown>;
   if (
     value.format !== 'nerdplexity-thread' ||
-    value.version !== 1 ||
+    ![1, 2].includes(value.version as number) ||
     typeof value.title !== 'string' ||
     !value.title.trim() ||
     value.title.length > 200 ||
@@ -262,5 +311,20 @@ export function parseConversation(
         : {}),
     };
   });
-  return { title: value.title, messages };
+  const rawAttachments = value.version === 2 ? (value.attachments ?? []) : [];
+  if (!Array.isArray(rawAttachments) || rawAttachments.length > ATTACHMENT_LIMITS.count)
+    throw new Error('This thread has too many attachments.');
+  const attachments: ThreadAttachment[] = rawAttachments.map((entry: unknown) => {
+    if (!entry || typeof entry !== 'object') throw new Error('An attachment in this file is invalid.');
+    const file = entry as Record<string, unknown>;
+    const image = file.kind === 'image' && typeof file.mimeType === 'string' && IMAGE_TYPES.has(file.mimeType);
+    const encodedSize = typeof file.content === 'string' ? new TextEncoder().encode(file.content).length : Infinity;
+    if (typeof file.name !== 'string' || !file.name.trim() || file.name.length > 200 || typeof file.content !== 'string' || (image ? encodedSize > Math.ceil(ATTACHMENT_LIMITS.imageBytes * 4 / 3) || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.content) : encodedSize > ATTACHMENT_LIMITS.textBytes) || (!image && file.content.includes('\0')))
+      throw new Error('An attachment in this file is invalid or too large.');
+    const size = image ? Math.floor(file.content.length * 3 / 4) : encodedSize;
+    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now() };
+  });
+  if (attachments.filter(file => file.kind === 'image').length > ATTACHMENT_LIMITS.images) throw new Error('A thread can contain up to 4 images.');
+  if (attachments.reduce((n, file) => n + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Thread attachments exceed 5 MB total.');
+  return { title: value.title, messages, attachments };
 }
