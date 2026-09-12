@@ -4,6 +4,7 @@ import http from 'node:http';
 
 const port = Number(process.env.FAKE_PROVIDER_PORT) || 5299;
 const log = [];
+const exaLog = [];
 const MODELS = [
   'fast-model',
   'slow-model',
@@ -40,6 +41,27 @@ http
         .end(
           JSON.stringify(prompt ? log.filter((e) => e.prompt === prompt) : log),
         );
+      return;
+    }
+    // Stand-in for Exa's search API (the test backend sets EXA_API_URL to /exa).
+    if (url.pathname === '/_exa_log') {
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(exaLog));
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/exa/search') {
+      const search = await readJSON(req);
+      exaLog.push({ key: req.headers['x-api-key'], body: search });
+      if (req.headers['x-api-key'] !== 'exa-test-key-000001') {
+        res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'Invalid API key', tag: 'INVALID_API_KEY' }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        requestId: 'fake', costDollars: { total: 0.007 },
+        results: [
+          { title: 'Nerdplexity 2.0 released', url: 'https://example.com/nerdplexity-2', publishedDate: '2026-09-10T00:00:00.000Z', highlights: ['Version 2.0 adds tools.'] },
+          { title: 'Unsafe', url: 'javascript:alert(1)', highlights: ['dropped'] },
+        ],
+      }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/v1/models') {
@@ -129,6 +151,8 @@ http
       if (!body.tools?.length) say('No tools were enabled.');
       else if (expression && !results.length) call('calculator', JSON.stringify({ expression }));
       else if (/malformed/.test(prompt) && !results.length) call('calculator', '{"expression":');
+      else if (/search the web/.test(prompt) && !results.length) call('web_search', JSON.stringify({ query: 'nerdplexity release' }));
+      else if (/search the web/.test(prompt)) say(last.error ? `Search failed: ${last.error}` : `Found ${last.results.length} page: ${last.results[0].title} (${last.results[0].url}).`);
       else if (/notes/.test(prompt) && results.length === 0) call('search_documents', JSON.stringify({ query: 'owner' }));
       else if (/notes/.test(prompt) && results.length === 1) call('read_document', JSON.stringify({ id: results[0][0]?.id ?? 'missing' }));
       else if (/notes/.test(prompt)) say(`According to ${last.title}: ${last.content}`);

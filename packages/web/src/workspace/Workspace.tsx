@@ -445,6 +445,7 @@ export default function Workspace() {
             documents={documents}
             onModels={() => go('/app/models')}
             onDocuments={() => go('/app/workspace')}
+            onConnections={() => go('/app/connections')}
           />
         )}
       </main>

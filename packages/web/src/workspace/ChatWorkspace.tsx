@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   GitBranch,
+  Globe,
   Lightbulb,
   Paperclip,
   Pencil,
@@ -37,6 +38,7 @@ import {
   type WorkbenchTool,
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
+import { hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -52,11 +54,13 @@ export function ChatWorkspace({
   documents,
   onModels,
   onDocuments,
+  onConnections,
 }: {
   run: ReturnType<typeof useRun>;
   documents: WorkspaceDocument[];
   onModels: () => void;
   onDocuments: () => void;
+  onConnections: () => void;
 }) {
   const {
     activeConversation,
@@ -175,6 +179,7 @@ export function ChatWorkspace({
       }
       if (!documents.length) { onDocuments(); return; }
     }
+    if (turningOn && tool === 'web' && !hasSearchKey()) { onConnections(); return; }
     try {
       if (!conversation) await newConversation();
       const current = useChat.getState().activeConversation();
@@ -784,6 +789,7 @@ export function ChatWorkspace({
               {([
                 ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
                 ['documents', Workflow, 'Documents', 'Lets a model on this machine search and read your Workspace documents'],
+                ['web', Globe, 'Web', 'Lets the model search the web with Exa using your key; queries are sent to Exa'],
               ] as const).map(([tool, Icon, name, hint]) => (
                 <button
                   key={tool}
@@ -840,13 +846,14 @@ export function ChatWorkspace({
                 `Tools: ${[
                   enabledTools.includes('calculator') && 'Calculator',
                   documentsOn && `Documents (${documents.length}, search and read only)`,
+                  enabledTools.includes('web') && 'Web (search queries go to Exa)',
                 ]
                   .filter(Boolean)
                   .join(', ')}`,
               !connection
                 ? 'Choose a model in Models.'
                 : local
-                  ? 'Requests stay on this machine.'
+                  ? enabledTools.includes('web') ? 'The model runs on this machine.' : 'Requests stay on this machine.'
                   : `Prompts are sent to ${connection.name}${hasKey(connection.id) ? ' with your API key' : ''}.`,
             ]
               .filter(Boolean)

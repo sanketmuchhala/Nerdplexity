@@ -49,7 +49,7 @@ export interface RunTiming {
 }
 
 /** Built-in tools a run may enable. None of them changes anything outside the app. */
-export type ToolName = 'calculator' | 'search_documents' | 'read_document';
+export type ToolName = 'calculator' | 'search_documents' | 'read_document' | 'web_search';
 
 export interface ToolTrace {
   /** Matches the running and finished events of one call. Absent on records saved before P6. */
@@ -62,8 +62,8 @@ export interface ToolTrace {
   status?: 'running' | 'completed' | 'error' | 'denied';
   error?: string;
   durationMs?: number;
-  /** 'computed' by the app, or 'retrieved' from the user's documents. */
-  source?: 'computed' | 'retrieved';
+  /** 'computed' by the app, 'retrieved' from the user's documents, or 'web' search results. */
+  source?: 'computed' | 'retrieved' | 'web';
 }
 
 export type RunEventPayload =
@@ -109,6 +109,8 @@ export interface RunStartRequest {
   /** Tools the model may call. Document tools require `documents` and a model on this machine. */
   tools?: ToolName[];
   documents?: { id: string; title: string; content: string }[];
+  /** Required for web_search. The key is used for this run only and never stored or echoed. */
+  search?: { provider: 'exa'; apiKey: string };
 }
 
 export interface RunStartResponse {

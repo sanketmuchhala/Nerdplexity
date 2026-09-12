@@ -374,3 +374,10 @@
 }
 
 .np-dialog .np-command-dialog { width: 100%; border: 0; background: transparent; box-shadow: none; }
+.np-tool-sources { margin: 0 0 10px; padding-left: 18px; font-size: 11px; line-height: 1.6; }
+.np-tool-sources li { margin-bottom: 4px; overflow-wrap: anywhere; }
+.np-tool-sources a { color: var(--np-accent); text-decoration: underline; text-underline-offset: 2px; }
+.np-tool-sources small { display: block; color: var(--np-muted); font-size: 9px; }
+.np-web-search { margin-bottom: 28px; }
+.np-web-search h2 { display: flex; align-items: center; gap: 8px; }
+.np-web-search-form { display: grid; gap: 12px; margin-top: 14px; max-width: 560px; }

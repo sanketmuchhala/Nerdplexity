@@ -450,3 +450,42 @@ test('document tools search, then read, local workspace documents in a multi-ste
   expect(requests[0].tools).toEqual(['search_documents', 'read_document']);
   expect(requests[0].messages[0].content).toContain('Launch notes');
 });
+
+test('web search uses the Exa key from Connections, shows safe sources, and keeps the key out of the model request', async ({ page }) => {
+  const key = 'exa-test-key-000001';
+  await setup(page, 'tool-model');
+  // Without a key, turning on Web leads to Connections instead of sending.
+  await page.getByRole('button', { name: 'Web tool' }).click();
+  await expect(page).toHaveURL(/\/app\/connections$/);
+  await page.getByLabel('Exa API key').fill(key);
+  await page.getByRole('button', { name: 'Save key' }).click();
+  await expect(page.locator('.np-web-search')).toContainText('Key saved for this tab');
+  await expect(page.locator('.np-web-search')).toContainText('exa••••0001');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
+  await page.getByRole('button', { name: 'Web tool' }).click();
+  await expect(page.getByRole('button', { name: 'Web tool' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.np-composer-footnote')).toContainText('Web (search queries go to Exa)');
+
+  const text = unique('Please search the web for news');
+  await send(page, text, 1);
+  const activity = page.locator('.np-thread .np-tool');
+  await expect(activity).toContainText('Searched the web');
+  await expect(activity).toContainText('“nerdplexity release” · 1 result');
+  await expect(page.locator('.np-thread')).toContainText('Found 1 page: Nerdplexity 2.0 released (https://example.com/nerdplexity-2).');
+  await activity.locator('summary').click();
+  await expect(activity).toContainText('Retrieved from the web through Exa');
+  const link = activity.getByRole('link', { name: 'Nerdplexity 2.0 released' });
+  await expect(link).toHaveAttribute('href', 'https://example.com/nerdplexity-2');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(activity.getByRole('link')).toHaveCount(1);
+
+  const exa = await (await page.request.get(`${fake}/_exa_log`)).json();
+  expect(exa.at(-1)).toMatchObject({ key, body: { query: 'nerdplexity release', numResults: 5 } });
+  const requests = await upstream(page, text);
+  expect(requests[0].tools).toEqual(['web_search']);
+  expect(JSON.stringify(requests)).not.toContain(key);
+  await page.goto('/app/runs');
+  await page.locator('.np-run-list').getByRole('button', { name: new RegExp(text) }).first().click();
+  await page.getByText('Input and settings sent', { exact: true }).click();
+  await expect(page.locator('.np-run-detail')).not.toContainText(key);
+});

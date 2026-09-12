@@ -25,7 +25,8 @@ export default defineConfig({
     {
       command: 'pnpm dev:server',
       url: `http://127.0.0.1:${apiPort}/health`,
-      env: { PORT: String(apiPort) },
+      // Web search goes to the fake provider's Exa stand-in, never to Exa, in tests.
+      env: { PORT: String(apiPort), EXA_API_URL: `http://127.0.0.1:${fakePort}/exa` },
       reuseExistingServer,
       timeout: 30_000,
     },

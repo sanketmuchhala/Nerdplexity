@@ -9,13 +9,14 @@ import type {
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
 
 /** Tool groups a thread can enable; 'documents' is search plus read. */
-export type WorkbenchTool = 'calculator' | 'documents';
+export type WorkbenchTool = 'calculator' | 'documents' | 'web';
 const WORKBENCH_TOOLS = new Map<string, ToolName[]>([
   ['calculator', ['calculator']],
   ['documents', ['search_documents', 'read_document']],
+  ['web', ['web_search']],
 ]);
 export const toolNamesFor = (tools: WorkbenchTool[] = []): ToolName[] => tools.flatMap(tool => WORKBENCH_TOOLS.get(tool) ?? []);
-export const usesDocumentTools = (tools: ToolName[]) => tools.some(name => name !== 'calculator');
+export const usesDocumentTools = (tools: ToolName[]) => tools.some(name => name === 'search_documents' || name === 'read_document');
 
 export interface WorkbenchSettings {
   systemPrompt: string;
@@ -123,7 +124,7 @@ export function settingsErrors(settings: WorkbenchSettings): string[] {
   // Presets and threads saved before P6 have no tools field, which means none.
   const tools: unknown = settings.tools ?? [];
   if (!Array.isArray(tools) || tools.some(tool => !WORKBENCH_TOOLS.has(tool)))
-    errors.push('Choose tools from Calculator and Documents.');
+    errors.push('Choose tools from Calculator, Documents, and Web.');
   if (
     typeof settings.systemPrompt !== 'string' ||
     settings.systemPrompt.length > 20_000

@@ -7,6 +7,7 @@ import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { isLocal, latestResult, targetFor } from '../state/connections';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
+import { hasSearchKey, searchKey } from '../lib/searchKey';
 
 export interface RunError {
   message: string;
@@ -196,6 +197,8 @@ export function useRun() {
         settings: attempt.input.settings,
         ...(attempt.tools.length ? { tools: attempt.tools } : {}),
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
+        // Read at send time so the key never enters the saved run snapshot.
+        ...(attempt.tools.includes('web_search') ? { search: { provider: 'exa' as const, apiKey: searchKey() } } : {}),
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);
@@ -232,6 +235,7 @@ export function useRun() {
     const toolProblem = tools.length && descriptor?.capabilities.tools === false ? 'This model does not support tools. Turn off tools or choose another model.'
       : documentTools && !isLocal(connection) ? 'Document tools run only on models on this machine, so documents are never sent online. Turn off Documents or choose a local model.'
       : documentTools && !documents.length ? 'Add a document in Workspace, or turn off Documents.'
+      : tools.includes('web_search') && !hasSearchKey() ? 'Web search needs an Exa API key. Add it in Connections, or turn off Web.'
       : null;
     const context = buildContext(conversation.messages, prompt, configured, descriptor, connection, conversation.attachments);
     if (context.warnings.length || toolProblem) {

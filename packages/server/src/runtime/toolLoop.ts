@@ -15,10 +15,11 @@ function parsedOrRaw(json: string): unknown {
 /**
  * Bounded tool loop: stream a model step, run the calls it asks for, return the results, repeat.
  * Every step streams through the normal adapter, so text, reasoning, quota, and failures behave as in chat.
- * Tools never change anything outside the app, so a retry of the whole run repeats no external effect.
+ * No tool changes anything outside the app (web search only reads), so a retry of the whole run repeats no external effect.
  */
 export async function* runWithTools(
   req: ModelRequest, enabled: ToolName[], documents: WorkspaceDocument[], signal: AbortSignal, fetchImpl: FetchFn = fetch,
+  search?: { apiKey: string },
 ): AsyncGenerator<ToolLoopEvent> {
   const tools = new Set(enabled);
   const specs = toolSpecs(tools);
@@ -67,7 +68,7 @@ export async function* runWithTools(
       callsUsed++;
       const trace = { id: call.id, name: call.name.slice(0, 64) || 'unnamed', step };
       yield { type: 'tool', ...trace, input: parsedOrRaw(call.arguments), output: null, status: 'running', source: toolSource(call.name) };
-      const outcome = await executeTool(call.name, call.arguments, { enabled: tools, documents, signal });
+      const outcome = await executeTool(call.name, call.arguments, { enabled: tools, documents, signal, search, fetchImpl });
       yield {
         type: 'tool', ...trace, input: outcome.input, output: outcome.output ?? null, status: outcome.status,
         ...(outcome.error ? { error: outcome.error } : {}), durationMs: outcome.durationMs, source: outcome.source,

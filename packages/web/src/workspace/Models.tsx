@@ -34,6 +34,7 @@ import useConnections, {
   usesBaseURL,
 } from '../state/connections';
 import { hasKey } from '../lib/credentials';
+import { WebSearchSettings } from './WebSearchSettings';
 import { costStatus } from '../lib/cost';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
@@ -794,6 +795,8 @@ export function Models({
           </div>
         )}
       </section>
+
+      {connectionsOnly && <WebSearchSettings />}
 
       {!connectionsOnly && connections.some(c => c.kind === 'ollama') && (
         <section className="np-panel np-ollama-manager" aria-labelledby="ollama-manager-title">

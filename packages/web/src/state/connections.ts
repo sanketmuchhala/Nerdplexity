@@ -70,6 +70,8 @@ interface ConnectionStore {
   remove: (id: string) => Promise<void>;
   discover: (id: string) => Promise<void>;
   discoverAll: () => Promise<void>;
+  /** Signal a key change made outside connections, such as the web search key. */
+  keysChanged: () => void;
 }
 
 const inflight = new Map<string, AbortController>();
@@ -80,6 +82,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
   keyVersion: 0,
   quota: {},
   checks: {},
+  keysChanged: () => set(state => ({ keyVersion: state.keyVersion + 1 })),
 
   setQuota: (connectionId, quota) => {
     const snapshot = { ...quota, at: Date.now() };

@@ -13,6 +13,7 @@ interface ValidRun {
   request: ModelRequest;
   tools: ToolName[];
   documents: WorkspaceDocument[];
+  search?: { apiKey: string };
 }
 
 const LIMITS = [['temperature', 0, 2, false], ['maxTokens', 1, 128_000, true], ['numCtx', 1024, 1_048_576, true]] as const;
@@ -40,6 +41,12 @@ export function validateRunRequest(body: any): ValidRun {
   const documents = body.documents ?? [];
   if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
   if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
+  let search: ValidRun['search'];
+  if (tools.includes('web_search')) {
+    const key = body.search?.apiKey;
+    if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) throw new Error('Web search needs an Exa API key. Add one in Connections.');
+    search = { apiKey: key };
+  }
   const documentTools = tools.some(name => DOCUMENT_TOOLS.has(name));
   if (documentTools) {
     if (!documents.length) throw new Error('Add a document in Workspace before enabling document tools.');
@@ -55,13 +62,14 @@ export function validateRunRequest(body: any): ValidRun {
     tools,
     // Documents reach the model only through document tool calls.
     documents: documentTools ? documents : [],
+    ...(search ? { search } : {}),
   };
 }
 
 function executorFor(run: ValidRun, fetchImpl: FetchFn): RunExecutor {
   return async ({ signal, emit }) => {
     const events = run.tools.length
-      ? runWithTools(run.request, run.tools, run.documents, signal, fetchImpl)
+      ? runWithTools(run.request, run.tools, run.documents, signal, fetchImpl, run.search)
       : streamModel(run.request, signal, fetchImpl);
     for await (const event of events) {
       if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason, ...(event.loadMs !== undefined ? { loadMs: event.loadMs } : {}) };
