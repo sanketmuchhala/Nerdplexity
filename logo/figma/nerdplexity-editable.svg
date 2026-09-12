@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="4473.67" height="4012.8" viewBox="0 0 4473.67 4012.8">
+  <title>Nerdplexity (editable text)</title>
+  <g id="Lockup on dark" transform="translate(384 384)">
+    <rect id="background" x="-384" y="-384" width="3705.67" height="1430.4" rx="128" fill="#000000"/>
+    <rect id="tile" x="0" y="51.2" width="560" height="560" rx="176" fill="#b5df98"/>
+    <text id="n" x="92.38" y="499.2" font-family="Inter" font-size="464" font-weight="750" letter-spacing="0" fill="#141c10">n</text>
+    <text id="dot" x="341.91" y="499.2" font-family="Inter" font-size="464" font-weight="750" letter-spacing="0" fill="#487130">.</text>
+    <text id="wordmark" x="720" y="313.6" font-family="Inter" font-size="272" font-weight="600" letter-spacing="-9.6" fill="#fafafa">Nerdplexity</text>
+    <text id="tagline" x="720" y="612.8" font-family="Inter" font-size="112" font-weight="500" letter-spacing="24.8" fill="#a1a1aa">INDEPENDENT INTELLIGENCE</text>
+  </g>
+  <g id="Lockup on light" transform="translate(384 2198.4)">
+    <rect id="background" x="-384" y="-384" width="3705.67" height="1430.4" rx="128" fill="#ffffff"/>
+    <rect id="tile" x="0" y="51.2" width="560" height="560" rx="176" fill="#b5df98"/>
+    <text id="n" x="92.38" y="499.2" font-family="Inter" font-size="464" font-weight="750" letter-spacing="0" fill="#141c10">n</text>
+    <text id="dot" x="341.91" y="499.2" font-family="Inter" font-size="464" font-weight="750" letter-spacing="0" fill="#487130">.</text>
+    <text id="wordmark" x="720" y="313.6" font-family="Inter" font-size="272" font-weight="600" letter-spacing="-9.6" fill="#0a0a0a">Nerdplexity</text>
+    <text id="tagline" x="720" y="612.8" font-family="Inter" font-size="112" font-weight="500" letter-spacing="24.8" fill="#52525b">INDEPENDENT INTELLIGENCE</text>
+  </g>
+</svg>

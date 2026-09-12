@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@app/types": "workspace:*",
+    "@lobehub/icons-static-svg": "1.95.0",
     "@types/uuid": "^10.0.0",
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",

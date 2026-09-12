@@ -10,7 +10,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Server,
+  Search,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -35,6 +35,8 @@ import useConnections, {
 } from '../state/connections';
 import { hasKey } from '../lib/credentials';
 import { WebSearchSettings } from './WebSearchSettings';
+import ModelLogo, { formatModelName } from './ModelLogo';
+import { WorkbenchDialog } from './WorkbenchDialog';
 import { costStatus } from '../lib/cost';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
@@ -432,25 +434,25 @@ function ConnectionForm({
           {error}
         </p>
       )}
-      <div className="np-conn-actions">
+      <div className="np-conn-actions np-modal-footer">
         {existingKey && (
           <button
             type="button"
-            className="np-button ghost small"
+            className="np-button ghost small np-forget-key"
             onClick={() => void clear()}
           >
-            Forget key
+            Forget Key
           </button>
         )}
         <button
           type="button"
-          className="np-button ghost small"
+          className="np-button ghost"
           onClick={onDone}
         >
           Cancel
         </button>
-        <button className="np-button primary small" disabled={saving}>
-          {saving ? 'Saving…' : initial ? 'Save and check' : 'Add and check'}
+        <button className="np-button primary" disabled={saving}>
+          {saving ? 'Saving…' : 'Save Connection'}
         </button>
       </div>
     </form>
@@ -667,20 +669,22 @@ export function Models({
               disabled={anyLoading}
             >
               <RefreshCw size={13} className={anyLoading ? 'np-spin' : ''} />
-              Refresh all
+              Refresh All
             </button>
             <button
-              className="np-button small"
+              className="np-button primary small"
               onClick={() => setEditing('new')}
               disabled={editing === 'new'}
             >
               <Plus size={13} />
-              Add connection
+              Add Provider
             </button>
           </div>
         </div>
         {editing === 'new' && (
-          <ConnectionForm onDone={() => setEditing(null)} />
+          <WorkbenchDialog title="Add Provider" onClose={() => setEditing(null)}>
+            <ConnectionForm onDone={() => setEditing(null)} />
+          </WorkbenchDialog>
         )}
         <ul className="np-conn-list">
           {connections.map((connection) => {
@@ -689,13 +693,15 @@ export function Models({
             const badge = keyBadge(connection);
             return (
               <li key={connection.id} className="np-conn-row">
-                {editing === connection.id ? (
-                  <ConnectionForm
-                    initial={connection}
-                    onDone={() => setEditing(null)}
-                  />
-                ) : (
-                  <>
+                {editing === connection.id && (
+                  <WorkbenchDialog title={`Edit ${connection.name}`} onClose={() => setEditing(null)}>
+                    <ConnectionForm
+                      initial={connection}
+                      onDone={() => setEditing(null)}
+                    />
+                  </WorkbenchDialog>
+                )}
+                <>
                     <div className="np-conn-main">
                       <span
                         className={`np-status ${status.ready ? 'ready' : ''}`}
@@ -768,8 +774,7 @@ export function Models({
                         {quotaLine(quota[connection.id])}
                       </p>
                     )}
-                  </>
-                )}
+                </>
               </li>
             );
           })}
@@ -829,9 +834,19 @@ export function Models({
                 )}
               </p>
             </div>
-            <div className="np-catalog-controls">
+          </div>
+          <div className="np-giant-search-container">
+            <div className="np-giant-search">
+              <Search size={22} aria-hidden />
+              <input
+                aria-label="Search models"
+                placeholder="Search models…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="np-giant-filters">
               <select
-                className="np-search"
                 aria-label="Filter by connection"
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
@@ -843,13 +858,22 @@ export function Models({
                   </option>
                 ))}
               </select>
-              <input
-                className="np-search"
-                aria-label="Search models"
-                placeholder="Search models…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <div
+                className="np-filter-row"
+                role="group"
+                aria-label="Model filters"
+              >
+                {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
+                  <button
+                    key={f}
+                    className={`np-mode ${filter === f ? 'selected' : ''}`}
+                    aria-pressed={filter === f}
+                    onClick={() => setFilter(f)}
+                  >
+                    {FILTER_LABEL[f]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <label className={`np-policy ${freeOnly ? 'on' : ''}`}>
@@ -870,29 +894,13 @@ export function Models({
               Anything with an unknown price is blocked until you allow it.
             </span>
           </label>
-          <div
-            className="np-filter-row"
-            role="group"
-            aria-label="Model filters"
-          >
-            {(Object.keys(FILTER_LABEL) as Filter[]).map((f) => (
-              <button
-                key={f}
-                className={`np-mode ${filter === f ? 'selected' : ''}`}
-                aria-pressed={filter === f}
-                onClick={() => setFilter(f)}
-              >
-                {FILTER_LABEL[f]}
-              </button>
-            ))}
-          </div>
           {actionError && (
             <p className="np-error" role="alert">
               {actionError}
             </p>
           )}
 
-          <div className="np-model-grid">
+          <div className="np-model-list">
             {entries.map(({ connection, model, local }) => {
               const key = modelKey(connection.id, model.id);
               const isActive =
@@ -900,8 +908,6 @@ export function Models({
                 active.modelId === model.id;
               const facts = [
                 model.details,
-                model.contextLength &&
-                  `${tokensLabel(model.contextLength)} context`,
                 model.sizeBytes !== undefined && sizeLabel(model.sizeBytes),
               ].filter(Boolean);
               const cost = costStatus(
@@ -913,41 +919,44 @@ export function Models({
               const check = checkLine(checks[key]);
               return (
                 <article
-                  className={`np-model-card ${isActive ? 'active' : ''}`}
+                  className={`np-model-row ${isActive ? 'active' : ''}`}
                   key={key}
                 >
-                  <div className="np-model-card-top">
-                    <div className="np-model-icon">
-                      {local ? <Cpu size={20} /> : <Server size={20} />}
-                    </div>
-                    <div className="np-model-tags">
-                      <span className="np-label">{connection.name}</span>
-                      {model.loaded && <span className="np-label">Loaded</span>}
-                    </div>
-                    <button
-                      className={`np-icon-button np-favorite ${favorites.has(key) ? 'on' : ''}`}
-                      aria-pressed={favorites.has(key)}
-                      aria-label={`${favorites.has(key) ? 'Remove' : 'Add'} ${model.id} ${favorites.has(key) ? 'from' : 'to'} favorites`}
-                      onClick={() => toggleFavorite(key)}
-                    >
-                      <Star size={14} />
-                    </button>
+                  <ModelLogo
+                    modelId={model.id}
+                    provider={connection.kind === 'openai-compatible' ? connection.name : connection.kind}
+                    local={local}
+                  />
+                  <div className="np-model-row-info">
+                    <h3 title={model.id}>
+                      {formatModelName(model.displayName, model.id)}
+                      {isActive && <span className="np-label">Active</span>}
+                    </h3>
+                    <p>
+                      {[connection.name, model.id, ...facts].join(' · ')}
+                    </p>
+                    {check && (
+                      <p
+                        className={`np-check-result ${check.error ? 'error' : ''}`}
+                        role="status"
+                      >
+                        {check.text}
+                      </p>
+                    )}
                   </div>
-                  <h3 title={model.id}>{model.displayName}</h3>
-                  {model.displayName !== model.id && (
-                    <p className="np-model-id">{model.id}</p>
-                  )}
-                  <p>
-                    {facts.join(' · ') ||
-                      (local ? 'On this machine' : 'Hosted model')}
-                  </p>
-                  <div className="np-cap-row">
+                  <div className="np-model-row-tags">
                     <span
                       className={`np-label np-cost ${cost.free ? 'free' : cost.cls}`}
                       title={cost.detail}
                     >
                       {cost.label}
                     </span>
+                    {model.loaded && <span className="np-label">Loaded</span>}
+                    {model.contextLength ? (
+                      <span className="np-label">
+                        {tokensLabel(model.contextLength)} ctx
+                      </span>
+                    ) : null}
                     {model.capabilities.tools === true && (
                       <span className="np-label">Tools</span>
                     )}
@@ -963,15 +972,7 @@ export function Models({
                       </span>
                     )}
                   </div>
-                  {check && (
-                    <p
-                      className={`np-check-result ${check.error ? 'error' : ''}`}
-                      role="status"
-                    >
-                      {check.text}
-                    </p>
-                  )}
-                  <div className="np-model-card-bottom">
+                  <div className="np-model-row-actions">
                     {connection.kind === 'ollama' && (
                       <button className="np-button ghost small" onClick={() => void deleteLocalModel(connection, model)}><Trash2 size={12} /> Remove</button>
                     )}
@@ -982,9 +983,16 @@ export function Models({
                     >
                       Check
                     </button>
-                    <span>{isActive ? 'Default' : ''}</span>
                     <button
-                      className="np-button small"
+                      className={`np-icon-button np-favorite ${favorites.has(key) ? 'on' : ''}`}
+                      aria-pressed={favorites.has(key)}
+                      aria-label={`${favorites.has(key) ? 'Remove' : 'Add'} ${model.id} ${favorites.has(key) ? 'from' : 'to'} favorites`}
+                      onClick={() => toggleFavorite(key)}
+                    >
+                      <Star size={16} />
+                    </button>
+                    <button
+                      className={`np-button small ${isActive ? 'ghost' : 'primary'}`}
                       disabled={blocked}
                       title={blocked ? 'Blocked by Free only' : undefined}
                       onClick={() =>
@@ -997,13 +1005,10 @@ export function Models({
                       {isActive ? (
                         <>
                           <Check size={13} />
-                          Use again
+                          Selected
                         </>
                       ) : (
-                        <>
-                          Use model
-                          <ArrowRight size={13} />
-                        </>
+                        'Select Model'
                       )}
                     </button>
                   </div>

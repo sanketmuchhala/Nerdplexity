@@ -10,16 +10,16 @@ const upstream = async (page: Page, prompt: string) =>
   ).json();
 async function setup(page: Page, model = 'fast-model') {
   await page.goto('/app/models');
-  await page.getByRole('button', { name: 'Add connection' }).click();
+  await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption('custom');
   await form.getByLabel('Connection name').fill('Workbench fake');
   await form.getByLabel('Server address').fill(`${fake}/v1`);
-  await form.getByRole('button', { name: 'Add and check' }).click();
+  await form.getByRole('button', { name: 'Save Connection' }).click();
   await page
     .getByRole('article')
     .filter({ hasText: model })
-    .getByRole('button', { name: 'Use model' })
+    .getByRole('button', { name: 'Select Model' })
     .click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(

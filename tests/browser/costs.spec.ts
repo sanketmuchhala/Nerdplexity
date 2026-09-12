@@ -30,15 +30,16 @@ async function mockRuns(page: Page, script: object[][]) {
 
 async function addConnection(page: Page, type: string, key: string, billing?: string) {
   await page.goto('/app/models');
-  await page.getByRole('button', { name: 'Add connection' }).click();
+  await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption(type);
   await form.getByLabel('API key').fill(key);
   if (billing) await form.getByLabel('Account billing').selectOption(billing);
-  await form.getByRole('button', { name: 'Add and check' }).click();
+  await form.getByRole('button', { name: 'Save Connection' }).click();
 }
 
-const card = (page: Page, id: string) => page.getByRole('article').filter({ has: page.getByRole('heading', { name: id, exact: true }) });
+// Model rows show a readable name; the exact model ID is the heading's title.
+const card = (page: Page, id: string) => page.getByRole('article').filter({ has: page.locator(`h3[title="${id}"]`) });
 
 test('Free only blocks models that are not confirmed free until the user allows charges', async ({ page }) => {
   await mockDiscovery(page, { openrouter: [
@@ -51,7 +52,7 @@ test('Free only blocks models that are not confirmed free until the user allows 
   await expect(card(page, 'vendor/big')).toContainText('$3 in / $15 out per M tokens');
 
   await page.getByLabel(/Free only/).check();
-  await expect(card(page, 'vendor/big').getByRole('button', { name: 'Use model' })).toBeDisabled();
+  await expect(card(page, 'vendor/big').getByRole('button', { name: 'Select Model' })).toBeDisabled();
   await page.getByRole('button', { name: 'Free to use' }).click();
   await expect(page.getByRole('article')).toHaveCount(1);
 
@@ -80,7 +81,7 @@ test('a free model that hits its limit offers free alternatives and never switch
     [{ type: 'delta', text: 'Answer from b.' }, { type: 'completed', timing }],
   ]);
   await addConnection(page, 'openrouter', 'sk-or-test');
-  await card(page, 'a:free').getByRole('button', { name: 'Use model' }).click();
+  await card(page, 'a:free').getByRole('button', { name: 'Select Model' }).click();
   await page.getByRole('textbox', { name: 'Message' }).fill('Question');
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   const alert = page.getByRole('alert');
@@ -100,16 +101,16 @@ test('a free model that hits its limit offers free alternatives and never switch
 test('an account marked as having no billing counts as free, and the Gemini data-use notice is shown', async ({ page }) => {
   await mockDiscovery(page, { gemini: [model('gemini-2.5-flash')] });
   await page.goto('/app/models');
-  await page.getByRole('button', { name: 'Add connection' }).click();
+  await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption('gemini');
   await expect(form).toContainText('Google may use your prompts to improve its products');
   await form.getByLabel('API key').fill('AIza-test');
   await form.getByLabel('Account billing').selectOption('no-billing');
-  await form.getByRole('button', { name: 'Add and check' }).click();
+  await form.getByRole('button', { name: 'Save Connection' }).click();
   await page.getByLabel(/Free only/).check();
   await expect(card(page, 'gemini-2.5-flash')).toContainText('Free plan');
-  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Use model' })).toBeEnabled();
+  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeEnabled();
 });
 
 test('Check proves a model responds, and asks first when it may be billed', async ({ page }) => {

@@ -1,7 +1,7 @@
 # Nerdplexity: model workbench and harness plan
 
-Status: P0–P6.2 complete; P7 next. Pending items: [pending.md](pending.md).
-Updated: 2026-09-11.
+Status: P0–P8 complete. Pending items: [pending.md](pending.md).
+Updated: 2026-09-12.
 User direction: make Nerdplexity an excellent interface for running local models and online models using personal API keys, including free offerings. Keep the Nerdplexity identity.
 
 This document supersedes the two older dashboard redesign plans. It is based on source inspection and provider documentation, not a completed runtime audit.
@@ -104,7 +104,7 @@ Start Compare with two runs from the same immutable input/context snapshot. Defa
 
 ### Visual direction
 
-Keep Nerdplexity's existing blue identity and improve consistency using current CSS tokens and primitives. Use restrained surfaces, clear typography, and emphasis on transcript readability. Model badges convey factual state, not decoration. Use visible focus, accessible labels, reduced-motion support, and defined loading/empty/error states. Review 390px, 768px, and 1440px layouts in both supported themes.
+Use the Nerdplexity black-and-green identity from the logo kit (`logo/`, adopted in P8 from the `codex/local-workspace` branch; replaces the earlier blue direction), with a green light theme, and keep consistency through the CSS tokens and primitives. Use restrained surfaces, clear typography, and emphasis on transcript readability. Model badges convey factual state, not decoration. Use visible focus, accessible labels, reduced-motion support, and defined loading/empty/error states. Review 390px, 768px, and 1440px layouts in both supported themes.
 
 ## 5. Verified repository gaps
 
@@ -378,3 +378,5 @@ Paste after switching:
 - P7 verification (2026-09-12): typecheck, production build, and source-policy lint pass. Vitest 141/141 (server 108, web 33), including null-safe analytics, percentile/rate/context validity, price provenance, explicit feedback separation, and run-export redaction. Playwright 32/32 through isolated local services, including saved analytics/feedback after reload, retired API/route checks, and overflow/screenshots at 1440, 768, and 390 px. The full P0–P7 acceptance evidence and provider/runtime limits are in [release-verification.md](release-verification.md). No deploy or publish was performed.
 - Pending items across all phases are tracked in [pending.md](pending.md). Owner decisions: documents stay local; web search uses Exa; MCP is deferred.
 - Next: use the release candidate in real workflows and prioritize remaining items from observed needs.
+- P8 complete (2026-09-12), branch `codex/engine`: merged `codex/local-workspace` (four UI commits made after P1 in the other checkout) with both histories kept. Its files were P1-era, so the merge started from the engine's P7 screens and ported the UI onto them: the pure-black/green theme (with a green light theme kept, `--np-faint` lightened for 4.5:1 contrast on black, and a darker light-mode accent for AA), the large model search, OpenRouter-style model rows with brand logos, the provider form in a modal, the button copy ("Add Provider", "Save Connection", "Select Model"), and answers headed by the model's logo and catalog name. The engine features on those screens stayed (price labels, Check, Ollama install/remove, Free only, Web search key, feedback, tool activity, provenance, accurate key-storage wording rather than the branch's "saved securely"). The branch's `@lobehub/icons` (React 19, antd 6, `@lobehub/ui` peers; about 4,900 lockfile lines) was replaced by `@lobehub/icons-static-svg` (MIT, no dependencies) with 46 imported logos on white circles; pale or white color icons use their one-color file. The logo kit (`logo/`) was added and supplies the favicon, touch icon, SVG mark, and sidebar colors. Markdown links in model output now render only for http(s) and mailto, so a `javascript:` link from a model stays text. The unrouted legacy `Chat.tsx` stays deleted.
+- P8 verification (2026-09-12): typecheck, production build (main bundle 534 KB), and lint pass. Vitest 155/155 (server 108, web 47, including logo resolution and name formatting). Playwright 32/32 after updating shared helpers for the adopted labels and locating model rows by the model ID in the heading title. Visual check in Chrome on a separate origin with the owner's OpenRouter catalog: model list with logos, provider dialog, Connections with the Web search panel, chat with logo-headed answers, tool activity and feedback, in dark and light themes. No deploy or publish.

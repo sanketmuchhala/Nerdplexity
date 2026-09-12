@@ -108,6 +108,17 @@ export function ChatWorkspace({
     ? discovered.models.find((m) => m.id === model)
     : undefined;
   const configured = workbenchSettings(conversation, settings);
+  /** Logo and name for the model behind an answer; the catalog name when it is known. */
+  const answerModel = (source?: { connectionId: string; modelId: string }) => {
+    if (!source) return undefined;
+    const owner = connections.find((c) => c.id === source.connectionId);
+    const listed = latestResult(catalog[source.connectionId]);
+    return {
+      id: source.modelId,
+      displayName: listed?.ok ? listed.models.find((m) => m.id === source.modelId)?.displayName : undefined,
+      provider: owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '',
+    };
+  };
   const enabledTools = configured.tools;
   const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
@@ -483,6 +494,7 @@ export function ChatWorkspace({
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
                   animate={!message.runId}
+                  model={message.role === 'assistant' ? answerModel(message.provenance) : undefined}
                 />
                 {message.role === 'assistant' &&
                   (message.provenance ||
@@ -593,6 +605,7 @@ export function ChatWorkspace({
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
+                model={ref && model ? answerModel({ connectionId: ref.connectionId, modelId: model }) : undefined}
               />
             )}
             {ownRun && run.running && (

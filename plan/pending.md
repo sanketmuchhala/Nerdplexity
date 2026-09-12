@@ -31,7 +31,8 @@ Last reviewed: 2026-09-12 (after P7 verification).
 
 - **Navigation differs from section 4.** The app has Chat, Models, Connections, Workspace, Run history, Compare; there is no separate Settings page.
 - **No context compaction.** Over-limit context offers only omitting earlier turns, not summarizing them.
-- **Owner visual review.** Screenshots at 390, 768, and 1440 px have been reviewed only by the implementing agents.
+- **Owner visual review.** Screenshots at 390, 768, and 1440 px have been reviewed only by the implementing agents; P8 changed the whole look (black and green), so this review matters more now.
+- **Model logos are a curated set.** 46 brands are mapped (`ModelLogo.tsx`); others show a lettered avatar. Add aliases as new providers appear.
 
 ### Files, local models, Compare (P5)
 
@@ -54,6 +55,7 @@ Last reviewed: 2026-09-12 (after P7 verification).
 
 ## Resolved
 
+- P8 (2026-09-12): the `codex/local-workspace` UI (black and green theme, model logos, list catalog, provider modal, logo-headed answers) merged into `codex/engine`, and the logo kit adopted. The other checkout's branch is now contained in `codex/engine`.
 - P7 canonical analytics, explicit feedback, metric provenance/coverage, release CI and acceptance notes (2026-09-12). The responsive blue workbench was re-checked at 390/768/1440 px; owner visual review remains open above.
 - Unrouted legacy chat, provider, telemetry, PromptOps, static-score, and DuckDuckGo `/v1/chat` code removed (P7, 2026-09-12).
 - Web search through Exa (P6.2, 2026-09-11), checked live. Hosted providers stream (P2). Emoji stripping of model output removed (P2). Document agent steps now stream through the tool loop (P6.1, `28cb36a`). Benchmark screen replaced by Compare (P5, `c79a8ce`).

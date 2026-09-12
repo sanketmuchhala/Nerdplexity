@@ -95,6 +95,9 @@ importers:
       '@app/types':
         specifier: workspace:*
         version: link:../types
+      '@lobehub/icons-static-svg':
+        specifier: 1.95.0
+        version: 1.95.0
       '@types/uuid':
         specifier: ^10.0.0
         version: 10.0.0
@@ -739,6 +742,9 @@ packages:
 
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
+
+  '@lobehub/icons-static-svg@1.95.0':
+    resolution: {integrity: sha512-VSObF66DUVQe0EK3xbIoFcw+Fcia1+bLVFkMsQbmz0zCceMxPmoLImS5VM5SM7zL+/NarZ11/ySNfkekcomIkQ==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -3145,6 +3151,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@kurkle/color@0.3.4': {}
+
+  '@lobehub/icons-static-svg@1.95.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

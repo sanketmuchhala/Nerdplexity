@@ -2,16 +2,20 @@ import { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { CodeBlock } from './ui/CodeBlock';
 import type { Message as StoredMessage, WebSearchResult } from '../lib/db';
+import ModelLogo, { formatModelName } from '../workspace/ModelLogo';
 
 interface Props {
   message: Omit<StoredMessage, 'createdAt'> & { timestamp: number; metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
   /** Skip the entrance animation when the message replaces text already on screen. */
   animate?: boolean;
+  /** The model that wrote an assistant answer, when known; its logo and name head the answer. */
+  model?: { id: string; displayName?: string; provider: string };
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
+const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 
-export function Message({ message, animate = true }: Props) {
+export function Message({ message, animate = true, model }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -28,12 +32,11 @@ export function Message({ message, animate = true }: Props) {
       <div className="w-full px-4 py-4 animate-message-in">
         <div className={COL}>
           <div className="flex justify-end">
-            <div className="max-w-[78%] px-4 py-3 rounded-2xl rounded-tr-sm"
-              style={{ background: 'var(--s3)', border: '1px solid var(--b-hi)' }}>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
+            <div className="max-w-[78%] px-5 py-3.5 rounded-[22px]"
+              style={{ background: 'var(--s2)' }}>
+              <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
                 {message.content}
               </p>
-              <p className="text-[10px] mt-1.5 text-right" style={{ color: 'var(--t4)' }}>{ts}</p>
             </div>
           </div>
         </div>
@@ -46,10 +49,15 @@ export function Message({ message, animate = true }: Props) {
     <div className={`w-full px-4 py-6 ${animate ? 'animate-message-in' : ''}`}>
       <div className={COL}>
         {/* Label */}
-        <div className="flex items-center gap-2 mb-3.5">
-          <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-white"
-            style={{ background: 'var(--blue-dark)', boxShadow: '0 0 8px rgba(59,130,246,.3)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>N</div>
-          <span className="t-caps" style={{ letterSpacing: '.1em' }}>Nerdplexity</span>
+        <div className="flex items-center gap-3 mb-4 np-answer-label">
+          {model ? (
+            <ModelLogo modelId={model.id} provider={model.provider} size={26} />
+          ) : (
+            <span className="np-answer-mark" aria-hidden>n<span>.</span></span>
+          )}
+          <span className="text-[15px] font-medium" style={{ color: 'var(--t1)' }}>
+            {model ? formatModelName(model.displayName, model.id) : 'Nerdplexity'}
+          </span>
         </div>
 
         {/* Source chips */}
@@ -63,11 +71,11 @@ export function Message({ message, animate = true }: Props) {
                 <a key={i} href={src.url} target="_blank" rel="noopener noreferrer"
                   className="flex-shrink-0 flex items-center gap-1.5 text-[11px] rounded-full transition-all"
                   style={{ padding: '3px 10px 3px 6px', background: 'var(--s2)', border: '1px solid var(--b-hi)', color: 'var(--t3)' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(59,130,246,.3)'; (e.currentTarget as HTMLElement).style.color = 'var(--t1)'; }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ACCENT(.3); (e.currentTarget as HTMLElement).style.color = 'var(--t1)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--b-hi)'; (e.currentTarget as HTMLElement).style.color = 'var(--t3)'; }}
                 >
                   <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                    style={{ background: 'rgba(59,130,246,.6)' }}>{i+1}</span>
+                    style={{ background: ACCENT(.6), color: 'var(--np-on-accent)' }}>{i+1}</span>
                   <span className="max-w-[100px] truncate">{host}</span>
                   <ExternalLink size={8} className="opacity-40 flex-shrink-0" />
                 </a>
@@ -77,7 +85,7 @@ export function Message({ message, animate = true }: Props) {
         )}
 
         {/* Content */}
-        <div className="text-sm leading-[1.8]" style={{ color: 'var(--t1)' }}>
+        <div className="text-[15px] leading-[1.75]" style={{ color: 'var(--t1)' }}>
           {/* Show model output exactly as received. */}
           {formatContent(message.content)}
         </div>
@@ -131,7 +139,7 @@ function formatContent(content: string) {
       while (i < lines.length && lines[i].trim().startsWith('> ')) { ql.push(lines[i].trim().slice(2)); i++; }
       out.push(
         <blockquote key={`bq${i}`} className="my-3 py-1 pl-4 rounded-r-lg"
-          style={{ borderLeft: '2px solid rgba(59,130,246,.4)', background: 'rgba(59,130,246,.04)' }}>
+          style={{ borderLeft: `2px solid ${ACCENT(.4)}`, background: ACCENT(.04) }}>
           {ql.map((q,j) => <div key={j} className="text-sm italic" style={{ color: 'var(--t2)' }}>{fmtLine(q)}</div>)}
         </blockquote>
       );
@@ -174,7 +182,7 @@ function formatContent(content: string) {
       out.push(
         <div key={i} className="my-0.5 leading-[1.8]">
           {parts.map((p,j) => j%2===1
-            ? <code key={j} className="text-sm px-1.5 py-0.5 rounded t-mono" style={{ background: 'rgba(59,130,246,.1)', border:'1px solid rgba(59,130,246,.2)', color:'var(--blue-bright)' }}>{p}</code>
+            ? <code key={j} className="text-sm px-1.5 py-0.5 rounded t-mono" style={{ background: ACCENT(.1), border:`1px solid ${ACCENT(.2)}`, color:'var(--blue-bright)' }}>{p}</code>
             : fmtLine(p))}
         </div>
       );
@@ -199,18 +207,18 @@ function fmtLine(line: string): React.ReactNode {
     const level = Math.floor((num[1]?.length??0)/2);
     return <div className="flex gap-3 my-1" style={{ marginLeft:`${level*1.5}rem` }}>
       <span className="flex-shrink-0 font-medium text-sm min-w-[1.25rem] text-right" style={{ color:'var(--blue-bright)' }}>{num[2]}.</span>
-      <span className="text-sm" style={{ color:'var(--t1)' }}>{fmtInline(num[3])}</span>
+      <span style={{ color:'var(--t1)' }}>{fmtInline(num[3])}</span>
     </div>;
   }
   if (line.trim().match(/^[-•*]\s/)) {
     const level = Math.floor((line.match(/^(\s*)/)?.[1]?.length??0)/2);
     const content = line.trim().slice(2);
     return <div className="flex items-start gap-3 my-1" style={{ marginLeft:`${level*1.5}rem` }}>
-      <span className="flex-shrink-0 mt-2.5 w-1.5 h-1.5 rounded-full" style={{ background:'rgba(59,130,246,.6)', flexShrink:0 }} />
-      <span className="text-sm" style={{ color:'var(--t1)' }}>{fmtInline(content)}</span>
+      <span className="flex-shrink-0 mt-2.5 w-1.5 h-1.5 rounded-full" style={{ background: ACCENT(.6), flexShrink:0 }} />
+      <span style={{ color:'var(--t1)' }}>{fmtInline(content)}</span>
     </div>;
   }
-  return <span className="text-sm" style={{ color:'var(--t1)' }}>{fmtInline(line)}</span>;
+  return <span style={{ color:'var(--t1)' }}>{fmtInline(line)}</span>;
 }
 
 function fmtInline(text: string): React.ReactNode {
@@ -226,7 +234,8 @@ function fmtInline(text: string): React.ReactNode {
   if (linkRe.test(text)) {
     return <>{text.split(linkRe).map((p,i) => {
       const m = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-      return m ? <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 transition-colors" style={{ color:'var(--blue-bright)', textDecorationColor:'rgba(59,130,246,.4)' }}>{m[1]}</a> : p;
+      if (!m || !/^(https?:|mailto:)/i.test(m[2].trim())) return p;
+      return <a key={i} href={m[2].trim()} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 transition-colors" style={{ color:'var(--blue-bright)', textDecorationColor: ACCENT(.4) }}>{m[1]}</a>;
     })}</>;
   }
   return text;
