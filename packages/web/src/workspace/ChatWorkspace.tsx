@@ -16,6 +16,8 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Square,
+  ThumbsDown,
+  ThumbsUp,
   Workflow,
   X,
 } from 'lucide-react';
@@ -71,6 +73,7 @@ export function ChatWorkspace({
     updateConversationTitle,
     addAttachment,
     removeAttachment,
+    setMessageFeedback,
     setWorkbench,
   } = useChat();
   const connections = useConnections((state) => state.connections);
@@ -537,21 +540,43 @@ export function ChatWorkspace({
                     </button>
                   )}
                   {message.role === 'assistant' && (
-                    <button
-                      className="np-icon-button"
-                      disabled={run.running}
-                      aria-label={`Regenerate message ${index + 1}`}
-                      onClick={() => {
-                        const user = messages
-                          .slice(0, index)
-                          .reverse()
-                          .find((m) => m.role === 'user');
-                        if (user) void branch(user.id, user.content, true);
-                      }}
-                    >
-                      <RotateCcw size={13} />
-                      <span>Regenerate in branch</span>
-                    </button>
+                    <>
+                      <button
+                        className={`np-icon-button ${message.feedback === 'helpful' ? 'active' : ''}`}
+                        aria-label={`Mark message ${index + 1} helpful`}
+                        aria-pressed={message.feedback === 'helpful'}
+                        title="Helpful"
+                        onClick={() => conversation && void setMessageFeedback(conversation.id, message.id, message.feedback === 'helpful' ? undefined : 'helpful').catch(() => setActionError('Unable to save feedback.'))}
+                      >
+                        <ThumbsUp size={13} />
+                        <span>Helpful</span>
+                      </button>
+                      <button
+                        className={`np-icon-button ${message.feedback === 'unhelpful' ? 'active' : ''}`}
+                        aria-label={`Mark message ${index + 1} unhelpful`}
+                        aria-pressed={message.feedback === 'unhelpful'}
+                        title="Unhelpful"
+                        onClick={() => conversation && void setMessageFeedback(conversation.id, message.id, message.feedback === 'unhelpful' ? undefined : 'unhelpful').catch(() => setActionError('Unable to save feedback.'))}
+                      >
+                        <ThumbsDown size={13} />
+                        <span>Unhelpful</span>
+                      </button>
+                      <button
+                        className="np-icon-button"
+                        disabled={run.running}
+                        aria-label={`Regenerate message ${index + 1}`}
+                        onClick={() => {
+                          const user = messages
+                            .slice(0, index)
+                            .reverse()
+                            .find((m) => m.role === 'user');
+                          if (user) void branch(user.id, user.content, true);
+                        }}
+                      >
+                        <RotateCcw size={13} />
+                        <span>Regenerate in branch</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </Fragment>

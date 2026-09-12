@@ -1,7 +1,7 @@
 {
   "name": "nerdplexity",
   "version": "1.0.0",
-  "description": "Master your AI conversations with intelligent prompt analytics - Local-first AI chat with real-time insights",
+  "description": "Local-first model workbench for local runtimes and bring-your-own-key providers",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.0.0",

@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { ModelRef } from '@app/types';
 import { db, Conversation, Message, AppSettings, Provider, legacyProvider, type ThreadAttachment } from '../lib/db';
-import * as credentials from '../lib/credentials';
 import useConnections from './connections';
 import { parseConversation, settingsErrors, workbenchSettings, type Preset, type WorkbenchSettings } from '../lib/workbench';
 
@@ -38,13 +37,11 @@ interface ChatStore {
   importThread: (text: string) => Promise<void>;
   addAttachment: (conversationId: string, attachment: ThreadAttachment) => Promise<void>;
   removeAttachment: (conversationId: string, attachmentId: string) => Promise<void>;
+  setMessageFeedback: (conversationId: string, messageId: string, feedback?: Message['feedback']) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
-  setApiKey: (provider: Provider, key: string) => Promise<void>;
-  getApiKey: (provider: Provider) => string;
-  testApiKey: (provider: Provider, model?: string) => Promise<{ ok: boolean; message?: string }>;
 
   // Helper methods
   persistActiveIfDirty: () => Promise<void>;
@@ -266,6 +263,18 @@ const useChat = create<ChatStore>((set, get) => ({
     set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
   },
 
+  setMessageFeedback: async (conversationId, messageId, feedback) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) throw new Error('This thread is no longer available.');
+    const updated: Conversation = {
+      ...conversation,
+      messages: conversation.messages.map(message => message.id === messageId ? { ...message, feedback } : message),
+      updatedAt: Date.now(),
+    };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(item => item.id === conversationId ? updated : item) }));
+  },
+
   // Update conversation settings (provider, model, etc.)
   updateConversationSettings: async (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => {
     const state = get();
@@ -327,44 +336,6 @@ const useChat = create<ChatStore>((set, get) => ({
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Failed to save settings:', error);
-    }
-  },
-
-  // Legacy helpers: hosted provider connections use the provider name as their ID.
-  setApiKey: async (provider: Provider, key: string) => {
-    await credentials.setKey(provider, key, true);
-    await useConnections.getState().load();
-  },
-
-  getApiKey: (provider: Provider) => credentials.getKey(provider),
-
-  // Test API key
-  testApiKey: async (provider: Provider, model?: string) => {
-    const apiKey = get().getApiKey(provider);
-
-    if (!apiKey) {
-      return { ok: false, message: 'No API key provided' };
-    }
-
-    try {
-      let response: Response;
-
-      // Keys travel in the request body, never the URL.
-      response = await fetch('/v1/ping', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, model, api_key: apiKey })
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.ok) {
-        return { ok: true, message: data.message || `API key valid for ${provider}` };
-      } else {
-        return { ok: false, message: data.message || 'API key test failed' };
-      }
-    } catch (error) {
-      return { ok: false, message: 'Network error testing API key' };
     }
   },
 

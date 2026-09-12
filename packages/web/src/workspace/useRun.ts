@@ -84,7 +84,7 @@ export function useRun() {
       status,
       durationMs: timing?.durationMs ?? Date.now() - record.startedAt,
       ...(timing ? { queuedMs: timing.queuedMs, ttftMs: timing.ttftMs } : {}),
-      ...(outcome.type === 'completed' ? { usage: outcome.usage, finishReason: outcome.finishReason } : {}),
+      ...(outcome.type === 'completed' ? { usage: outcome.usage, finishReason: outcome.finishReason, loadMs: outcome.loadMs } : {}),
       ...(outcome.type === 'failed' ? { error: outcome.error.message, errorCategory: outcome.error.category, retryAfterMs: outcome.error.retryAfterMs } : {}),
       ...(outcome.type === 'local' && outcome.message ? { error: outcome.message } : {}),
     };
@@ -179,12 +179,21 @@ export function useRun() {
   const execute = async (attempt: Attempt, retryOf?: string) => {
     const connection = useConnections.getState().connections.find(c => c.id === attempt.connectionId);
     if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
+    const discovery = latestResult(useConnections.getState().catalog[connection.id]);
+    const descriptor = discovery?.ok ? discovery.models.find(item => item.id === attempt.model) : undefined;
+    const pricing = discovery?.ok ? {
+      execution: discovery.execution,
+      classification: discovery.execution === 'local' ? 'local' as const : descriptor?.pricing ?? 'unknown' as const,
+      ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}),
+      catalogCheckedAt: discovery.checkedAt,
+    } : undefined;
     const controller = new AbortController();
     const record: RunRecord = {
       id: uuidv4(), conversationId: attempt.conversationId, connectionId: connection.id, provider: connection.name, model: attempt.model,
       prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.tools.length ? 'agent' : 'chat',
       input: structuredClone(attempt.input), notices: [],
       output: '', reasoning: '', tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
+      ...(pricing ? { pricing } : {}),
     };
     active.current = { record, controller, cancelRequested: false };
     lastAttempt.current = { ...attempt, recordId: record.id };

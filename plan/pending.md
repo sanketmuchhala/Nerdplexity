@@ -2,11 +2,11 @@
 
 The single list of work that is not done, deferred, or waiting on a decision. The progress log in [implementation-plan.md](implementation-plan.md) stays the history of each phase; this file is the current to-do list. When an item is finished, move it to **Resolved** with the date and commit.
 
-Last reviewed: 2026-09-11 (after P6.2 and its live check).
+Last reviewed: 2026-09-12 (after P7 verification).
 
 ## In progress
 
-- Nothing. Next phase: P7, run analytics and release hardening.
+- Nothing. P0–P7 are complete; use the release candidate and prioritize the open items from real workflows.
 
 ## Owner decisions
 
@@ -26,7 +26,6 @@ Last reviewed: 2026-09-11 (after P6.2 and its live check).
 - **Custom endpoint pointed at OpenRouter.** Found in the live check: a custom compatible connection to `openrouter.ai` works, but loses the OpenRouter preset's $0 pricing (every model shows "Price unknown", Free only blocks them, free alternatives are not offered) and its error messages say "The endpoint". Suggest the preset when a custom URL matches a hosted provider.
 - **Citation style varies by model.** The live Nemotron answer cited with its own markers (`【1†L1-L4】`) instead of URLs despite the instruction; the tool activity still lists the real links. Consider numbering results and rendering citations.
 - **Live tool-calling checks per provider.** Checked live only through OpenRouter's OpenAI-style route (Nemotron 3 Super free: calculator and web search). Native Anthropic, Gemini, Ollama, and other OpenAI-compatible servers are verified with fixtures only. Ollama streams tool calls only in versions that support it; models whose catalog reports tool support as unknown fail with a provider error if they reject tools.
-- **Legacy web search.** `/v1/chat` still uses DuckDuckGo and returns helper links, not retrieved evidence, when a search fails. Only the unrouted legacy screens below call it; the workbench uses Exa. Remove it with those screens.
 
 ### Workbench (P4)
 
@@ -49,12 +48,12 @@ Last reviewed: 2026-09-11 (after P6.2 and its live check).
 - **Anthropic rate-limit headers** (`anthropic-ratelimit-*`) are not parsed.
 - **Runs are lost if the backend restarts.** This is by design; the client reports them as interrupted.
 
-### Code health (P1)
+### Code health
 
-- **Unrouted legacy code still compiles:** `components/Chat.tsx`, `hooks/useChat.ts`, `hooks/useLocalKeys.ts`, `pages/Landing.tsx`, `promptops/BenchmarkPage.tsx` (present as of 2026-09-11).
 - **LAN runtimes over plain http** are not allowed by the destination policy.
-- **Palette.** P1 noted a green palette and low-contrast answer text from checkpoint `323d763`; not re-checked since P4's theme work.
 
 ## Resolved
 
+- P7 canonical analytics, explicit feedback, metric provenance/coverage, release CI and acceptance notes (2026-09-12). The responsive blue workbench was re-checked at 390/768/1440 px; owner visual review remains open above.
+- Unrouted legacy chat, provider, telemetry, PromptOps, static-score, and DuckDuckGo `/v1/chat` code removed (P7, 2026-09-12).
 - Web search through Exa (P6.2, 2026-09-11), checked live. Hosted providers stream (P2). Emoji stripping of model output removed (P2). Document agent steps now stream through the tool loop (P6.1, `28cb36a`). Benchmark screen replaced by Compare (P5, `c79a8ce`).

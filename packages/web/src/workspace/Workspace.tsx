@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
-  BookOpen,
+  BarChart3,
   ChevronRight,
   Clock3,
   GitCompare,
@@ -33,6 +33,7 @@ import { Documents } from './Documents';
 import { Runs } from './Runs';
 import { useRun } from './useRun';
 import { Compare } from './Compare';
+import { Analytics } from './Analytics';
 import './workspace.css';
 
 const destinations = [
@@ -52,6 +53,7 @@ const destinations = [
   },
   { id: 'runs', label: 'Run history', icon: Clock3, path: '/app/runs' },
   { id: 'compare', label: 'Compare', icon: GitCompare, path: '/app/compare' },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3, path: '/app/analytics' },
 ];
 
 export default function Workspace() {
@@ -439,6 +441,8 @@ export default function Workspace() {
           <Runs openConversation={openConversation} />
         ) : current.id === 'compare' ? (
           <Compare onChat={() => go('/app')} />
+        ) : current.id === 'analytics' ? (
+          <Analytics />
         ) : (
           <ChatWorkspace
             run={run}
@@ -499,9 +503,9 @@ export default function Workspace() {
                   </button>
                 ))}
               {!query && (
-                <button onClick={() => go('/app/analytics/dashboard')}>
-                  <BookOpen size={16} />
-                  Advanced analytics
+                <button onClick={() => go('/app/analytics')}>
+                  <BarChart3 size={16} />
+                  Analytics
                   <ArrowUpRight size={13} />
                 </button>
               )}

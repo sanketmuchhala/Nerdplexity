@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { CodeBlock } from './ui/CodeBlock';
-import { ChatMessage } from '../hooks/useChat';
-import { WebSearchResult } from '../lib/db';
+import type { Message as StoredMessage, WebSearchResult } from '../lib/db';
 
 interface Props {
-  message: ChatMessage & { metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
+  message: Omit<StoredMessage, 'createdAt'> & { timestamp: number; metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
   /** Skip the entrance animation when the message replaces text already on screen. */
   animate?: boolean;
 }

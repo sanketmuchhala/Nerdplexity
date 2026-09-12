@@ -5,11 +5,6 @@ import useChat           from './state/chatStore';
 import useConnections    from './state/connections';
 import { initializeDatabase } from './lib/db';
 
-// Analytics pages — lazy-ish (kept sync for simplicity)
-import MetricsDashboard  from './promptops/MetricsDashboard';
-import EventsPage        from './promptops/EventsPage';
-import PromptOpsLanding  from './promptops/PromptOpsLanding';
-
 export default function App() {
   const [initialized,   setInitialized]   = useState(false);
   const [initError,     setInitError]     = useState('');
@@ -64,16 +59,15 @@ export default function App() {
         {/* App shell */}
         <Route path="/app/*" element={<Workspace />} />
 
-        {/* Analytics */}
-        <Route path="/app/analytics"           element={<PromptOpsLanding />} />
-        <Route path="/app/analytics/dashboard" element={<MetricsDashboard />} />
-        <Route path="/app/analytics/events"    element={<EventsPage />} />
+        {/* Retired analytics URLs now open the canonical workspace analytics page. */}
+        <Route path="/app/analytics/dashboard" element={<Navigate to="/app/analytics" replace />} />
+        <Route path="/app/analytics/events"    element={<Navigate to="/app/analytics" replace />} />
         <Route path="/app/analytics/benchmark" element={<Navigate to="/app/compare" replace />} />
 
         {/* Legacy redirects — old routes still work */}
-        <Route path="/promptops" element={<PromptOpsLanding />} />
-        <Route path="/dashboard" element={<MetricsDashboard />} />
-        <Route path="/events"    element={<EventsPage />} />
+        <Route path="/promptops" element={<Navigate to="/app/analytics" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/app/analytics" replace />} />
+        <Route path="/events"    element={<Navigate to="/app/analytics" replace />} />
         <Route path="/benchmark" element={<Navigate to="/app/compare" replace />} />
       </Routes>
     </BrowserRouter>

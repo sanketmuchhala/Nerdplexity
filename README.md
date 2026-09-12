@@ -6,7 +6,7 @@ The project is being developed toward chat, files, model comparisons, and option
 
 ## Current state
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, optional bounded tools, run history, and analytics pages. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs.
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, optional bounded tools, run history, and local analytics. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs.
 
 The Models page can stream Ollama pull progress and remove an installed model. Compare sends one frozen context snapshot to two explicitly selected models through the normal run engine, saves both results, labels measured and estimated metrics, and can continue either result in chat.
 
@@ -102,25 +102,26 @@ Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/
 
 Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends a request on its own only when the model never started: a rate limit that asks to wait 10 seconds or less (at most twice), or a model that rejects the temperature setting. Both are shown in the chat. Longer waits are shown with the time to wait.
 
-Run history records queue time, time to first text, total time, reported token usage, finish reason, errors, and reasoning when the model reports it.
+Run history records origin, state, queue time, time to first text, total and model time, runtime-reported load time, reported token usage, finish reason, errors, tools, and reasoning when the model reports it. Generation rate is shown only for completed runs without tools when the timing and output token count are available. Context utilization uses the frozen input budget and provider-reported prompt usage.
+
+Analytics is calculated in the browser from those same saved run records. It shows outcome and model rollups, latency percentiles, metric coverage, explicit helpful/unhelpful ratings, and estimated hosted cost only where a provider catalog price was captured before the run. It does not assign factual-quality, groundedness, or hallucination scores. Historical runs without enough evidence remain unmeasured.
 
 ## App routes
 
-- `/`: landing page.
-- `/app`: chat and settings.
+- `/`: redirects to the workbench.
+- `/app`: chat; generation settings open per thread.
 - `/app/models`: model catalog and Ollama management.
 - `/app/connections`: local runtime and hosted provider connections, and the Exa key for web search.
 - `/app/workspace`: persistent text documents for the Documents tool.
 - `/app/runs`: run history.
 - `/app/compare`: persisted side-by-side model comparisons.
-- `/app/analytics`: analytics navigation.
-- `/app/analytics/dashboard`: metrics.
-- `/app/analytics/events`: event history.
+- `/app/analytics`: run analytics derived from browser storage.
+- `/app/analytics/dashboard` and `/app/analytics/events`: redirect to `/app/analytics`.
 - `/app/analytics/benchmark`: redirects to `/app/compare`.
 
 ## Data and credentials
 
-Threads, attachments, comparisons, settings, connections, and analytics live in browser IndexedDB. API keys are kept for the current tab session unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. Keys saved by earlier versions were migrated as remembered keys; use **Forget key** to remove one. Keys are sent to the local backend in request bodies, never in URLs.
+Threads, attachments, comparisons, settings, connections, runs, feedback, and the source data for analytics live in browser IndexedDB. Analytics is derived locally and is not sent to a telemetry service. The workbench does not load fonts or analytics scripts from third parties. API keys are kept for the current tab session unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. Keys saved by earlier versions were migrated as remembered keys; use **Forget key** to remove one. Keys are sent to the local backend in request bodies, never in URLs. Thread, comparison, and run exports omit credentials and connection destinations; run exports also omit backend recovery identifiers.
 
 Text/code attachments are limited to 100 KB each. Images are limited to PNG, JPEG, WebP, or GIF, 2 MB each and four per thread; all attachments together are limited to 5 MB. Images can be sent only when the selected catalog entry confirms vision support. Attachments are visible and removable before a run. Thread and comparison exports include their source context but omit credentials and connection destinations.
 
@@ -136,6 +137,7 @@ Do not commit keys or personal conversation exports.
 - `tests/browser`: browser regression tests.
 - `plan/implementation-plan.md`: current workbench plan.
 - `plan/baseline.md`: setup and validation evidence.
+- `plan/release-verification.md`: release acceptance evidence and untested live integrations.
 
 ## License
 

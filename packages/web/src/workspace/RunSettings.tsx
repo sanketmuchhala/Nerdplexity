@@ -42,6 +42,7 @@ export function RunSettings({
     draft,
     model,
     connection,
+    conversation?.attachments,
   );
   useEffect(() => {
     const sub = liveQuery(() => db.presets.orderBy('name').toArray()).subscribe(

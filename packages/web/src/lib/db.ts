@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
-import type { Connection, ConnectionKind, ModelRef, ProviderErrorCategory, RateLimitState, ToolTrace } from '@app/types';
+import type { Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -24,7 +24,7 @@ export interface RunRecord {
   status: RunStatus; mode: 'chat' | 'agent';
   output: string; reasoning?: string;
   error?: string; errorCategory?: ProviderErrorCategory; retryAfterMs?: number;
-  ttftMs?: number; queuedMs?: number; finishReason?: string;
+  ttftMs?: number; queuedMs?: number; loadMs?: number; finishReason?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   tools: ToolTrace[];
   /** Server run ID, start key, and last applied event, used to reattach after a reload. */
@@ -36,6 +36,14 @@ export interface RunRecord {
   /** Immutable, credential-free request context and configured settings. */
   input?: InputSnapshot;
   notices?: string[];
+  /** Immutable catalog pricing metadata captured before the request. */
+  pricing?: {
+    execution: ExecutionLocation;
+    classification: PricingClass;
+    inputPerMillion?: number;
+    outputPerMillion?: number;
+    catalogCheckedAt: number;
+  };
 }
 
 export interface ComparisonSide {
@@ -92,6 +100,8 @@ export interface Message {
   /** Set when an assistant message is a partial answer from a run that did not complete. */
   runStatus?: 'canceled' | 'failed' | 'interrupted';
   finishReason?: string;
+  /** Explicit feedback from the user. It is never inferred from run metrics. */
+  feedback?: 'helpful' | 'unhelpful';
 }
 
 export interface Conversation {

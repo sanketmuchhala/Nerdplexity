@@ -53,12 +53,15 @@ export function Compare({ onChat }: { onChat: () => void }) {
   const runSide = async (comparison: ComparisonRecord, index: 0 | 1) => {
     const side = comparison.sides[index];
     const connection = connectionState.connections.find(item => item.id === side.connectionId)!;
+    const discovery = latestResult(connectionState.catalog[connection.id]);
+    const descriptor = discovery?.ok ? discovery.models.find(item => item.id === side.modelId) : undefined;
     const controller = new AbortController();
     controllers.current.push(controller);
     const record: RunRecord = {
       id: uuidv4(), conversationId: comparison.sourceConversationId ?? `comparison:${comparison.id}`, connectionId: side.connectionId,
       provider: connection.name, model: side.modelId, prompt: comparison.prompt, startedAt: Date.now(), durationMs: 0,
       status: 'running', mode: 'chat', output: '', reasoning: '', tools: [], input: structuredClone(comparison.input), notices: [], idempotencyKey: uuidv4(), lastSeq: 0,
+      ...(discovery?.ok ? { pricing: { execution: discovery.execution, classification: discovery.execution === 'local' ? 'local' as const : descriptor?.pricing ?? 'unknown' as const, ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}), catalogCheckedAt: discovery.checkedAt } } : {}),
     };
     side.runRecordId = record.id;
     await db.runs.put(record);
@@ -85,7 +88,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
   const finishSide = (side: ComparisonSide, record: RunRecord, terminal: TerminalPayload) => {
     side.status = terminal.type; side.durationMs = terminal.timing.durationMs; side.queuedMs = terminal.timing.queuedMs; side.ttftMs = terminal.timing.ttftMs;
     record.status = terminal.type; record.durationMs = terminal.timing.durationMs; record.ttftMs = terminal.timing.ttftMs; record.queuedMs = terminal.timing.queuedMs;
-    if (terminal.type === 'completed') { side.usage = terminal.usage; side.loadMs = terminal.loadMs; record.usage = terminal.usage; record.finishReason = terminal.finishReason; }
+    if (terminal.type === 'completed') { side.usage = terminal.usage; side.loadMs = terminal.loadMs; record.usage = terminal.usage; record.loadMs = terminal.loadMs; record.finishReason = terminal.finishReason; }
     if (terminal.type === 'failed') { side.error = terminal.error.message; record.error = terminal.error.message; record.errorCategory = terminal.error.category; }
   };
 
