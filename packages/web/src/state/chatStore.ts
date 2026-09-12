@@ -1,7 +1,17 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { db, Conversation, Message, AppSettings, Provider } from '../lib/db';
-import { getDefaultModelForProvider } from '../constants/models';
+import type { ModelRef } from '@app/types';
+import { db, Conversation, Message, AppSettings, Provider, legacyProvider, type ThreadAttachment } from '../lib/db';
+import useConnections from './connections';
+import { parseConversation, settingsErrors, workbenchSettings, type Preset, type WorkbenchSettings } from '../lib/workbench';
+
+/** Legacy provider label for a connection, for screens that still read `provider`. */
+const providerFor = (connectionId: string | undefined, fallback: Provider): Provider => {
+  const connection = useConnections.getState().connections.find(c => c.id === connectionId);
+  return connection ? legacyProvider(connection.kind) : fallback;
+};
+
+type MessageExtra = Partial<Pick<Message, 'provenance' | 'runId' | 'runStatus' | 'finishReason'>>;
 
 interface ChatStore {
   // State
@@ -9,24 +19,30 @@ interface ChatStore {
   activeConversationId: string | null;
   settings: AppSettings | null;
   isLoading: boolean;
-  
+
   // Computed getters
   activeConversation: () => Conversation | null;
-  
+
   // Actions
   loadConversations: () => Promise<void>;
   loadSettings: () => Promise<void>;
   newConversation: (defaults?: Partial<Conversation>) => Promise<void>;
   selectConversation: (id: string) => void;
-  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }) => Promise<void>;
+  addMessage: (role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata'], conversationId?: string, extra?: MessageExtra) => Promise<void>;
+  setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
+  setAllowCharges: (id: string, allow: boolean) => Promise<void>;
+  setWorkbench: (id: string, settings: WorkbenchSettings) => Promise<void>;
+  applyPreset: (preset: Preset) => Promise<void>;
+  forkConversation: (id: string, beforeMessageId: string) => Promise<void>;
+  importThread: (text: string) => Promise<void>;
+  addAttachment: (conversationId: string, attachment: ThreadAttachment) => Promise<void>;
+  removeAttachment: (conversationId: string, attachmentId: string) => Promise<void>;
+  setMessageFeedback: (conversationId: string, messageId: string, feedback?: Message['feedback']) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   updateConversationSettings: (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
-  setApiKey: (provider: Provider, key: string) => Promise<void>;
-  getApiKey: (provider: Provider) => string;
-  testApiKey: (provider: Provider, model?: string) => Promise<{ ok: boolean; message?: string }>;
-  
+
   // Helper methods
   persistActiveIfDirty: () => Promise<void>;
   getCurrentProvider: () => Provider;
@@ -39,13 +55,13 @@ const useChat = create<ChatStore>((set, get) => ({
   activeConversationId: null,
   settings: null,
   isLoading: false,
-  
+
   // Computed getters
   activeConversation: () => {
     const state = get();
     return state.conversations.find(c => c.id === state.activeConversationId) || null;
   },
-  
+
   // Load conversations from IndexedDB
   loadConversations: async () => {
     try {
@@ -55,7 +71,7 @@ const useChat = create<ChatStore>((set, get) => ({
       console.error('Failed to load conversations:', error);
     }
   },
-  
+
   // Load settings from IndexedDB
   loadSettings: async () => {
     try {
@@ -67,27 +83,29 @@ const useChat = create<ChatStore>((set, get) => ({
       console.error('Failed to load settings:', error);
     }
   },
-  
+
   // Create new conversation
-  newConversation: async (defaults = {}) => {    
+  newConversation: async (defaults = {}) => {
     // Persist current conversation if it has changes
     await get().persistActiveIfDirty();
-    
+
     const id = uuidv4();
-    const currentProvider = get().getCurrentProvider();
-    
+    // New threads use the chosen model; with none chosen, the thread waits for a selection.
+    const active = get().settings?.activeModel;
+
     const conversation: Conversation = {
       id,
       title: "New chat",
-      provider: currentProvider,
-      model: getDefaultModelForProvider(currentProvider),
+      provider: providerFor(active?.connectionId, get().getCurrentProvider()),
+      model: active?.modelId || '',
+      connectionId: active?.connectionId,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messages: [],
       settings: get().getDefaultSettings(),
       ...defaults
     };
-    
+
     try {
       await db.conversations.put(conversation);
       set(state => ({
@@ -95,81 +113,175 @@ const useChat = create<ChatStore>((set, get) => ({
         activeConversationId: id
       }));
     } catch (error) {
-      console.error('Failed to create new conversation:', error);
+      throw new Error('Unable to save the new thread. Check browser storage.');
     }
   },
-  
+
   // Select conversation by ID
   selectConversation: (id: string) => {
     set({ activeConversationId: id });
   },
-  
+
   // Add message to active conversation
-  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: { webSearchResults?: import('../lib/db').WebSearchResult[]; reasoning?: string }) => {
+  addMessage: async (role: 'user' | 'assistant' | 'system', content: string, metadata?: Message['metadata'], conversationId?: string, extra?: MessageExtra) => {
     const state = get();
-    const activeConv = state.activeConversation();
-    
+    const activeConv = conversationId ? state.conversations.find(c => c.id === conversationId) : state.activeConversation();
+
     if (!activeConv) {
       console.error('No active conversation');
       return;
     }
-    
+
     const message: Message = {
       id: uuidv4(),
       role,
       content,
       createdAt: Date.now(),
-      ...(metadata && { metadata })
+      ...(metadata && { metadata }),
+      ...extra
     };
-    
+
     const updatedConversation: Conversation = {
       ...activeConv,
       messages: [...activeConv.messages, message],
       updatedAt: Date.now(),
       // Auto-generate title from first user message
-      title: activeConv.messages.length === 0 && role === 'user' 
+      title: activeConv.title === 'New chat' && activeConv.messages.length === 0 && role === 'user'
         ? content.slice(0, 50) + (content.length > 50 ? '...' : '')
         : activeConv.title
     };
-    
+
     try {
       await db.conversations.put(updatedConversation);
       set(state => ({
-        conversations: state.conversations.map(c => 
+        conversations: state.conversations.map(c =>
           c.id === activeConv.id ? updatedConversation : c
         )
       }));
     } catch (error) {
-      console.error('Failed to add message:', error);
+      throw new Error('Unable to save the message. Check browser storage.');
     }
   },
-  
+
   // Update conversation title
   updateConversationTitle: async (id: string, title: string) => {
     const state = get();
     const conversation = state.conversations.find(c => c.id === id);
-    
+
     if (!conversation) return;
-    
+
     const updated = { ...conversation, title, updatedAt: Date.now() };
-    
+
     try {
       await db.conversations.put(updated);
       set(state => ({
         conversations: state.conversations.map(c => c.id === id ? updated : c)
       }));
     } catch (error) {
-      console.error('Failed to update conversation title:', error);
+      throw new Error('Unable to save the thread title. Check browser storage.');
     }
   },
-  
+
+  // Point a thread at a connection and model for its next run. History keeps its provenance.
+  setConversationModel: async (id: string, ref: ModelRef) => {
+    const conversation = get().conversations.find(c => c.id === id);
+    if (!conversation) return;
+    const updated: Conversation = {
+      ...conversation,
+      connectionId: ref.connectionId,
+      model: ref.modelId,
+      provider: providerFor(ref.connectionId, conversation.provider),
+      updatedAt: Date.now()
+    };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
+  },
+
+  setAllowCharges: async (id: string, allow: boolean) => {
+    const conversation = get().conversations.find(c => c.id === id);
+    if (!conversation) return;
+    const updated: Conversation = { ...conversation, allowCharges: allow, updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
+  },
+
+  setWorkbench: async (id, settings) => {
+    if (settingsErrors(settings).length) throw new Error(settingsErrors(settings)[0]);
+    const conversation = get().conversations.find(c => c.id === id);
+    if (!conversation) throw new Error('This thread is no longer available.');
+    const updated = { ...conversation, workbench: structuredClone(settings), updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
+  },
+
+  applyPreset: async preset => {
+    if (settingsErrors(preset.settings).length) throw new Error(settingsErrors(preset.settings)[0]);
+    if (!useConnections.getState().connections.some(c => c.id === preset.model.connectionId)) throw new Error('This preset’s connection was removed. Choose another model and save a new preset.');
+    if (!get().activeConversation()) await get().newConversation();
+    const conversation = get().activeConversation();
+    if (!conversation) throw new Error('Unable to create a thread.');
+    const updated: Conversation = { ...conversation, connectionId: preset.model.connectionId, model: preset.model.modelId,
+      provider: providerFor(preset.model.connectionId, conversation.provider), workbench: structuredClone(preset.settings), updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === updated.id ? updated : c) }));
+  },
+
+  forkConversation: async (id, beforeMessageId) => {
+    const conversation = get().conversations.find(c => c.id === id);
+    const index = conversation?.messages.findIndex(m => m.id === beforeMessageId) ?? -1;
+    if (!conversation || index < 0) throw new Error('The source message is no longer available.');
+    await get().newConversation({
+      title: `${conversation.title.slice(0, 170)} (branch)`, model: conversation.model, connectionId: conversation.connectionId,
+      provider: conversation.provider, settings: structuredClone(conversation.settings),
+      workbench: structuredClone(workbenchSettings(conversation, get().settings)),
+      messages: structuredClone(conversation.messages.slice(0, index)), branchOf: { conversationId: id, messageId: beforeMessageId },
+      attachments: structuredClone(conversation.attachments ?? []),
+      // A new branch does not inherit permission to charge an account.
+      allowCharges: false,
+    });
+  },
+
+  importThread: async text => {
+    const imported = parseConversation(text);
+    // Imported IDs and model destinations cannot overwrite or auto-route a local thread.
+    await get().newConversation({ ...imported, connectionId: undefined, model: '', allowCharges: false });
+  },
+
+  addAttachment: async (conversationId, attachment) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) throw new Error('Create a thread before attaching a file.');
+    const updated = { ...conversation, attachments: [...(conversation.attachments ?? []), attachment], updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
+  },
+
+  removeAttachment: async (conversationId, attachmentId) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) return;
+    const updated = { ...conversation, attachments: (conversation.attachments ?? []).filter(file => file.id !== attachmentId), updatedAt: Date.now() };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
+  },
+
+  setMessageFeedback: async (conversationId, messageId, feedback) => {
+    const conversation = get().conversations.find(c => c.id === conversationId);
+    if (!conversation) throw new Error('This thread is no longer available.');
+    const updated: Conversation = {
+      ...conversation,
+      messages: conversation.messages.map(message => message.id === messageId ? { ...message, feedback } : message),
+      updatedAt: Date.now(),
+    };
+    await db.conversations.put(updated);
+    set(state => ({ conversations: state.conversations.map(item => item.id === conversationId ? updated : item) }));
+  },
+
   // Update conversation settings (provider, model, etc.)
   updateConversationSettings: async (id: string, updates: Partial<Pick<Conversation, 'provider' | 'model'> & Conversation['settings']>) => {
     const state = get();
     const conversation = state.conversations.find(c => c.id === id);
-    
+
     if (!conversation) return;
-    
+
     const updated: Conversation = {
       ...conversation,
       provider: updates.provider || conversation.provider,
@@ -182,7 +294,7 @@ const useChat = create<ChatStore>((set, get) => ({
       },
       updatedAt: Date.now()
     };
-    
+
     try {
       await db.conversations.put(updated);
       set(state => ({
@@ -192,7 +304,7 @@ const useChat = create<ChatStore>((set, get) => ({
       console.error('Failed to update conversation settings:', error);
     }
   },
-  
+
   // Delete conversation
   deleteConversation: async (id: string) => {
     try {
@@ -205,79 +317,33 @@ const useChat = create<ChatStore>((set, get) => ({
       console.error('Failed to delete conversation:', error);
     }
   },
-  
+
   // Save settings
   saveSettings: async (partial: Partial<AppSettings>) => {
     const state = get();
     const currentSettings = state.settings;
-    
+
     if (!currentSettings) return;
-    
-    const updatedSettings = { ...currentSettings, ...partial };
-    
+
     try {
-      await db.settings.put(updatedSettings);
+      // Publish the value only after it is durable. Merge against storage so independent saves do not overwrite each other.
+      const updatedSettings = await db.transaction('rw', db.settings, async () => {
+        const stored = await db.settings.get(currentSettings.id!);
+        const updated = { ...(stored ?? currentSettings), ...partial };
+        await db.settings.put(updated);
+        return updated;
+      });
       set({ settings: updatedSettings });
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
   },
-  
-  // Set API key for provider
-  setApiKey: async (provider: Provider, key: string) => {
-    const state = get();
-    if (!state.settings) return;
-    
-    const updatedApiKeys = { ...state.settings.apiKeys, [provider]: key };
-    await get().saveSettings({ apiKeys: updatedApiKeys });
-  },
-  
-  // Get API key for provider
-  getApiKey: (provider: Provider) => {
-    const state = get();
-    return state.settings?.apiKeys[provider] || '';
-  },
-  
-  // Test API key
-  testApiKey: async (provider: Provider, model?: string) => {
-    const apiKey = get().getApiKey(provider);
-    
-    if (!apiKey) {
-      return { ok: false, message: 'No API key provided' };
-    }
-    
-    try {
-      let response: Response;
-      
-      // Use specific GET endpoint for DeepSeek
-      if (provider === 'deepseek') {
-        response = await fetch(`/v1/ping?provider=deepseek&api_key=${encodeURIComponent(apiKey)}`);
-      } else {
-        // Use existing POST endpoint for other providers
-        response = await fetch('/v1/ping', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, model, api_key: apiKey })
-        });
-      }
-      
-      const data = await response.json();
-      
-      if (response.ok && data.ok) {
-        return { ok: true, message: data.message || `API key valid for ${provider}` };
-      } else {
-        return { ok: false, message: data.message || 'API key test failed' };
-      }
-    } catch (error) {
-      return { ok: false, message: 'Network error testing API key' };
-    }
-  },
-  
+
   // Helper: persist active conversation if it has unsaved changes
   persistActiveIfDirty: async () => {
     const state = get();
     const activeConv = state.activeConversation();
-    
+
     if (activeConv && activeConv.messages.length > 0) {
       try {
         await db.conversations.put(activeConv);
@@ -286,19 +352,19 @@ const useChat = create<ChatStore>((set, get) => ({
       }
     }
   },
-  
+
   // Helper: get current provider from settings
   getCurrentProvider: (): Provider => {
-    const state = get();
-    return state.settings?.selectedProvider || 'openai';
+    const settings = get().settings;
+    return providerFor(settings?.activeModel?.connectionId, settings?.selectedProvider || 'local-ollama');
   },
-  
+
   // Helper: get default settings
   getDefaultSettings: () => {
     const state = get();
     return {
-      temperature: state.settings?.temperature || 0.7,
-      max_tokens: state.settings?.max_tokens || 4000,
+      temperature: state.settings?.temperature ?? 0.7,
+      max_tokens: state.settings?.max_tokens ?? 2048,
       web_enabled: state.settings?.web_enabled || false
     };
   }

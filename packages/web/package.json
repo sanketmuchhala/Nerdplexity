@@ -3,16 +3,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5173",
+    "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "npm run ci:no-emoji",
     "ci:no-emoji": "node ../../scripts/no-emoji-check.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@app/types": "workspace:*",
+    "@lobehub/icons-static-svg": "1.95.0",
     "@types/uuid": "^10.0.0",
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.0.3"
+    "@vitejs/plugin-react": "^4.0.3",
+    "fake-indexeddb": "^6.2.5"
   }
 }

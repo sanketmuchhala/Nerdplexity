@@ -1,3 +1,5 @@
+> Historical proposal, superseded on 2026-09-10 by [the Nerdplexity workbench plan](implementation-plan.md). This document contains unrelated Merchant branding and incorrect implementation assumptions. Use the linked plan for current work.
+
 # 1) Phase 2 Summary
 - **Goal statement**: Redesign the existing LLM Observability dashboard into a modern, Merchant Blue-anchored interface with improved grid layouts, clear component separation, and functional real-time metrics polling.
 - **What stays unchanged**: Multi-provider LLM support, API key input, model selection, streaming chat, and the existing routing flows (e.g., `/chat`, `/settings`, and core prompt engineering logic).

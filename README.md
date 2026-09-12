@@ -1,351 +1,144 @@
 # Nerdplexity
-### *Master Your AI Conversations with Intelligent Analytics*
 
-> **Stop shooting in the dark with AI prompts.** Nerdplexity gives you X-ray vision into your conversations, real-time performance insights, and data-driven optimization recommendations.
+A local-first model workbench for connecting local runtimes and online providers with your own API keys.
 
-**Finally understand what makes your prompts work — and what doesn't.**
+The project is being developed toward chat, files, model comparisons, and optional tools. See the [implementation plan](plan/implementation-plan.md) for the agreed scope and delivery phases.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-brightgreen?style=for-the-badge" alt="Production Ready">
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License">
-  <img src="https://img.shields.io/badge/Privacy-Local%20First-success?style=for-the-badge" alt="Local First">
-</p>
+## Current state
 
-<p align="center">
-  <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
-  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js">
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite">
-</p>
+The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, optional bounded tools, run history, and local analytics. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs. The interface uses the Nerdplexity black-and-green identity (logo kit in `logo/`), with brand logos for models in the catalog and on chat answers.
 
-## See Your AI Performance in Real-Time
+The Models page can stream Ollama pull progress and remove an installed model. Compare sends one frozen context snapshot to two explicitly selected models through the normal run engine, saves both results, labels measured and estimated metrics, and can continue either result in chat.
 
-<details>
-<summary><b>Analytics Dashboard - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Nerdplexity Analytics Dashboard showing real-time prompt performance metrics, latency patterns, and quality analysis" src="https://github.com/user-attachments/assets/914cfd84-2f4a-42c6-8f26-dc93cb1d7ba5" />
-</details>
+Tools are off by default and enabled per thread from the composer: **Calculator** (exact arithmetic computed by the app, available on any model) and **Documents** (search and read your Workspace documents, only on models on this machine), and **Web** (search the web with Exa using your own Exa key, entered under Connections; search queries go to Exa even when the model is local). Tool calls stream through the same run engine for every provider, are limited to 6 model steps and 12 tool calls, and each call's exact input and result is shown with the answer and in Run history, separate from the model's text. No tool changes anything outside the app. MCP connections are planned work.
 
-<details>
-<summary><b>Clean Chat Interface - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Nerdplexity's distraction-free chat interface with intelligent prompt engineering features" src="https://github.com/user-attachments/assets/53aa45b1-b9c9-4c29-8f9b-875065061b3d" />
-</details>
+Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
 
-<details>
-<summary><b>Performance Monitoring - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Live system metrics showing CPU, memory usage, and model performance optimization" src="https://github.com/user-attachments/assets/2e95cd66-0875-4d7f-86e7-3b2bf9410720" />
-</details>
+## Setup
 
-<details>
-<summary><b>Universal Provider Support - Click to expand</b></summary>
-<img width="1680" height="1050" alt="Support for OpenAI, Anthropic, Google, DeepSeek, and local Ollama models" src="https://github.com/user-attachments/assets/49017d28-fba2-4d98-8c19-4e8ffd5e63ff" />
-</details>
+Requirements: Node.js (the package declares `>=18`) and pnpm 9.0.0. Ollama is optional.
 
-## The Problem with AI Today
-
-Most developers and researchers waste **thousands of dollars** and **countless hours** on AI because they:
-- **Guess** what makes prompts work instead of measuring
-- **Repeat** the same expensive mistakes over and over
-- **Miss** performance bottlenecks that slow down their workflow
-- **Overspend** on premium models when cheaper ones would work
-
-## The Nerdplexity Solution
-
-**Turn AI experimentation into a data-driven science.** Get real-time insights that tell you exactly what's working, what's not, and how to optimize everything.
-
-### Analytics That Actually Matter
-
-```
-Latency Analysis     → Find your speed bottlenecks in real-time
-Cost Optimization    → Track spending per useful response
-Quality Metrics      → Measure success rates across approaches
-Performance Tuning   → Optimize for your specific hardware
-A/B Testing         → Compare prompt variations with hard data
-Historical Trends    → Learn from weeks of conversation data
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-### Features That Save You Time & Money
+If pnpm is not installed, use the pinned version through npm:
 
-| Feature | Benefit | Impact |
-|---------|---------|---------|
-| **Real-time Dashboards** | See performance as you chat | Stop bad prompts immediately |
-| **Smart Model Switching** | Auto-route to optimal providers | 40-60% cost reduction |
-| **Context Bloat Detection** | Prevent expensive token waste | Save hundreds on API calls |
-| **Error Pattern Analysis** | Learn why prompts fail | Improve success rates 2-3x |
-| **Local + Cloud Hybrid** | Privacy + performance | Best of both worlds |
-| **Performance Profiling** | CPU/Memory optimization | 10x faster local inference |
-
-## Why Nerdplexity?
-
-### Thoughtful Design
-- **Minimal, fast UI** — Clean dark interface that gets out of your way
-- **Smooth streaming** — No jarring jumps or scroll issues during responses
-- **Thinking HUD** — See generation progress without cognitive overload
-- **Focus-first** — Everything optimized for deep work and experimentation
-
-### Universal Compatibility
-- **Cloud + Local** — BYOK for OpenAI/Anthropic/Gemini/DeepSeek OR run Ollama locally
-- **Quantized Models** — Optimized for Gemma2:2b (1.6GB), Llama, Mistral on Apple Silicon
-- **Performance Mode** — Ultra-fast responses for rapid iteration
-- **Auto-detection** — Smart provider selection based on model names
-
-### Data-Driven Insights
-- **100% Private** — All analytics data stays in your browser (IndexedDB)
-- **Real-time Metrics** — Live charts update as you chat
-- **Historical Analysis** — Track improvements over weeks and months
-- **Export Capabilities** — Save insights for reports and presentations
-
-### Privacy & Security
-- **Local-first** — No data ever leaves your machine
-- **BYOK principle** — You control your API keys and data
-- **Zero telemetry** — We never see your prompts or responses
-- **Offline capable** — Works completely offline with local models
-
-## Quick Start - Running in 60 Seconds
-
-### Option 1: Instant Setup (Recommended)
-```bash
-# Clone and run
-git clone https://github.com/sanketmuchhala/Project-Green-Lantern.git
-cd Project-Green-Lantern
-pnpm install && pnpm run dev
-
-# Open http://localhost:3000 and start analyzing your prompts!
+```sh
+npm exec --yes --package=pnpm@9.0.0 -- pnpm install --frozen-lockfile
+npm exec --yes --package=pnpm@9.0.0 -- pnpm dev
 ```
 
-### Option 2: Cloud Models (BYOK)
-```bash
-# 1. Get your API keys ready
-#    OpenAI: https://platform.openai.com/api-keys
-#    Anthropic: https://console.anthropic.com/
-#    Google: https://makersuite.google.com/app/apikey
+Open **http://127.0.0.1:5173/app**. The backend runs on **http://127.0.0.1:5174**; its health endpoint is `/health`. Both services bind to loopback by default. Vite forwards `/v1` requests to the backend.
 
-# 2. Add keys in Settings → Provider → [Your choice]
-# 3. Pick your model and start chatting
-# 4. Watch real-time analytics appear as you type
+Cloud-only development does not start or require Ollama. For local inference, start an installed Ollama service separately:
+
+```sh
+pnpm dev:ollama
 ```
 
-### Option 3: Local Models (Privacy + Free)
-```bash
-# Install Ollama for local AI
-brew install ollama  # or: curl -fsSL https://ollama.com/install.sh | sh
-ollama serve &
+To run a second checkout beside another, give it different ports: `WEB_PORT=5273 PORT=5274 pnpm dev`.
 
-# Pull optimized models
-ollama pull gemma2:2b     # 1.6GB - Lightning fast
-ollama pull llama3.2:3b   # 2GB - Best balance
-ollama pull qwen2.5:3b    # 2GB - Code specialist
+Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible endpoint with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models, plus the rate-limit allowance the provider last reported. Listing models does not prove a model can run: use **Check** on a model card to send one short prompt.
 
-# Configure: Settings → Local (Ollama) → Choose model
-# Enable Performance Mode for 3x faster responses
-```
+## Free use
 
-### Pro Tip: Hybrid Setup
-- Use **local models** for rapid prototyping (free, private)
-- Use **cloud models** for production work (highest quality)
-- **Compare them side-by-side** in the analytics dashboard
+Each model shows what is known about its cost: **On this machine** (no hosted fee), **Free model** (the provider's catalog lists it at $0, as OpenRouter does), **Free plan** (you marked the account as having no billing enabled), a catalog price, or **Price unknown**. Nerdplexity cannot read billing settings; the account billing choice on a connection is your statement.
 
-## See It In Action
+Turn on **Free only** in Models to run only models in the first three groups. Anything else, including a model ID typed by hand, is blocked before it is sent, with two choices: pick a free model, or allow charges for that thread. When a free model hits its limit, Nerdplexity suggests other free models; it never switches models or providers on its own.
 
-### 60-Second Demo: From Setup to Insights
+Provider notes: OpenRouter free models are limited per minute and per day, and a negative balance blocks them too. Groq's free plan has per-model request and token limits. On Gemini's free tier, Google may use your prompts to improve its products, and free availability varies by model.
 
-```bash
-# 1. Clone and start (30 seconds)
-git clone https://github.com/sanketmuchhala/Project-Green-Lantern.git
-cd Project-Green-Lantern && pnpm install && pnpm run dev
+## Commands
 
-# 2. Add your API key (10 seconds)
-# Settings → OpenAI → Paste key → Save
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Start backend and frontend |
+| `pnpm dev:server` | Start the backend only |
+| `pnpm dev:web` | Start Vite only |
+| `pnpm dev:ollama` | Start an already-installed Ollama runtime |
+| `pnpm typecheck` | Check all TypeScript packages |
+| `pnpm build` | Build all packages |
+| `pnpm start` | Serve the production build from the backend on port 5174 |
+| `pnpm test` | Run the Playwright browser regression suite |
+| `pnpm -r test` | Run server and web unit tests (Vitest) |
+| `pnpm lint` | Run the existing source emoji policy check |
 
-# 3. Start chatting and watch magic happen (20 seconds)
-# Type: "Explain quantum computing"
-# Watch real-time metrics appear:
-#   TTFT: 1.2s
-#   Quality: 94%
-#   Cost: $0.003
-#   Success: PASS
-```
+Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. Unit tests cover the destination policy, model discovery and streaming per provider, the run engine (ordering, replay, idempotency, cancellation), stream reassembly, and the browser storage migration.
 
-### What You'll See Immediately:
-- **Live performance graphs** updating as you chat
-- **Real-time cost tracking** for every message
-- **Speed analysis** showing exactly where delays happen
-- **Quality scores** based on response completeness
-- **Historical trends** building up as you use it
+If using the npm bootstrap, prefix a command with `npm exec --yes --package=pnpm@9.0.0 --`, for example `npm exec --yes --package=pnpm@9.0.0 -- pnpm test`.
 
-### Power User Features:
-- **A/B test prompts** with statistical significance
-- **Cost optimization** recommendations
-- **Performance mode** for 3x faster local inference
-- **Error pattern analysis** to improve success rates
-- **Export insights** for presentations and reports
+## Browser checks
 
-## Analytics Dashboard Deep Dive
+Install Chromium once:
 
-Visit `/promptscope` in the app to access your **Prompt Analytics Dashboard**:
-
-### Event Latency Timeline
-- Every prompt plotted as individual points
-- See **Time to First Token (TTFT)** vs total response time
-- Identify slow prompts and optimize them
-- Track improvements over time
-
-### Context Bloat Analyzer
-- Monitor prompt tokens as % of total context
-- Detect when conversations get too expensive
-- Find optimal conversation lengths
-- Prevent context window overflows
-
-### Outcome Mix Tracking
-- Success vs Refusal vs Error rates
-- Identify problematic prompt patterns
-- Track safety trigger rates
-- Optimize for higher success rates
-
-### Quality vs Cost Analysis
-- Scatter plots comparing model performance
-- Cost-per-useful-response metrics
-- ROI analysis for different providers
-- Sweet spot identification for your use cases
-
-### Real-time System Metrics
-- **CPU & Memory Usage** - Monitor system load during inference
-- **Ollama Status** - Model loading, GPU utilization
-- **Network Latency** - API response times
-- **Error Monitoring** - Real-time failure detection
-
-### Advanced Analytics
-- **Prompt Engineering Insights** - See what structures work best
-- **Temperature Impact Analysis** - Understand creativity vs consistency
-- **Token Efficiency Metrics** - Cost optimization opportunities
-- **Conversation Flow Analysis** - Multi-turn effectiveness
-
-## Architecture
-
-```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'primaryColor': '#0b0b0b', 'primaryTextColor': '#e5e5e5', 'lineColor': '#666' }}}%%
-flowchart LR
-  A[User] --> B[Nerdplexity UI]
-  B -->|/v1/chat| C[Smart Router]
-  C -->|Cloud keys| D[(Cloud Providers)]
-  C -->|Local HTTP| E[(Ollama)]
-  B -->|Real-time logging| F[(IndexedDB)]
-  F --> G[Analytics Dashboard]
-
-  subgraph Cloud Providers
-    D1[OpenAI GPT-4o]
-    D2[Anthropic Claude]
-    D3[Google Gemini]
-    D4[DeepSeek R1]
-  end
-
-  subgraph Local Stack
-    E1[Gemma2:2b - 1.6GB]
-    E2[Llama 3.2 - 2GB]
-    E3[Mistral 7B - 4GB]
-    E4[Qwen 2.5 - 3GB]
-  end
-
-  D --> D1
-  D --> D2
-  D --> D3
-  D --> D4
-
-  E --> E1
-  E --> E2
-  E --> E3
-  E --> E4
-```
-
-## Installation & Development
-
-### Prerequisites
-- Node.js 18+
-- pnpm (recommended) or npm
-- For local models: Ollama
-
-### Installation
-```bash
-# Clone the repository
-git clone https://github.com/sanketmuchhala/Project-Green-Lantern.git
-cd Project-Green-Lantern
-
-# Install dependencies
-pnpm install
-
-# Start development servers
-pnpm run dev
-
-# Build for production
-pnpm run build
-
-# Run tests
+```sh
+pnpm exec playwright install chromium
 pnpm test
 ```
 
-### Project Structure
+Alternatively, use an installed Google Chrome:
+
+```sh
+PLAYWRIGHT_CHANNEL=chrome pnpm test
 ```
-nerdplexity/
-├── packages/
-│   ├── web/                 # React frontend
-│   │   ├── src/
-│   │   │   ├── components/  # UI components
-│   │   │   ├── promptops/   # Analytics system
-│   │   │   ├── hooks/       # Custom React hooks
-│   │   │   ├── state/       # State management
-│   │   │   └── lib/         # Utilities
-│   │   └── public/          # Static assets
-│   ├── server/              # Node.js backend
-│   │   ├── src/
-│   │   │   ├── providers/   # AI provider adapters
-│   │   │   ├── routes/      # API endpoints
-│   │   │   └── services/    # Business logic
-│   │   └── dist/            # Compiled output
-│   └── types/               # Shared TypeScript types
-├── docs/                    # Documentation
-├── quantization-setup.md    # Local model optimization guide
-└── README.md               # You are here
+
+Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, streaming and interruption behavior, inline model switching, settings snapshots and retries, presets, branches, explicit context trimming, safe thread import/export, attachments, identical comparison context, saved-result continuation, Ollama management controls, calculator and document tool loops with malformed tool arguments, theme persistence, dialog focus, mobile navigation, and responsive layouts.
+
+Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
+
+With `pnpm dev` already running, capture the UI using synthetic events:
+
+```sh
+node scripts/capture-baseline.mjs
+# Or use installed Chrome:
+PLAYWRIGHT_CHANNEL=chrome node scripts/capture-baseline.mjs
 ```
+
+Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/baseline.md) for results and known gaps.
+
+## How runs work
+
+Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends a request on its own only when the model never started: a rate limit that asks to wait 10 seconds or less (at most twice), or a model that rejects the temperature setting. Both are shown in the chat. Longer waits are shown with the time to wait.
+
+Run history records origin, state, queue time, time to first text, total and model time, runtime-reported load time, reported token usage, finish reason, errors, tools, and reasoning when the model reports it. Generation rate is shown only for completed runs without tools when the timing and output token count are available. Context utilization uses the frozen input budget and provider-reported prompt usage.
+
+Analytics is calculated in the browser from those same saved run records. It shows outcome and model rollups, latency percentiles, metric coverage, explicit helpful/unhelpful ratings, and estimated hosted cost only where a provider catalog price was captured before the run. It does not assign factual-quality, groundedness, or hallucination scores. Historical runs without enough evidence remain unmeasured.
+
+## App routes
+
+- `/`: redirects to the workbench.
+- `/app`: chat; generation settings open per thread.
+- `/app/models`: model catalog and Ollama management.
+- `/app/connections`: local runtime and hosted provider connections, and the Exa key for web search.
+- `/app/workspace`: persistent text documents for the Documents tool.
+- `/app/runs`: run history.
+- `/app/compare`: persisted side-by-side model comparisons.
+- `/app/analytics`: run analytics derived from browser storage.
+- `/app/analytics/dashboard` and `/app/analytics/events`: redirect to `/app/analytics`.
+- `/app/analytics/benchmark`: redirects to `/app/compare`.
+
+## Data and credentials
+
+Threads, attachments, comparisons, settings, connections, runs, feedback, and the source data for analytics live in browser IndexedDB. Analytics is derived locally and is not sent to a telemetry service. The workbench does not load fonts or analytics scripts from third parties. API keys are kept for the current tab session unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. Keys saved by earlier versions were migrated as remembered keys; use **Forget key** to remove one. Keys are sent to the local backend in request bodies, never in URLs. Thread, comparison, and run exports omit credentials and connection destinations; run exports also omit backend recovery identifiers.
+
+Text/code attachments are limited to 100 KB each. Images are limited to PNG, JPEG, WebP, or GIF, 2 MB each and four per thread; all attachments together are limited to 5 MB. Images can be sent only when the selected catalog entry confirms vision support. Attachments are visible and removable before a run. Thread and comparison exports include their source context but omit credentials and connection destinations.
+
+Requests to an online connection send your messages through the local backend to that provider. Hosted providers are pinned to their official endpoints. Custom endpoints must use https unless they are on this machine. Document tools run only on models on this machine; documents are never sent to remote endpoints. Web search sends your search queries, not your conversation, to Exa.
+
+Do not commit keys or personal conversation exports.
+
+## Repository
+
+- `packages/web`: React, Vite, Zustand, and Dexie frontend.
+- `packages/server`: Express routes, provider adapters, local queue, and metrics.
+- `packages/types`: shared TypeScript contracts.
+- `tests/browser`: browser regression tests.
+- `plan/implementation-plan.md`: current workbench plan.
+- `plan/baseline.md`: setup and validation evidence.
+- `plan/release-verification.md`: release acceptance evidence and untested live integrations.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for full details.
-
-## Acknowledgments
-
-- **Ollama** for making local AI accessible
-- **OpenAI, Anthropic, Google** for excellent APIs
-- **React & TypeScript** communities for great tools
-- **All contributors** who make this project better
-
----
-
-## Ready to Stop Guessing and Start Measuring?
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Star%20this%20repo-yellow?style=for-the-badge&logo=github" alt="Star this repo">
-  <img src="https://img.shields.io/badge/Contribute-blue?style=for-the-badge" alt="Contribute">
-  <img src="https://img.shields.io/badge/Join%20Community-green?style=for-the-badge" alt="Join Community">
-</p>
-
-### Turn Your AI Experiments Into a Science
-
-```bash
-# Stop wasting money on bad prompts
-git clone https://github.com/sanketmuchhala/Project-Green-Lantern.git
-cd Project-Green-Lantern && pnpm install && pnpm run dev
-
-# Start measuring what actually works
-# Join thousands of developers already using Nerdplexity
-```
-
-<p align="center">
-  <strong>Experience the future of prompt engineering.</strong><br>
-  <em>Data-driven AI optimization starts here.</em>
-</p>
-
----
-
-<p align="center">
-  Made with care by <a href="https://github.com/sanketmuchhala">Sanket Muchhala</a><br>
-  <em>Building tools for the AI-first future</em>
-</p>
+[MIT](LICENSE).
