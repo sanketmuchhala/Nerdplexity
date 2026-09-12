@@ -793,7 +793,7 @@ export function ChatWorkspace({
                 disabled={run.running}
                 onClick={() => attachmentInput.current?.click()}
               >
-                <Paperclip size={13} /> Attach
+                <Paperclip size={13} /> <span className="np-mode-label">Attach</span>
               </button>
               <input
                 ref={attachmentInput}
@@ -840,7 +840,7 @@ export function ChatWorkspace({
                   onClick={() => void toggleTool(tool)}
                 >
                   <Icon size={13} />
-                  {name}
+                  <span className="np-mode-label">{name}</span>
                 </button>
               ))}
             </div>

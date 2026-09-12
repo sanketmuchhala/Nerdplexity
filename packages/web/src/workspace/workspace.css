@@ -122,10 +122,16 @@
 .np-composer:focus-within { border-color: rgba(var(--np-accent-rgb), 0.439); box-shadow: 0 0 0 3px rgba(var(--np-accent-rgb), 0.020), 0 8px 35px #00000014; }
 .np-composer textarea { display: block; width: 100%; padding: 19px 19px 6px; border: none; resize: none; line-height: 1.7; font-size: 13px; outline: none!important; min-height: 77px; }
 .np-composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 11px; gap: 8px; }
-.np-composer-modes { display: flex; align-items: center; gap: 5px; }
+.np-composer-modes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
 .np-mode { display: flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; color: var(--np-muted); font-size: 10px!important; }
 .np-mode.selected { color: var(--np-text); background: rgba(var(--np-accent-rgb), 0.055); border-color: rgba(var(--np-accent-rgb), 0.110); }
-.np-composer-send { display: flex; align-items: center; gap: 15px; }
+.np-composer-send { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+/* Phones: tool buttons show icons only; the label stays available to screen readers. */
+@media (max-width: 480px) {
+  .np-composer-modes .np-mode-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .np-composer-modes .np-mode { padding: 6px 8px; }
+  .np-composer-send { gap: 10px; }
+}
 .np-local-label { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--np-muted); }
 .np-local-label i { width: 4px; height: 4px; border-radius: 50%; background: var(--np-accent); }
 .np-send { height: 30px; width: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--np-accent); color: var(--np-raised); }

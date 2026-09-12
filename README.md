@@ -1,144 +1,153 @@
-# Nerdplexity
+<div align="center">
 
-A local-first model workbench for connecting local runtimes and online providers with your own API keys.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="logo/svg/nerdplexity-lockup-on-dark.svg">
+  <img alt="Nerdplexity" src="logo/svg/nerdplexity-lockup-on-light.svg" width="380">
+</picture>
 
-The project is being developed toward chat, files, model comparisons, and optional tools. See the [implementation plan](plan/implementation-plan.md) for the agreed scope and delivery phases.
+### Your models. Your keys. One local workbench.
 
-## Current state
+Chat with models on your machine and with online providers using your own API keys.<br>
+Switch and compare models, give them bounded tools, and see exactly what every run did.
 
-The app has browser-persisted threads, a connections-based model catalog, streaming chat for every connection type (Ollama, OpenAI-compatible endpoints, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq), free-use controls, optional bounded tools, run history, and local analytics. The chat workbench supports inline model switching, reusable model/settings presets, per-thread system instructions, explicit context budgets, request previews, immutable run snapshots, branches, regeneration, portable thread export/import, bounded text/code and compatible-model image attachments, search, light/dark themes, and responsive keyboard-accessible dialogs. The interface uses the Nerdplexity black-and-green identity (logo kit in `logo/`), with brand logos for models in the catalog and on chat answers.
+[![CI](https://github.com/sanketmuchhala/Nerdplexity/actions/workflows/ci.yml/badge.svg)](https://github.com/sanketmuchhala/Nerdplexity/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-b5df98)](LICENSE)
+![Node 18+](https://img.shields.io/badge/node-%3E%3D18-487130)
+![pnpm 9](https://img.shields.io/badge/pnpm-9.0.0-487130)
 
-The Models page can stream Ollama pull progress and remove an installed model. Compare sends one frozen context snapshot to two explicitly selected models through the normal run engine, saves both results, labels measured and estimated metrics, and can continue either result in chat.
+</div>
 
-Tools are off by default and enabled per thread from the composer: **Calculator** (exact arithmetic computed by the app, available on any model) and **Documents** (search and read your Workspace documents, only on models on this machine), and **Web** (search the web with Exa using your own Exa key, entered under Connections; search queries go to Exa even when the model is local). Tool calls stream through the same run engine for every provider, are limited to 6 model steps and 12 tool calls, and each call's exact input and result is shown with the answer and in Run history, separate from the model's text. No tool changes anything outside the app. MCP connections are planned work.
+<p align="center">
+  <img src="docs/screenshots/readme/chat.png" alt="A chat answer from qwen3:8b on Ollama, with the calculator tool call shown above the answer" width="900">
+</p>
 
-Provider adapters have been tested against recorded-format fixtures and a local fake server, not live provider accounts; model availability depends on the provider and account.
+## Why Nerdplexity
 
-## Setup
+- **Local first.** Threads, settings, runs, and analytics live in your browser. Local models never leave your machine.
+- **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible server, all in one catalog.
+- **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
+- **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
 
-Requirements: Node.js (the package declares `>=18`) and pnpm 9.0.0. Ollama is optional.
+## Features
+
+| | |
+| --- | --- |
+| **Models** | One searchable catalog with brand logos, favorites, filters (free, on this machine, tools, vision), price and context info, and a one-prompt **Check**. Install and remove Ollama models with live download progress. |
+| **Chat** | Streaming answers from every provider, **Stop**, **Retry**, switching models mid-thread, edit-and-regenerate branches, presets, per-thread system instructions, explicit context budgets with a request preview, reasoning shown separately, export and import. |
+| **Attachments** | Text, Markdown, and code files (100 KB each), and images for models that accept them, shown and removable before you send. |
+| **Tools** | Off by default, on per thread: **Calculator** (computed by the app), **Documents** (search and read your Workspace notes, models on this machine only), **Web** (Exa search with your own key). |
+| **Compare** | Send one frozen context to two models and see both answers with measured timing and usage, then continue either one in chat. |
+| **Runs and analytics** | Every run is recorded: queue time, time to first text, tokens, errors, tool calls. Analytics are calculated in your browser from those records, and you can mark answers helpful or unhelpful. |
+| **Look** | Black and green, with a light theme, keyboard-accessible dialogs, and layouts for phone, tablet, and desktop. |
+
+<table>
+  <tr>
+    <td width="60%"><img src="docs/screenshots/readme/models.png" alt="Model catalog with local Ollama models and OpenRouter models, logos, prices, and Select Model buttons"></td>
+    <td width="40%"><img src="docs/screenshots/readme/chat-phone.png" alt="The chat on a phone-sized screen"></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/readme/chat-light.png" alt="The chat in the light theme"></td>
+  </tr>
+</table>
+
+<sub>Screenshots use scripted demo data (catalogs and responses served by <code>scripts/capture-readme.mjs</code>); prices shown are examples.</sub>
+
+## Quick start
+
+You need Node.js 18 or newer and pnpm 9.0.0. Ollama is optional.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-If pnpm is not installed, use the pinned version through npm:
+Open **http://127.0.0.1:5173/app**, go to **Models**, and pick a model:
 
-```sh
-npm exec --yes --package=pnpm@9.0.0 -- pnpm install --frozen-lockfile
-npm exec --yes --package=pnpm@9.0.0 -- pnpm dev
-```
+- **On this machine:** start [Ollama](https://ollama.com) or LM Studio; both are preconfigured (`http://127.0.0.1:11434` and `http://127.0.0.1:1234/v1`). You can also install Ollama models from the Models page.
+- **Online:** click **Add Provider**, choose the provider, paste your API key, and click **Save Connection**.
 
-Open **http://127.0.0.1:5173/app**. The backend runs on **http://127.0.0.1:5174**; its health endpoint is `/health`. Both services bind to loopback by default. Vite forwards `/v1` requests to the backend.
+No pnpm? Run it through npm: `npm exec --yes --package=pnpm@9.0.0 -- pnpm install --frozen-lockfile`, then the same prefix before `pnpm dev`.
 
-Cloud-only development does not start or require Ollama. For local inference, start an installed Ollama service separately:
+The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both services listen only on this machine. Use `pnpm dev:ollama` to start an installed Ollama, and `WEB_PORT=5273 PORT=5274 pnpm dev` to run a second copy beside another.
 
-```sh
-pnpm dev:ollama
-```
+## Connecting models
 
-To run a second checkout beside another, give it different ports: `WEB_PORT=5273 PORT=5274 pnpm dev`.
+| Connection | What you need | Notes |
+| --- | --- | --- |
+| Ollama | Ollama running locally | Install and remove models in the app. Runs stay on your machine. |
+| LM Studio, llama.cpp | A local OpenAI-compatible server | Preconfigured at `127.0.0.1:1234/v1`. |
+| OpenAI, Anthropic, Gemini, DeepSeek | Your API key | Pinned to each provider's official endpoint. |
+| OpenRouter | Your API key | Lists $0 models as **Free model** and shows per-token prices. Choose the OpenRouter type rather than a custom endpoint, or prices show as unknown. |
+| Groq | Your API key | Free plan limits per model; rate limits are shown. |
+| Custom endpoint | Address, optional key | Any OpenAI-compatible server. Must use https unless it is on this machine. |
 
-Open **Models** to manage connections. Ollama (`http://127.0.0.1:11434`) and LM Studio / llama.cpp (`http://127.0.0.1:1234/v1`) are preconfigured. Add OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible endpoint with your own key. Each connection shows whether it is offline, rejected the key, has the wrong address, or has no models, plus the rate-limit allowance the provider last reported. Listing models does not prove a model can run: use **Check** on a model card to send one short prompt.
+Each connection says whether it is offline, rejected the key, has the wrong address, or lists no models. Listing models does not prove one runs: use **Check** on a model to send one short prompt.
 
 ## Free use
 
-Each model shows what is known about its cost: **On this machine** (no hosted fee), **Free model** (the provider's catalog lists it at $0, as OpenRouter does), **Free plan** (you marked the account as having no billing enabled), a catalog price, or **Price unknown**. Nerdplexity cannot read billing settings; the account billing choice on a connection is your statement.
+Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), **Free plan** (you marked the account as having no billing), a catalog price, or **Price unknown**. Nerdplexity cannot see your billing settings; the billing choice on a connection is your statement.
 
-Turn on **Free only** in Models to run only models in the first three groups. Anything else, including a model ID typed by hand, is blocked before it is sent, with two choices: pick a free model, or allow charges for that thread. When a free model hits its limit, Nerdplexity suggests other free models; it never switches models or providers on its own.
+With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model hits its limit, Nerdplexity suggests other free models. It never switches models or providers on its own.
 
-Provider notes: OpenRouter free models are limited per minute and per day, and a negative balance blocks them too. Groq's free plan has per-model request and token limits. On Gemini's free tier, Google may use your prompts to improve its products, and free availability varies by model.
+Provider notes: OpenRouter free models have per-minute and per-day limits, and a negative balance blocks them. On Gemini's free tier, Google may use your prompts to improve its products.
 
-## Commands
+## Tools
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm dev` | Start backend and frontend |
-| `pnpm dev:server` | Start the backend only |
-| `pnpm dev:web` | Start Vite only |
-| `pnpm dev:ollama` | Start an already-installed Ollama runtime |
-| `pnpm typecheck` | Check all TypeScript packages |
-| `pnpm build` | Build all packages |
-| `pnpm start` | Serve the production build from the backend on port 5174 |
-| `pnpm test` | Run the Playwright browser regression suite |
-| `pnpm -r test` | Run server and web unit tests (Vitest) |
-| `pnpm lint` | Run the existing source emoji policy check |
+Turn tools on from the message box; the choice is saved with the thread and in presets.
 
-Run `pnpm build` before `pnpm start`. The lint command is not a complete ESLint or security audit. Unit tests cover the destination policy, model discovery and streaming per provider, the run engine (ordering, replay, idempotency, cancellation), stream reassembly, and the browser storage migration.
+- **Calculator:** exact arithmetic computed by the app, on any model.
+- **Documents:** search and read the notes in **Workspace**. Only for models on this machine; documents are never sent online.
+- **Web:** web search through [Exa](https://exa.ai) with your own key, added under **Connections**. Your search queries go to Exa, even when the model is local. Results are shown with their links.
 
-If using the npm bootstrap, prefix a command with `npm exec --yes --package=pnpm@9.0.0 --`, for example `npm exec --yes --package=pnpm@9.0.0 -- pnpm test`.
-
-## Browser checks
-
-Install Chromium once:
-
-```sh
-pnpm exec playwright install chromium
-pnpm test
-```
-
-Alternatively, use an installed Google Chrome:
-
-```sh
-PLAYWRIGHT_CHANNEL=chrome pnpm test
-```
-
-Playwright starts the backend, Vite, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`). No API keys or local models are needed. Tests cover connections and discovery states, free-only blocking and the allow-charges override, free alternatives after a rate limit, billing statements, model checks, provider quota display, streaming and interruption behavior, inline model switching, settings snapshots and retries, presets, branches, explicit context trimming, safe thread import/export, attachments, identical comparison context, saved-result continuation, Ollama management controls, calculator and document tool loops with malformed tool arguments, theme persistence, dialog focus, mobile navigation, and responsive layouts.
-
-Playwright does not reuse servers that are already running, because a server on the same port may belong to another checkout. Set `PW_REUSE=1` to reuse your own running dev servers, or use different ports: `WEB_PORT=5273 PORT=5274 pnpm test`.
-
-With `pnpm dev` already running, capture the UI using synthetic events:
-
-```sh
-node scripts/capture-baseline.mjs
-# Or use installed Chrome:
-PLAYWRIGHT_CHANNEL=chrome node scripts/capture-baseline.mjs
-```
-
-Captures are written to `docs/screenshots/baseline/`. See [baseline notes](plan/baseline.md) for results and known gaps.
+A run may use at most 6 model steps and 12 tool calls. Each call appears above the answer with its exact input, result, and time, and is kept in Run history. Tool results are treated as data, not instructions, and no tool changes anything outside the app.
 
 ## How runs work
 
-Sending a message starts a run on the local backend, which streams events to the browser. A run continues if the page reloads; the reloaded page reattaches and shows the rest of the answer. A run with no page attached for 60 seconds is canceled. **Stop** cancels the request to the model. If a run fails, stops, or is lost, the partial answer is kept and labeled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends a request on its own only when the model never started: a rate limit that asks to wait 10 seconds or less (at most twice), or a model that rejects the temperature setting. Both are shown in the chat. Longer waits are shown with the time to wait.
+Sending a message starts a run on the local backend, which streams the answer to the browser. If the page reloads, it reattaches and shows the rest. **Stop** cancels the request to the model. A run that fails, stops, or is lost keeps its partial answer, clearly labelled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends on its own only when the model never started (a short rate-limit wait, at most twice, or a model that rejects the temperature setting), and says so in the chat.
 
-Run history records origin, state, queue time, time to first text, total and model time, runtime-reported load time, reported token usage, finish reason, errors, tools, and reasoning when the model reports it. Generation rate is shown only for completed runs without tools when the timing and output token count are available. Context utilization uses the frozen input budget and provider-reported prompt usage.
+Run history records queue time, time to first text, total and model time, reported token usage, finish reason, errors, reasoning, and tool calls. Analytics shows outcomes, per-model rollups, latency percentiles, and cost estimates only where a catalog price was known before the run. Missing data stays marked as not measured; there are no invented quality scores.
 
-Analytics is calculated in the browser from those same saved run records. It shows outcome and model rollups, latency percentiles, metric coverage, explicit helpful/unhelpful ratings, and estimated hosted cost only where a provider catalog price was captured before the run. It does not assign factual-quality, groundedness, or hallucination scores. Historical runs without enough evidence remain unmeasured.
+## Data and privacy
 
-## App routes
-
-- `/`: redirects to the workbench.
-- `/app`: chat; generation settings open per thread.
-- `/app/models`: model catalog and Ollama management.
-- `/app/connections`: local runtime and hosted provider connections, and the Exa key for web search.
-- `/app/workspace`: persistent text documents for the Documents tool.
-- `/app/runs`: run history.
-- `/app/compare`: persisted side-by-side model comparisons.
-- `/app/analytics`: run analytics derived from browser storage.
-- `/app/analytics/dashboard` and `/app/analytics/events`: redirect to `/app/analytics`.
-- `/app/analytics/benchmark`: redirects to `/app/compare`.
-
-## Data and credentials
-
-Threads, attachments, comparisons, settings, connections, runs, feedback, and the source data for analytics live in browser IndexedDB. Analytics is derived locally and is not sent to a telemetry service. The workbench does not load fonts or analytics scripts from third parties. API keys are kept for the current tab session unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. Keys saved by earlier versions were migrated as remembered keys; use **Forget key** to remove one. Keys are sent to the local backend in request bodies, never in URLs. Thread, comparison, and run exports omit credentials and connection destinations; run exports also omit backend recovery identifiers.
-
-Text/code attachments are limited to 100 KB each. Images are limited to PNG, JPEG, WebP, or GIF, 2 MB each and four per thread; all attachments together are limited to 5 MB. Images can be sent only when the selected catalog entry confirms vision support. Attachments are visible and removable before a run. Thread and comparison exports include their source context but omit credentials and connection destinations.
-
-Requests to an online connection send your messages through the local backend to that provider. Hosted providers are pinned to their official endpoints. Custom endpoints must use https unless they are on this machine. Document tools run only on models on this machine; documents are never sent to remote endpoints. Web search sends your search queries, not your conversation, to Exa.
+- **Stored in your browser (IndexedDB):** threads, attachments, comparisons, settings, connections, runs, and feedback. Analytics is calculated locally; nothing is sent to a telemetry service.
+- **API keys:** kept for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the local backend in request bodies, never in URLs, and are left out of every export.
+- **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the local backend to that provider; web search sends search queries to Exa; documents never leave.
 
 Do not commit keys or personal conversation exports.
 
-## Repository
+## Development
 
-- `packages/web`: React, Vite, Zustand, and Dexie frontend.
-- `packages/server`: Express routes, provider adapters, local queue, and metrics.
-- `packages/types`: shared TypeScript contracts.
-- `tests/browser`: browser regression tests.
-- `plan/implementation-plan.md`: current workbench plan.
-- `plan/baseline.md`: setup and validation evidence.
-- `plan/release-verification.md`: release acceptance evidence and untested live integrations.
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Start the backend and the web app |
+| `pnpm dev:server` / `pnpm dev:web` | Start one of them |
+| `pnpm typecheck` | Type-check all packages |
+| `pnpm build` then `pnpm start` | Build, then serve the production build on port 5174 |
+| `pnpm -r test` | Unit tests (Vitest) for the server and web app |
+| `pnpm test` | Browser tests (Playwright) |
+| `pnpm lint` | Source policy check |
+
+Browser tests start their own backend, web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.
+
+To refresh the README screenshots, run `pnpm dev` and then `node scripts/capture-readme.mjs`.
+
+```text
+packages/web      React + Vite app (Zustand, Dexie)
+packages/server   Express backend: run engine, provider adapters, tools
+packages/types    Shared TypeScript contracts
+tests/browser     Playwright tests
+logo/             Logo kit: SVG and PNG marks, favicon, brand tokens
+plan/             Implementation plan, open items, release evidence
+```
+
+## Project status
+
+Nerdplexity runs locally; it is not a hosted service. Provider adapters are tested against recorded provider formats and a local fake server. Live checks so far cover OpenRouter (chat, calculator, and Exa web search on a free model); native Anthropic, Gemini, Ollama, and other providers are verified with fixtures only. See the [implementation plan](plan/implementation-plan.md), [open items](plan/pending.md), and [release verification](plan/release-verification.md).
+
+## Brand
+
+The logo kit in [`logo/`](logo) has the `n.` mark, full and compact lockups for dark and light backgrounds, PNG exports, the favicon, and the brand colors (`#b5df98` tile, `#141c10` letter, `#487130` dot). It is built reproducibly from Inter; see [logo/README.md](logo/README.md).
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE)
