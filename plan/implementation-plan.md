@@ -1,16 +1,16 @@
 # Nerdplexity: model workbench and harness plan
 
 Status: P0–P9 complete. Pending items: [pending.md](pending.md).
-Updated: 2026-09-12.
+Updated: 2026-09-13.
 User direction: make Nerdplexity an excellent interface for running local models and online models using personal API keys, including free offerings. Keep the Nerdplexity identity.
 
-This document supersedes the two older dashboard redesign plans. It is based on source inspection and provider documentation, not a completed runtime audit.
+This is the canonical product plan and implementation record. Obsolete dashboard redesign plans and handoff prompts were removed after the workbench replaced them.
 
 ## 1. Product outcome
 
 Nerdplexity should let someone connect a model, understand what it can do, run it, switch models, and inspect the result without managing a different interface for every provider.
 
-The primary experience is a model workbench. Chat, local model management, provider connections, files, comparisons, and optional tool execution share one consistent interface. Analytics explains actual runs.
+The primary experience is a model workbench. Chat, local model management, provider connections, files, comparisons, optional tool execution, and inspectable run history share one consistent interface.
 
 Confirmed first-release emphasis: general model workbench with chat, files, comparisons, and optional tools. The user selected this direction. Terminal-based coding-agent execution and a large research subsystem are later extensions.
 
@@ -26,7 +26,7 @@ Confirmed first-release emphasis: general model workbench with chat, files, comp
 ## 2. Product decisions
 
 - Delivery: retain the existing React/Express local web app for the first release. A desktop package is a later distribution decision.
-- Local-first: conversations, presets, files, and analytics stay in the local browser database by default. Selected cloud inference and online tools necessarily transmit the context they need.
+- Local-first: conversations, presets, files, and run history stay in the local browser database by default. Selected cloud inference and online tools necessarily transmit the context they need.
 - Connectivity: Ollama native integration plus a configurable OpenAI-compatible connection cover the main local and online paths. Dedicated adapters handle provider-specific differences.
 - Identity: a model selection is a connection ID plus model ID, never a guess from the model name.
 - Model switching: explicit selection per turn first. Saved planner/executor/reviewer profiles and policy-based routing come after reliable individual runs.
@@ -61,9 +61,8 @@ Ollama supports tool calling, which makes it a viable local harness backend when
 
 ### Navigation
 
-Primary: Chat, Models, Connections, Compare.
-Secondary: Runs, Settings.
-Keep existing analytics routes as aliases while moving their useful content into Runs.
+Primary: Chat, Models, Connections, Workspace, Run history, Compare.
+Former analytics URLs redirect to Run history; their useful per-run measurements live there.
 
 ### Main workbench
 
@@ -106,7 +105,7 @@ Start Compare with two runs from the same immutable input/context snapshot. Defa
 
 Use the Nerdplexity black-and-green identity from the logo kit (`logo/`, adopted in P8 from the `codex/local-workspace` branch; replaces the earlier blue direction), with a green light theme, and keep consistency through the CSS tokens and primitives. Use restrained surfaces, clear typography, and emphasis on transcript readability. Model badges convey factual state, not decoration. Use visible focus, accessible labels, reduced-motion support, and defined loading/empty/error states. Review 390px, 768px, and 1440px layouts in both supported themes.
 
-## 5. Verified repository gaps
+## 5. Initial repository gaps (resolved during P0–P7)
 
 | Observation | Consequence / planned correction |
 | --- | --- |
@@ -253,7 +252,7 @@ Files: adapter presets, discovery/capability mapping, connection UI, error/quota
 - Normalize catalogs without promising unavailable or retired models.
 - Implement explicit free-only policy, pricing provenance, unknown-state handling, and user-controlled fallback.
 - Read rate-limit headers when present; honor retry-after with bounded retry only when replay is safe.
-- Keep credentials out of URLs, logs, exports, analytics, and run events.
+- Keep credentials out of URLs, logs, exports, and run events.
 
 Done: representative adapters pass fixtures; live checks are reported per available connection; a rate-limited free route never silently becomes a paid or different-provider request.
 
@@ -298,10 +297,10 @@ Files: tool registry/executor, shared tool contracts, adapter tool serialization
 
 Done: one tool call and a multi-step loop work on a supported local and online model; unknown tools, malformed arguments, timeout, denial, and cancellation terminate cleanly; retries do not repeat completed effects.
 
-### P7 — Run analytics and release hardening
+### P7 — Run inspection and release hardening
 
 Depends on P2–P6 for the corresponding enabled features.
-Files: promptops analytics, shared derivation, tests, CI, README, verification notes.
+Files: Run history, shared per-run measurements, tests, CI, README, verification notes.
 
 - Build Runs from canonical events and reactive browser storage.
 - Show model, origin, state, latency, TTFT, tokens/s where valid, usage/cost provenance, tools, and context utilization.
@@ -352,7 +351,7 @@ Paste after switching:
 - Application changes: none.
 - Validation attempted: `pnpm typecheck`; command unavailable on PATH.
 - Confirmed: the user chose the general model workbench (chat, files, comparisons, optional tools) for the first release.
-- P0 complete (2026-09-10): Ollama-optional startup, loopback binding, Playwright suite (4/4 passing), UI capture script and screenshots, README rewrite. Typecheck, build, and lint pass; Vitest has no test files. Details in [baseline notes](baseline.md).
+- P0 complete (2026-09-10): Ollama-optional startup, loopback binding, Playwright suite (4/4 passing), UI capture, and README rewrite. Typecheck, build, and lint passed. Its obsolete pre-workbench capture artifacts were removed in P8.2.
 - P1 complete (2026-09-10): shared connection/model contracts in `@app/types`; server destination policy (`runtime/destinations.ts`) and discovery for Ollama, OpenAI-compatible, OpenAI, Anthropic (official SDK), Gemini, and DeepSeek (`runtime/discovery.ts`, `POST /v1/models/discover`); Dexie v4 with `connections` and `credentials`, idempotent legacy migration, and a retryable startup error; session-only keys by default with opt-in device storage; Models page as the single catalog (connections, search, filters, favorites, manual model IDs); runs routed by `connectionId`; custom endpoints stream through the run route; assistant answers record and show provenance; model-name provider detection and the key-in-URL ping removed; Settings modal replaced by Connections.
 - P1 verification: typecheck, build, lint pass. Vitest 28/28 (server 21: policy, discovery fixtures per provider, key redaction, chunk and UTF-8 splits; web 7: v3 to v4 migration, idempotency, fresh install, credential storage). Playwright 6/6. Unmocked smoke through the real backend to a local fake OpenAI-compatible server: discovery, wrong-key auth, streamed answer split into 7-byte chunks, remembered key after reload, no phone overflow. No live provider account or real Ollama model was used.
 - Open after P1: hosted providers do not stream yet (P2); the message renderer strips emoji from model output, contrary to "preserve exact output" (P2); the workspace UI from `323d763` uses a green palette and low-contrast answer text rather than the blue identity (P4); unrouted legacy components (`components/Chat.tsx`, `ChatHeader.tsx`, `hooks/useLocalKeys.ts`, `pages/Landing.tsx`) still compile against compatibility shims; LAN runtimes over plain http are not allowed by the destination policy.
@@ -385,5 +384,7 @@ Paste after switching:
 
 - P8.1 complete (2026-09-12), local `main`: diagnosed OpenRouter's nested 429 from `google/gemma-4-26b-a4b-it:free` as temporary shared capacity exhaustion at Google AI Studio, separate from the model's $0 usage price. OpenRouter errors now prefer `metadata.raw` and `provider_name` over the unhelpful outer `Provider returned error`, distinguish upstream capacity from the account's free-request limit, preserve provider retry/reset data, and apply the same explanation when OpenRouter was entered as a custom compatible endpoint. The documented `openrouter/free` router is cataloged as verified $0 even when OpenRouter omits it or reports request-time router pricing, and is prioritized among explicit free alternatives; Nerdplexity still never changes or retries with another model until the user chooses it. Provider setup and README copy now explain that $0 routes still have capacity and account limits, and that upstream BYOK is optional and subject to that provider's terms.
 - P8.1 verification: typecheck, production build, and lint pass. Vitest 162/162 (server 115, web 47), including the exact nested Gemma/Google AI Studio 429 shape, account-limit reset timing, native/custom OpenRouter routes, free-router discovery, and fallback ordering. Playwright 34/34, including the explicit `openrouter/free` recovery flow and proof that no automatic model switch occurs. The supplied live error was reproduced as a fixture; no additional live provider request was needed or made.
+- P8.2 complete (2026-09-13), local `main`: removed the aggregate Analytics destination and page, its responsive CSS, aggregate derivation, browser flow, and four unused chart/date dependencies. Former analytics, PromptOps, dashboard, and events URLs now redirect to Run history. Per-run model time, first-text timing, generation rate, context utilization, validated price estimate, and credential-safe export remain in a focused `runMetrics.ts` module used by Run history. Also removed four disconnected blue-theme UI primitives and their barrel export, the obsolete dashboard research PDF and plans, stale agent handoff/roadmap prompts, and pre-workbench baseline capture script and images. README, verification notes, and the canonical plan now describe only the active six-destination workbench.
+- P8.2 verification: typecheck, production build, and source-policy lint pass. Vitest 159/159 (server 115, web 44). Playwright 33/33 through isolated local services, including proof that `/app/analytics/events` redirects to `/app/runs`, Run history renders, and Analytics is absent from navigation. The installed unused-export analyzer reports no disconnected page module; its remaining findings are individual exported types/helpers in active modules, not unreachable UI files.
 - P9 (2026-09-13): repository split into `frontend/` (`@app/web`), `backend/` (`@app/server`), and `shared/` (`@app/types`) at the top level, replacing `packages/*`; package names and imports are unchanged and the lockfile only renamed its workspace importers. The empty legacy `server/src/types.ts` was removed. The backend app is built by `createApp()` in `backend/src/app.ts` (testable without a listener); `server.ts` only loads settings and listens. Connectivity audit: every frontend call (`/v1/models/discover`, `/v1/runs` start/events/cancel, `/v1/models/ollama` pull/delete, `/v1/health`) maps to a backend route. `/v1/health` now follows the shared `BackendHealth` contract, is readable from any site, and reports `hosted`, `originAllowed`, and features, so the web app can tell a down server from one that does not allow its site (a CORS rejection otherwise looks like a network failure) and hides Ollama management on a hosted server. Errors name the configured server address, and a non-JSON reply (a static host) is reported as no server. Vercel config moved to `frontend/vercel.json` (Root Directory must be `frontend`), and its rewrites now list the app's page routes explicitly: the earlier negative-lookahead rewrite served the app page for `/v1/*` in production. Added `pnpm test:split`, an end-to-end test of the deployed shape (web app built with `VITE_API_URL` and served on its own origin, backend on another), run in CI.
-- P9 verification: typecheck, build, and lint pass. Vitest 166/166 (backend 119, frontend 47), including `createApp` over HTTP (health for allowed, unlisted, and absent origins; API closed to unlisted sites; hosted mode). Playwright 36/36 plus `test:split` 1/1 (discovery and a streamed chat across origins, every API call to the backend's origin). The compiled backend serves the built frontend from `frontend/dist`.
+- P9 verification (after merging P8.2): typecheck, build, and lint pass; a frozen-lockfile install succeeds. Vitest 163/163 (backend 119, frontend 44), including `createApp` over HTTP (health for allowed, unlisted, and absent origins; API closed to unlisted sites; hosted mode). Playwright 35/35 plus `test:split` 1/1 (discovery and a streamed chat across origins, every API call to the backend's origin). All 33 paths removed in P8.2 remain absent under both old and new locations, with no references left to them. The compiled backend serves the built frontend from `frontend/dist`.

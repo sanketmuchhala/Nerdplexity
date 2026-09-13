@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { liveQuery } from 'dexie';
 import { ArrowUpRight, CheckCircle2, Clock, Download, XCircle } from 'lucide-react';
 import { db, RunRecord, RunStatus } from '../lib/db';
-import { exportRuns, measurementFor } from '../lib/runAnalytics';
+import { exportRuns, measurementFor } from '../lib/runMetrics';
 import { exportText } from './api';
 import { ToolActivity } from './ToolActivity';
 

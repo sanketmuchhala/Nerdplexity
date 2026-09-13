@@ -56,19 +56,15 @@ export default function App() {
         {/* Marketing */}
         <Route path="/" element={<Navigate to="/app" replace />} />
 
+        {/* Retired screens open the closest current workspace page. */}
+        <Route path="/app/analytics/*" element={<Navigate to="/app/runs" replace />} />
+        <Route path="/promptops" element={<Navigate to="/app/runs" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/app/runs" replace />} />
+        <Route path="/events" element={<Navigate to="/app/runs" replace />} />
+        <Route path="/benchmark" element={<Navigate to="/app/compare" replace />} />
+
         {/* App shell */}
         <Route path="/app/*" element={<Workspace />} />
-
-        {/* Retired analytics URLs now open the canonical workspace analytics page. */}
-        <Route path="/app/analytics/dashboard" element={<Navigate to="/app/analytics" replace />} />
-        <Route path="/app/analytics/events"    element={<Navigate to="/app/analytics" replace />} />
-        <Route path="/app/analytics/benchmark" element={<Navigate to="/app/compare" replace />} />
-
-        {/* Legacy redirects — old routes still work */}
-        <Route path="/promptops" element={<Navigate to="/app/analytics" replace />} />
-        <Route path="/dashboard" element={<Navigate to="/app/analytics" replace />} />
-        <Route path="/events"    element={<Navigate to="/app/analytics" replace />} />
-        <Route path="/benchmark" element={<Navigate to="/app/compare" replace />} />
       </Routes>
     </BrowserRouter>
   );
