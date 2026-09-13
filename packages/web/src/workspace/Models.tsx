@@ -106,10 +106,10 @@ const PRESETS: Preset[] = [
     label: 'OpenRouter',
     kind: 'openrouter',
     name: 'OpenRouter',
-    hint: 'Many providers behind one key. Models priced at $0 are marked free. Free models are limited per minute and per day, and a negative balance blocks them too.',
+    hint: "Many providers behind one key. $0 models still have account and shared-capacity limits. openrouter/free chooses an available compatible free model. You can optionally add an upstream provider key in OpenRouter Integrations; that provider's terms apply.",
     link: {
-      href: 'https://openrouter.ai/docs/api_reference/limits',
-      label: 'OpenRouter limits',
+      href: 'https://openrouter.ai/docs/faq',
+      label: 'OpenRouter free-model limits',
     },
   },
   {

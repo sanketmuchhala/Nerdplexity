@@ -108,6 +108,18 @@ export function quotaFrom(headers: Headers): RateLimitState | undefined {
   return Object.keys(present).length ? present : undefined;
 }
 
+function openRouterQuotaMessage(detail: string): string {
+  if (/temporarily rate-limited upstream/i.test(detail)) {
+    const provider = /^(.{1,80}?) — /.exec(detail)?.[1];
+    const free = /:free\b/i.test(detail);
+    return `OpenRouter's shared${provider ? ` ${provider}` : ' upstream provider'} route is temporarily rate limited. ${free ? 'This model is still $0, but shared free capacity is unavailable right now.' : 'The upstream route has no capacity right now.'} Retry shortly${free ? ', choose another free model, or use openrouter/free' : ' or choose another model'}.`;
+  }
+  if (/free-models-per-(?:minute|day)|free[- ]models?.*(?:rate|request).*limit/i.test(detail)) {
+    return "OpenRouter's free-model request limit is used up. The model is still $0, but free requests have account limits. Retry after the displayed reset or later.";
+  }
+  return 'OpenRouter is rate limiting this request. Pricing and request capacity are separate. Retry later or choose another model.';
+}
+
 /** Map an HTTP failure to a safe, categorized provider error. */
 export function failureFromStatus(status: number, detail: string, target: ResolvedTarget, headers?: Headers): ProviderFailure {
   const label = LABEL[target.kind];
@@ -117,7 +129,13 @@ export function failureFromStatus(status: number, detail: string, target: Resolv
     new ProviderFailure({ category, message, retryable, ...(wait !== undefined ? { retryAfterMs: wait } : {}) });
   if (status === 401 || status === 403) return make('auth', `${label} rejected the API key.`, false);
   if (status === 402) return make('quota', `${label} reports insufficient credits or a negative balance. This can block free models too.${text ? ` ${text}` : ''}`, false);
-  if (status === 429) return make('quota', `${label} is rate limiting requests or the quota is used up.${text ? ` ${text}` : ''}`, true);
+  if (status === 429) return make(
+    'quota',
+    target.kind === 'openrouter' || /temporarily rate-limited upstream|free-models-per-(?:minute|day)/i.test(text)
+      ? openRouterQuotaMessage(text)
+      : `${label} is rate limiting requests or the quota is used up.${text ? ` ${text}` : ''}`,
+    true,
+  );
   if (status === 404) return make('invalid-request', `${label} could not find this model.${text ? ` ${text}` : ''}`, false);
   if (status === 400 || status === 413 || status === 422) {
     const context = /context|too long|too many tokens|maximum.*tokens|token limit|prompt is too long/i.test(text);
@@ -132,6 +150,9 @@ function providerMessage(body: string): string {
     const data = JSON.parse(body);
     const error = Array.isArray(data) ? data[0]?.error : data.error;
     if (typeof error === 'string') return error;
+    const raw = error?.metadata?.raw;
+    const upstream = error?.metadata?.provider_name;
+    if (typeof raw === 'string') return typeof upstream === 'string' ? `${upstream} — ${raw}` : raw;
     if (typeof error?.message === 'string') return error.message;
   } catch { /* not JSON */ }
   return body;

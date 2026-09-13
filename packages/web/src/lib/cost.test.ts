@@ -39,18 +39,19 @@ describe('freeAlternatives', () => {
   const remote = connection({ id: 'or' });
   const local = connection({ id: 'ollama', kind: 'ollama', name: 'Ollama', baseURL: 'http://127.0.0.1:11434' });
   const catalogs: Record<string, DiscoveryResult> = {
-    or: { ok: true, execution: 'remote', checkedAt: 0, models: [model('a:free', { pricing: 'zero-price' }), model('paid', { pricing: 'paid' }), model('b:free', { pricing: 'zero-price' })] },
+    or: { ok: true, execution: 'remote', checkedAt: 0, models: [model('a:free', { pricing: 'zero-price' }), model('paid', { pricing: 'paid' }), model('b:free', { pricing: 'zero-price' }), model('openrouter/free', { pricing: 'zero-price' })] },
     ollama: { ok: true, execution: 'local', checkedAt: 0, models: [model('llama3')] },
   };
 
-  it('suggests only free models, same connection first, excluding the failed one', () => {
+  it("suggests only free models, prioritizing OpenRouter's free router without switching automatically", () => {
     expect(freeAlternatives([local, remote], catalogs, { connectionId: 'or', modelId: 'a:free' })).toEqual([
+      { connectionId: 'or', modelId: 'openrouter/free' },
       { connectionId: 'or', modelId: 'b:free' },
       { connectionId: 'ollama', modelId: 'llama3' },
     ]);
   });
 
   it('respects the limit and skips failed catalogs', () => {
-    expect(freeAlternatives([remote, local], { ...catalogs, ollama: { ok: false, checkedAt: 0, error: { category: 'offline', message: '' } } }, { connectionId: 'x', modelId: 'y' }, 1)).toEqual([{ connectionId: 'or', modelId: 'a:free' }]);
+    expect(freeAlternatives([remote, local], { ...catalogs, ollama: { ok: false, checkedAt: 0, error: { category: 'offline', message: '' } } }, { connectionId: 'x', modelId: 'y' }, 1)).toEqual([{ connectionId: 'or', modelId: 'openrouter/free' }]);
   });
 });

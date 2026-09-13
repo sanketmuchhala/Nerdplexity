@@ -55,7 +55,9 @@ export function freeAlternatives(
   for (const connection of ordered) {
     const catalog = catalogs[connection.id];
     if (!catalog?.ok) continue;
-    for (const model of catalog.models) {
+    const models = [...catalog.models].sort((a, b) =>
+      Number(b.id === 'openrouter/free') - Number(a.id === 'openrouter/free'));
+    for (const model of models) {
       if (connection.id === exclude.connectionId && model.id === exclude.modelId) continue;
       if (!costStatus(connection, model, catalog.execution).free) continue;
       result.push({ connectionId: connection.id, modelId: model.id });

@@ -132,11 +132,48 @@ describe('OpenAI-style streaming', () => {
     expect(always.calls).toHaveLength(3);
   });
 
-  it('reads an epoch reset time as the retry wait', async () => {
+  it('explains OpenRouter upstream free-model limits without exposing its wrapper error', async () => {
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-v1-test-secret' }, { model: 'google/gemma-4-26b-a4b-it:free' }), fakeFetch(() => json({
+      error: {
+        message: 'Provider returned error',
+        code: 429,
+        metadata: {
+          raw: 'google/gemma-4-26b-a4b-it:free is temporarily rate-limited upstream. Please retry shortly, or add your own key.',
+          provider_name: 'Google AI Studio',
+        },
+      },
+    }, 429)).fn);
+    const error = failure(result.error);
+    expect(error).toMatchObject({ category: 'quota', retryable: true });
+    expect(error.message).toContain("OpenRouter's shared Google AI Studio route is temporarily rate limited");
+    expect(error.message).toContain('still $0');
+    expect(error.message).toContain('openrouter/free');
+    expect(error.message).not.toContain('Provider returned error');
+    expect(error.message).not.toContain('{"error"');
+
+    // The same OpenRouter payload can arrive through a custom OpenAI-compatible connection.
+    const custom = failure((await run(request(compat), fakeFetch(() => json({
+      error: {
+        message: 'Provider returned error',
+        code: 429,
+        metadata: {
+          raw: 'google/gemma-4-26b-a4b-it:free is temporarily rate-limited upstream.',
+          provider_name: 'Google AI Studio',
+        },
+      },
+    }, 429)).fn)).error);
+    expect(custom.message).toContain("OpenRouter's shared Google AI Studio route");
+
+    const generic = failure((await run(request({ kind: 'openrouter', apiKey: 'sk-or-v1-test-secret' }), fakeFetch(() => json({ error: { message: 'Too many requests' } }, 429)).fn)).error);
+    expect(generic.message).not.toContain('$0');
+  });
+
+  it('explains an OpenRouter account limit and reads its epoch reset time', async () => {
     const reset = String(Date.now() + 45_000);
     const error = failure((await run(request({ kind: 'openrouter', apiKey: 'or' }), fakeFetch(() => json({ error: { message: 'Rate limit exceeded: free-models-per-day' } }, 429, { 'x-ratelimit-reset': reset })).fn)).error);
     expect(error.retryAfterMs).toBeGreaterThan(40_000);
     expect(error.retryAfterMs).toBeLessThanOrEqual(45_000);
+    expect(error.message).toContain('free-model request limit is used up');
   });
 
   it('reads Groq usage reported under x_groq', async () => {
