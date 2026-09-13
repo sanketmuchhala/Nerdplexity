@@ -463,3 +463,11 @@
 .np-feedback-panel > div:last-child strong { color: var(--np-text); margin-right: 4px; }
 @media (max-width: 1000px) { .np-analytics-cards { grid-template-columns: 1fr 1fr; }.np-analytics-grid { grid-template-columns: 1fr; } }
 @media (max-width: 540px) { .np-analytics-cards { grid-template-columns: 1fr; }.np-day-row { grid-template-columns: 48px minmax(80px, 1fr) 20px; }.np-day-row small { grid-column: 2 / 4; text-align: left; } }
+.np-backend-notice { display: flex; align-items: center; gap: 12px; margin: 12px 31px 0; padding: 11px 14px; border: 1px solid #e3c08f40; border-radius: 9px; background: #e3c08f0d; color: var(--np-text); font-size: 12px; line-height: 1.6; }
+.np-backend-notice > svg { flex-shrink: 0; color: #e3c08f; }
+.np-backend-notice p { flex: 1; min-width: 0; }
+.np-backend-notice a { color: var(--np-accent); text-decoration: underline; text-underline-offset: 2px; }
+.np-backend-notice code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: var(--np-raised); }
+.np-app[data-theme="light"] .np-backend-notice { border-color: #b7791f55; background: #fff6df; }
+.np-app[data-theme="light"] .np-backend-notice > svg { color: #8a5a12; }
+@media (max-width: 760px) { .np-backend-notice { margin: 10px 16px 0; flex-wrap: wrap; } }

@@ -115,6 +115,30 @@ Run history records queue time, time to first text, total and model time, report
 
 Do not commit keys or personal conversation exports.
 
+## Deploying
+
+Nerdplexity is built to run on your own computer. You can also put it online, for example the web app on **Vercel** and the server on **Render** or **Railway**.
+
+**Web app on Vercel.** The repo's [`vercel.json`](vercel.json) builds only the web app as a static site. If your Vercel project builds from `packages/server`, [`packages/server/vercel.json`](packages/server/vercel.json) does the same. In the Vercel project, set `VITE_API_URL` to your server's address (for example `https://nerdplexity-api.onrender.com`) and redeploy. Until then, the site shows a notice that no server is connected.
+
+**Server on Render or Railway.** Create a web service (a long-running process, not serverless: runs stream from memory) with:
+
+| Setting | Value |
+| --- | --- |
+| Build command | `pnpm install --frozen-lockfile && pnpm build` |
+| Start command | `pnpm start` |
+| `NERDPLEXITY_HOSTED` | `1`: listen on all interfaces, refuse local and private-network model addresses, and turn off Ollama model management |
+| `ALLOWED_ORIGINS` | Your web app's address, for example `https://nerdplexity.vercel.app` (comma-separated, exact) |
+| `PORT` | Set by the platform |
+
+The server also serves the web app itself, so a Render or Railway service alone is a complete deployment.
+
+Before you deploy, know that:
+
+- **Keys and messages pass through your server.** They still go only to the providers you choose, and are never logged or stored on the server.
+- **Models on your computer are unavailable from a hosted server.** Ollama and LM Studio need the local setup.
+- **Anyone who knows the server's address can send it requests with their own keys.** `ALLOWED_ORIGINS` stops other websites from using it in a browser, not direct requests.
+
 ## Development
 
 | Command | Purpose |
@@ -142,7 +166,7 @@ plan/             Implementation plan, open items, release evidence
 
 ## Project status
 
-Nerdplexity runs locally; it is not a hosted service. Provider adapters are tested against recorded provider formats and a local fake server. Live checks so far cover OpenRouter (chat, calculator, and Exa web search on a free model); native Anthropic, Gemini, Ollama, and other providers are verified with fixtures only. See the [implementation plan](plan/implementation-plan.md), [open items](plan/pending.md), and [release verification](plan/release-verification.md).
+Nerdplexity is built to run locally; see [Deploying](#deploying) for putting it online. Provider adapters are tested against recorded provider formats and a local fake server. Live checks so far cover OpenRouter (chat, calculator, and Exa web search on a free model); native Anthropic, Gemini, Ollama, and other providers are verified with fixtures only. See the [implementation plan](plan/implementation-plan.md), [open items](plan/pending.md), and [release verification](plan/release-verification.md).
 
 ## Brand
 

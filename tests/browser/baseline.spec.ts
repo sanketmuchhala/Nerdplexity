@@ -28,3 +28,20 @@ test('the retired event route opens empty run analytics without a runtime except
   await expect(page.getByRole('heading', { name: 'No run data yet.' })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('a notice explains when the server cannot be reached, and Retry clears it', async ({ page }) => {
+  await page.route('**/v1/health', route => route.fulfill({ status: 503, json: { error: 'down' } }));
+  await page.goto('/app');
+  const notice = page.locator('.np-backend-notice');
+  await expect(notice).toContainText('No Nerdplexity server is connected.');
+  await expect(notice.getByRole('link', { name: 'deploy the server' })).toHaveAttribute('href', /#deploying$/);
+  await page.unroute('**/v1/health');
+  await notice.getByRole('button', { name: 'Retry' }).click();
+  await expect(notice).toHaveCount(0);
+});
+
+test('the API health check is served under /v1 for proxies and hosted frontends', async ({ page }) => {
+  // Through the web app's dev proxy, as a hosted frontend would reach it through VITE_API_URL.
+  const response = await page.request.get('/v1/health');
+  expect(await response.json()).toMatchObject({ status: 'ok' });
+});

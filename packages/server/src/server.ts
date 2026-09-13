@@ -8,43 +8,40 @@ import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
 import { errorHandler } from './middleware/errors.js';
 import { modelsRouter } from './routes/models.js';
+import { allowedOrigins, originAllowed, originGuard } from './middleware/origins.js';
+import { hostedMode } from './runtime/destinations.js';
 
 dotenv.config({ path: '.env.local' });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5174;
-const HOST = process.env.HOST || '127.0.0.1';
+// Hosted servers (Render, Railway) must listen on all interfaces; a local server stays on loopback.
+const HOST = process.env.HOST || (hostedMode() ? '0.0.0.0' : '127.0.0.1');
+// A frontend hosted elsewhere (for example on Vercel) is allowed only when listed in ALLOWED_ORIGINS.
+const extraOrigins = allowedOrigins();
 
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true
+  origin: (origin, callback) => callback(null, !origin || originAllowed(origin, extraOrigins)),
 }));
 
-// Reject browser requests from unrelated sites before accessing local runtimes.
-app.use((req, res, next) => {
-  if (req.headers.origin) {
-    try {
-      const origin = new URL(req.headers.origin);
-      if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)) {
-        res.status(403).json({ error: 'Open Nerdplexity on localhost.' });
-        return;
-      }
-    } catch { res.status(403).json({ error: 'Invalid origin.' }); return; }
-  }
-  next();
-});
+// Reject browser requests from unrelated sites before accessing runtimes or providers.
+app.use(originGuard(extraOrigins));
 
 app.use(express.json({ limit: '10mb' }));
 // Run engine: start, stream ordered events with replay, cancel.
 app.use('/v1/runs', runsRouter(new RunRegistry()));
-app.use('/v1/models', modelsRouter());
+// Installing or removing Ollama models only makes sense on the user's own machine.
+if (!hostedMode()) app.use('/v1/models', modelsRouter());
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check. /v1/health is the same check on the API path, which a dev proxy or a separately
+// hosted frontend reaches in every setup.
+const health: express.RequestHandler = (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+};
+app.get('/health', health);
+app.get('/v1/health', health);
 
 // Model discovery for a configured connection. Keys travel in the body, never the URL.
 app.post('/v1/models/discover', async (req, res) => {
@@ -77,6 +74,8 @@ app.get('*', (_req, res) => {
 
 app.listen(Number(PORT), HOST, () => {
   console.log(`[SERVER] Nerdplexity server running on http://${HOST}:${PORT}`);
-  console.log(`[SECURITY] Local-only mode. API keys are never logged or stored.`);
+  console.log(hostedMode()
+    ? `[SECURITY] Hosted mode: local and private-network targets are refused. Allowed sites: ${[...extraOrigins].join(', ') || 'this machine only'}. API keys are never logged or stored.`
+    : `[SECURITY] Local-only mode. API keys are never logged or stored.`);
   console.log(`[READY] Serving frontend from: ${webDist}`);
 });

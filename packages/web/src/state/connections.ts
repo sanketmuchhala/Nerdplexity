@@ -5,6 +5,7 @@ import { db, KEYED_KINDS } from '../lib/db';
 import * as credentials from '../lib/credentials';
 import { isLocal, usesBaseURL } from '../lib/cost';
 import { followRun, startRun } from '../workspace/runClient';
+import { apiUrl } from '../lib/backend';
 
 export { isLocal, usesBaseURL };
 
@@ -44,7 +45,7 @@ export const latestResult = (state?: CatalogState): DiscoveryResult | undefined 
 
 async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
   try {
-    const response = await fetch('/v1/models/discover', {
+    const response = await fetch(apiUrl('/v1/models/discover'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target }), signal,
     });
     if (!response.ok) throw new Error(`Backend returned ${response.status}`);

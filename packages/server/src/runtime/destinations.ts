@@ -14,6 +14,29 @@ const HOSTED: Partial<Record<ConnectionKind, string>> = {
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', 'host.docker.internal']);
 
+/**
+ * NERDPLEXITY_HOSTED=1 marks a server deployed for others to reach (Render, Railway). There,
+ * "this machine" is the cloud server, so local runtimes and private-network addresses are refused:
+ * otherwise a request could make the server probe its own internal network.
+ */
+export const hostedMode = () => ['1', 'true', 'yes'].includes((process.env.NERDPLEXITY_HOSTED ?? '').toLowerCase());
+
+/**
+ * Non-public addresses: IPv4 loopback, private, link-local, and other reserved ranges, any IPv6
+ * literal (providers are reached by name), and local-only names.
+ */
+function privateAddress(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host.startsWith('[')) return true;
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
+  }
+  return host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal');
+}
+
 export class DestinationError extends Error {}
 
 export interface ResolvedTarget {
@@ -37,6 +60,9 @@ function normalizeBase(kind: ConnectionKind, input: string | undefined): { baseU
   try { url = new URL(input.trim()); } catch { throw new DestinationError('Enter a full URL, such as http://127.0.0.1:11434.'); }
   if (url.username || url.password || url.search || url.hash) throw new DestinationError('Remove credentials, query strings, and fragments from the URL. Enter keys in the API key field.');
   const local = LOOPBACK.has(url.hostname);
+  if (hostedMode() && (local || privateAddress(url.hostname))) {
+    throw new DestinationError('This Nerdplexity server is hosted, so it cannot reach models on your computer or a private network. Run Nerdplexity locally to use Ollama or LM Studio.');
+  }
   if (local ? !['http:', 'https:'].includes(url.protocol) : url.protocol !== 'https:') {
     throw new DestinationError(local ? 'Use http or https.' : 'Remote endpoints must use https. Plain http is allowed only for this machine.');
   }

@@ -60,3 +60,28 @@ describe('redact', () => {
     expect(redact('unchanged', undefined)).toBe('unchanged');
   });
 });
+
+describe('hosted mode', () => {
+  const withHosted = (fn: () => void) => {
+    const previous = process.env.NERDPLEXITY_HOSTED;
+    process.env.NERDPLEXITY_HOSTED = '1';
+    try { fn(); } finally { if (previous === undefined) delete process.env.NERDPLEXITY_HOSTED; else process.env.NERDPLEXITY_HOSTED = previous; }
+  };
+
+  it('refuses this-machine and private-network targets, including encoded addresses', () => withHosted(() => {
+    for (const baseURL of ['http://127.0.0.1:11434', 'http://localhost:1234/v1', 'https://10.0.0.5/v1', 'https://192.168.1.20/v1', 'https://172.16.0.1/v1',
+      'https://169.254.169.254/v1', 'https://[::1]/v1', 'https://[fd00::1]/v1', 'https://2130706433/v1', 'https://printer.local/v1', 'https://metadata.google.internal/v1']) {
+      expect(() => resolveTarget({ kind: 'openai-compatible', baseURL }), baseURL).toThrow('hosted');
+    }
+    expect(() => resolveTarget({ kind: 'ollama', baseURL: 'http://127.0.0.1:11434' })).toThrow('hosted');
+  }));
+
+  it('still allows hosted providers and public https endpoints', () => withHosted(() => {
+    expect(resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-1' }).baseURL).toBe('https://openrouter.ai/api/v1');
+    expect(resolveTarget({ kind: 'openai-compatible', baseURL: 'https://api.example.com/v1' }).execution).toBe('remote');
+  }));
+
+  it('is off unless NERDPLEXITY_HOSTED is set', () => {
+    expect(resolveTarget({ kind: 'ollama', baseURL: 'http://127.0.0.1:11434' }).execution).toBe('local');
+  });
+});

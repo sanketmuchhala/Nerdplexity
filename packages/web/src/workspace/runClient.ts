@@ -1,4 +1,5 @@
 import type { RunEnvelope, RunStartRequest, RunStartResponse, TerminalPayload } from '@app/types';
+import { apiUrl } from '../lib/backend';
 
 /** The server no longer has this run (restart, expiry) or cannot replay what the client missed. */
 export class RunUnavailable extends Error {}
@@ -19,7 +20,7 @@ export async function startRun(request: RunStartRequest, signal: AbortSignal): P
   for (let attempt = 0; ; attempt++) {
     let response: Response;
     try {
-      response = await fetch('/v1/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });
+      response = await fetch(apiUrl('/v1/runs'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });
     } catch (error) {
       if (signal.aborted || attempt >= 2) throw signal.aborted ? error : new Error('The Nerdplexity backend is not responding. Start it with pnpm dev.');
       await sleep(400 * (attempt + 1), signal);
@@ -42,7 +43,7 @@ export async function followRun(runId: string, after: number, onEnvelope: (envel
     signal.throwIfAborted();
     let response: Response | undefined;
     try {
-      response = await fetch(`/v1/runs/${encodeURIComponent(runId)}/events?after=${last}`, { signal });
+      response = await fetch(apiUrl(`/v1/runs/${encodeURIComponent(runId)}/events?after=${last}`), { signal });
       if (response.status === 404 || response.status === 410) {
         const data = await response.json().catch(() => ({}));
         throw new RunUnavailable(data.error || 'This run is no longer available.');
@@ -82,5 +83,5 @@ export async function followRun(runId: string, after: number, onEnvelope: (envel
 }
 
 export async function cancelRun(runId: string) {
-  await fetch(`/v1/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => undefined);
+  await fetch(apiUrl(`/v1/runs/${encodeURIComponent(runId)}/cancel`), { method: 'POST' }).catch(() => undefined);
 }
