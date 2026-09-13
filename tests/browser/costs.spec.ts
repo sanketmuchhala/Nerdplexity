@@ -75,26 +75,28 @@ test('Free only blocks models that are not confirmed free until the user allows 
 });
 
 test('a free model that hits its limit offers free alternatives and never switches on its own', async ({ page }) => {
-  await mockDiscovery(page, { openrouter: [model('a:free', { pricing: 'zero-price' }), model('b:free', { pricing: 'zero-price' }), model('paid', { pricing: 'paid' })] });
+  await mockDiscovery(page, { openrouter: [model('a:free', { pricing: 'zero-price' }), model('b:free', { pricing: 'zero-price' }), model('openrouter/free', { pricing: 'zero-price' }), model('paid', { pricing: 'paid' })] });
   const runs = await mockRuns(page, [
-    [{ type: 'failed', error: { category: 'quota', message: 'OpenRouter is rate limiting requests or the quota is used up.', retryable: true, retryAfterMs: 45000 }, timing }],
-    [{ type: 'delta', text: 'Answer from b.' }, { type: 'completed', timing }],
+    [{ type: 'failed', error: { category: 'quota', message: "OpenRouter's shared Google AI Studio route is temporarily rate limited. This model is still $0.", retryable: true, retryAfterMs: 45000 }, timing }],
+    [{ type: 'delta', text: 'Answer from the free router.' }, { type: 'completed', timing }],
   ]);
   await addConnection(page, 'openrouter', 'sk-or-test');
   await card(page, 'a:free').getByRole('button', { name: 'Select Model' }).click();
   await page.getByRole('textbox', { name: 'Message' }).fill('Question');
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   const alert = page.getByRole('alert');
+  await expect(alert).toContainText('shared Google AI Studio route is temporarily rate limited');
+  await expect(alert).toContainText('still $0');
   await expect(alert).toContainText('Try again in 45s.');
-  await expect(alert.getByRole('button', { name: 'Try b:free' })).toBeVisible();
+  await expect(alert.getByRole('button', { name: 'Try openrouter/free' })).toBeVisible();
   await expect(alert.getByRole('button', { name: /Try paid/ })).toHaveCount(0);
   await page.waitForTimeout(300);
   expect(runs).toHaveLength(1);
 
-  await alert.getByRole('button', { name: 'Try b:free' }).click();
-  await expect(page.getByText('Answer from b.')).toBeVisible();
-  expect(runs.map(r => r.model)).toEqual(['a:free', 'b:free']);
-  await expect(page.locator('.np-provenance')).toHaveText('b:free · OpenRouter');
+  await alert.getByRole('button', { name: 'Try openrouter/free' }).click();
+  await expect(page.getByText('Answer from the free router.')).toBeVisible();
+  expect(runs.map(r => r.model)).toEqual(['a:free', 'openrouter/free']);
+  await expect(page.locator('.np-provenance')).toHaveText('openrouter/free · OpenRouter');
   await expect(page.locator('.np-thread').getByText('Question', { exact: true })).toHaveCount(1);
 });
 

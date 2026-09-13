@@ -130,18 +130,30 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
       { id: 'meta/llama:free', name: 'Llama (free)', context_length: 131072, pricing: { prompt: '0', completion: '0', request: '0' }, supported_parameters: ['tools', 'max_tokens'], architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'vendor/big', name: 'Big', pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] }, top_provider: { max_completion_tokens: 64000 }, expiration_date: future },
       { id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } },
+      { id: 'openrouter/free', name: 'Free Models Router', pricing: { prompt: '-1', completion: '-1' } },
       { id: 'vendor/retired', pricing: { prompt: '0', completion: '0' }, expiration_date: past },
       { id: 'vendor/image-gen', pricing: { prompt: '0', completion: '0' }, architecture: { output_modalities: ['image'] } },
     ] }) });
-    const [llama, auto, big, ...rest] = models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn));
-    expect(rest).toEqual([]);
+    const discovered = models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn));
+    const byId = (id: string) => discovered.find(model => model.id === id)!;
     expect(calls[0].url).toBe('https://openrouter.ai/api/v1/models');
+    expect(discovered).toHaveLength(4);
+    const llama = byId('meta/llama:free');
     expect(llama).toMatchObject({ id: 'meta/llama:free', pricing: 'zero-price', contextLength: 131072, capabilities: { tools: true, vision: false } });
     expect(llama.price).toBeUndefined();
+    const big = byId('vendor/big');
     expect(big).toMatchObject({ pricing: 'paid', maxOutputTokens: 64000, capabilities: { tools: null, vision: true }, expiresAt: future });
     expect(big.price!.input).toBeCloseTo(3);
     expect(big.price!.output).toBeCloseTo(15);
-    expect(auto).toMatchObject({ id: 'openrouter/auto', pricing: 'unknown' });
+    expect(byId('openrouter/auto')).toMatchObject({ pricing: 'unknown' });
+    expect(byId('openrouter/free')).toMatchObject({ pricing: 'zero-price', details: expect.stringContaining('available compatible free model') });
+  });
+
+  it('adds the documented free router when the catalog omits it', async () => {
+    const { fn } = fakeFetch({ '/api/v1/models': () => json({ data: [] }) });
+    expect(models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn))).toEqual([
+      expect.objectContaining({ id: 'openrouter/free', pricing: 'zero-price' }),
+    ]);
   });
 
   it('hides inactive and speech-only Groq models and keeps limits', async () => {

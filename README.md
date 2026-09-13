@@ -77,7 +77,7 @@ The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both se
 | Ollama | Ollama running locally | Install and remove models in the app. Runs stay on your machine. |
 | LM Studio, llama.cpp | A local OpenAI-compatible server | Preconfigured at `127.0.0.1:1234/v1`. |
 | OpenAI, Anthropic, Gemini, DeepSeek | Your API key | Pinned to each provider's official endpoint. |
-| OpenRouter | Your API key | Lists $0 models as **Free model** and shows per-token prices. Choose the OpenRouter type rather than a custom endpoint, or prices show as unknown. |
+| OpenRouter | Your API key | Lists $0 models as **Free model** and shows per-token prices. Shared free routes can be rate limited even though usage is $0; `openrouter/free` chooses a compatible free model with capacity. |
 | Groq | Your API key | Free plan limits per model; rate limits are shown. |
 | Custom endpoint | Address, optional key | Any OpenAI-compatible server. Must use https unless it is on this machine. |
 
@@ -87,7 +87,7 @@ Each connection says whether it is offline, rejected the key, has the wrong addr
 
 Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), **Free plan** (you marked the account as having no billing), a catalog price, or **Price unknown**. Nerdplexity cannot see your billing settings; the billing choice on a connection is your statement.
 
-With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model hits its limit, Nerdplexity suggests other free models. It never switches models or providers on its own.
+With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches models or providers on its own.
 
 Provider notes: OpenRouter free models have per-minute and per-day limits, and a negative balance blocks them. On Gemini's free tier, Google may use your prompts to improve its products.
 

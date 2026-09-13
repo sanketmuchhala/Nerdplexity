@@ -99,21 +99,25 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
   const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
   if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'OpenRouter did not return a model list.');
   const now = Date.now();
-  return data.data
+  const models = data.data
     .filter((m: any) => typeof m?.id === 'string'
       && (!Array.isArray(m.architecture?.output_modalities) || m.architecture.output_modalities.includes('text'))
       && !(m.expiration_date && Date.parse(m.expiration_date) <= now))
     .map((m: any) => {
+      const freeRouter = m.id === 'openrouter/free';
       const input = perMillion(m.pricing?.prompt);
       const output = perMillion(m.pricing?.completion);
       const perRequest = Number(m.pricing?.request || 0);
       // Negative or missing prices mean the cost is decided per request (for example, routers).
-      const pricing: ModelDescriptor['pricing'] = input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0
-        ? 'unknown'
-        : input === 0 && output === 0 && perRequest === 0 ? 'zero-price' : 'paid';
+      // OpenRouter documents openrouter/free as an always-$0 router even though its selected model varies per request.
+      const pricing: ModelDescriptor['pricing'] = freeRouter ? 'zero-price'
+        : input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0
+          ? 'unknown'
+          : input === 0 && output === 0 && perRequest === 0 ? 'zero-price' : 'paid';
       return withDefaults({
         id: m.id,
         displayName: typeof m.name === 'string' ? m.name : m.id,
+        ...(freeRouter ? { details: 'Routes to an available compatible free model' } : {}),
         contextLength: Number(m.context_length) || undefined,
         maxOutputTokens: Number(m.top_provider?.max_completion_tokens) || undefined,
         capabilities: {
@@ -125,6 +129,15 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
         ...(typeof m.expiration_date === 'string' ? { expiresAt: m.expiration_date } : {}),
       }, pricing);
     });
+  if (!models.some((model: ModelDescriptor) => model.id === 'openrouter/free')) {
+    models.push(withDefaults({
+      id: 'openrouter/free',
+      displayName: 'Free Models Router',
+      details: 'Routes to an available compatible free model',
+      capabilities: { tools: null, vision: null },
+    }, 'zero-price'));
+  }
+  return models;
 }
 
 async function discoverGemini(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
