@@ -20,12 +20,13 @@ test('a new conversation survives a browser reload', async ({ page }) => {
   await expect(page.locator('aside').getByText('New chat', { exact: true })).toBeVisible();
 });
 
-test('the retired event route opens empty run analytics without a runtime exception', async ({ page }) => {
+test('retired analytics routes open Run history', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/app/analytics/events');
-  await expect(page).toHaveURL(/\/app\/analytics$/);
-  await expect(page.getByRole('heading', { name: 'No run data yet.' })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/runs$/);
+  await expect(page.getByRole('heading', { name: 'See what actually happened.' })).toBeVisible();
+  await expect(page.locator('nav').getByRole('button', { name: 'Analytics' })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

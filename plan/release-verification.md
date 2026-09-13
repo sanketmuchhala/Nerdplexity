@@ -1,6 +1,6 @@
 # Release verification
 
-P7 turns the P0–P6.2 work into a locally verifiable release candidate. This document records what automated checks prove and where a real provider account or runtime is still required.
+This document records what automated checks prove for the local release candidate and where a real provider account or runtime is still required.
 
 ## Acceptance evidence
 
@@ -14,9 +14,9 @@ P7 turns the P0–P6.2 work into a locally verifiable release candidate. This do
 | Local runtime | Fixtures and browser tests cover unreachable/empty/missing states, local queue ordering, management progress/errors, and cancellation. | Passed with real-runtime limits below |
 | Files and tools | Tests cover attachment limits and four image mappings, identical Compare inputs, tool argument validation, unknown/denied/error/timeout/cancel paths, bounded loops, and Exa result filtering/redaction. | Passed |
 | UI | Browser flows cover keyboard dialogs, mobile navigation, light/dark persistence, long content, loading/error/empty states, and 1440/768/390 px overflow checks. | Passed |
-| Metrics | P7 unit tests cover null-safe percentiles, valid generation-rate rules, immutable catalog-price estimates, coverage, explicit feedback, and credential-safe exports. The browser check verifies persisted feedback and responsive analytics. | Passed |
+| Run history | Unit tests cover valid per-run generation rates, immutable catalog-price estimates, and credential-safe exports. Browser checks cover saved outcomes and retired-route redirects. | Passed |
 
-## Metric provenance
+## Run measurement provenance
 
 - Model time is total run duration minus local queue time.
 - First text is measured by the run engine and omitted when no text arrived.
@@ -24,7 +24,6 @@ P7 turns the P0–P6.2 work into a locally verifiable release candidate. This do
 - Tokens per second requires a completed run without tools, reported completion tokens, first-text timing, and a positive generation interval. Tool time would distort this rate, so tool runs do not show it.
 - Context utilization divides provider-reported prompt tokens by the immutable input budget saved before the run.
 - Hosted cost is an estimate only when the run saved a provider catalog price or a catalog-confirmed $0 classification. The estimate does not include caching, discounts, request fees, taxes, or later price changes.
-- Helpful and unhelpful counts come only from user-selected feedback on saved assistant messages. No response-quality score is inferred.
 
 ## Live integrations still untested
 
@@ -37,7 +36,7 @@ Use **Check** on each configured model to record account-specific inference succ
 
 ## Local verification result
 
-On 2026-09-12, the release candidate passed workspace typecheck, production build, source-policy lint, all 141 Vitest tests (108 server and 33 web), and all 32 Playwright tests through isolated local services. The analytics browser test also retained review captures at 1440, 768, and 390 px and asserted no horizontal overflow.
+The current release candidate is verified after each completed cleanup phase; see the latest entry in `implementation-plan.md` for exact test counts.
 
 ## Release boundary
 

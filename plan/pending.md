@@ -2,7 +2,7 @@
 
 The single list of work that is not done, deferred, or waiting on a decision. The progress log in [implementation-plan.md](implementation-plan.md) stays the history of each phase; this file is the current to-do list. When an item is finished, move it to **Resolved** with the date and commit.
 
-Last reviewed: 2026-09-12 (after P7 verification).
+Last reviewed: 2026-09-13 (after P8.2 cleanup).
 
 ## In progress
 
@@ -62,6 +62,6 @@ Last reviewed: 2026-09-12 (after P7 verification).
 ## Resolved
 
 - P8 (2026-09-12): the `codex/local-workspace` UI (black and green theme, model logos, list catalog, provider modal, logo-headed answers) merged into `codex/engine`, and the logo kit adopted. The other checkout's branch is now contained in `codex/engine`.
-- P7 canonical analytics, explicit feedback, metric provenance/coverage, release CI and acceptance notes (2026-09-12). The responsive blue workbench was re-checked at 390/768/1440 px; owner visual review remains open above.
+- P7 added canonical run measurements and release hardening (2026-09-12). P8.2 later removed the aggregate Analytics page while retaining useful per-run measurements in Run history.
 - Unrouted legacy chat, provider, telemetry, PromptOps, static-score, and DuckDuckGo `/v1/chat` code removed (P7, 2026-09-12).
 - Web search through Exa (P6.2, 2026-09-11), checked live. Hosted providers stream (P2). Emoji stripping of model output removed (P2). Document agent steps now stream through the tool loop (P6.1, `28cb36a`). Benchmark screen replaced by Compare (P5, `c79a8ce`).

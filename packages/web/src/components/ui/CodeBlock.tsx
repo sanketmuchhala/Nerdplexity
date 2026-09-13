@@ -25,4 +25,3 @@ export function CodeBlock({ code, language, className }: Props) {
     </div>
   );
 }
-export const CodeBlockLegacy = CodeBlock;

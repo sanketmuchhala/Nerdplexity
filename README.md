@@ -23,7 +23,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 
 ## Why Nerdplexity
 
-- **Local first.** Threads, settings, runs, and analytics live in your browser. Local models never leave your machine.
+- **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
 - **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible server, all in one catalog.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
 - **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
@@ -37,7 +37,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 | **Attachments** | Text, Markdown, and code files (100 KB each), and images for models that accept them, shown and removable before you send. |
 | **Tools** | Off by default, on per thread: **Calculator** (computed by the app), **Documents** (search and read your Workspace notes, models on this machine only), **Web** (Exa search with your own key). |
 | **Compare** | Send one frozen context to two models and see both answers with measured timing and usage, then continue either one in chat. |
-| **Runs and analytics** | Every run is recorded: queue time, time to first text, tokens, errors, tool calls. Analytics are calculated in your browser from those records, and you can mark answers helpful or unhelpful. |
+| **Run history** | Every run records queue time, time to first text, tokens, errors, tool calls, and its exact input snapshot for inspection or export. |
 | **Look** | Black and green, with a light theme, keyboard-accessible dialogs, and layouts for phone, tablet, and desktop. |
 
 <table>
@@ -105,11 +105,11 @@ A run may use at most 6 model steps and 12 tool calls. Each call appears above t
 
 Sending a message starts a run on the local backend, which streams the answer to the browser. If the page reloads, it reattaches and shows the rest. **Stop** cancels the request to the model. A run that fails, stops, or is lost keeps its partial answer, clearly labelled. **Retry** starts a new attempt without repeating your message. Nerdplexity resends on its own only when the model never started (a short rate-limit wait, at most twice, or a model that rejects the temperature setting), and says so in the chat.
 
-Run history records queue time, time to first text, total and model time, reported token usage, finish reason, errors, reasoning, and tool calls. Analytics shows outcomes, per-model rollups, latency percentiles, and cost estimates only where a catalog price was known before the run. Missing data stays marked as not measured; there are no invented quality scores.
+Run history records queue time, time to first text, total and model time, reported token usage, finish reason, errors, reasoning, tool calls, context utilization, and cost estimates where a catalog price was known before the run. Missing data stays marked as not measured.
 
 ## Data and privacy
 
-- **Stored in your browser (IndexedDB):** threads, attachments, comparisons, settings, connections, runs, and feedback. Analytics is calculated locally; nothing is sent to a telemetry service.
+- **Stored in your browser (IndexedDB):** threads, attachments, comparisons, settings, connections, runs, and feedback. Nothing is sent to a telemetry service.
 - **API keys:** kept for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the local backend in request bodies, never in URLs, and are left out of every export.
 - **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the local backend to that provider; web search sends search queries to Exa; documents never leave.
 
