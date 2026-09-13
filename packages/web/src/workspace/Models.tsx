@@ -40,6 +40,7 @@ import { WorkbenchDialog } from './WorkbenchDialog';
 import { costStatus } from '../lib/cost';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
+import { apiUrl } from '../lib/backend';
 
 interface Preset {
   id: string;
@@ -597,7 +598,7 @@ export function Models({
     const controller = new AbortController();
     pullController.current = controller;
     try {
-      const response = await fetch('/v1/models/ollama/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model }), signal: controller.signal });
+      const response = await fetch(apiUrl('/v1/models/ollama/pull'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model }), signal: controller.signal });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || `Download failed (${response.status}).`);
@@ -629,7 +630,7 @@ export function Models({
     if (!window.confirm(`Remove “${model.id}” from ${connection.name}? This deletes its local Ollama files.`)) return;
     setActionError('');
     try {
-      const response = await fetch('/v1/models/ollama', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model: model.id }) });
+      const response = await fetch(apiUrl('/v1/models/ollama'), { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: targetFor(connection), model: model.id }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || `Removal failed (${response.status}).`);
       await discover(connection.id);

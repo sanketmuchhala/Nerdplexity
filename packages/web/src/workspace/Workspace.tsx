@@ -33,6 +33,7 @@ import { Documents } from './Documents';
 import { Runs } from './Runs';
 import { useRun } from './useRun';
 import { Compare } from './Compare';
+import { BackendNotice } from './BackendNotice';
 import { Analytics } from './Analytics';
 import './workspace.css';
 
@@ -418,6 +419,7 @@ export default function Workspace() {
             <span className="np-avatar">N</span>
           </div>
         </header>
+        <BackendNotice />
         {storageError && (
           <div className="np-error np-storage-error" role="alert">
             {storageError}

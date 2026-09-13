@@ -49,6 +49,12 @@ Last reviewed: 2026-09-12 (after P7 verification).
 - **Anthropic rate-limit headers** (`anthropic-ratelimit-*`) are not parsed.
 - **Runs are lost if the backend restarts.** This is by design; the client reports them as interrupted.
 
+### Deployment
+
+- **Vercel settings unverified.** The fix is in `vercel.json` files; the project's dashboard settings (root directory, framework, environment) and the original failure log were not seen. Confirm the next deployment succeeds, then set `VITE_API_URL` once the server is deployed.
+- **Server hosting (owner, pending).** Deploy the server to Render or Railway with `NERDPLEXITY_HOSTED=1` and `ALLOWED_ORIGINS`; not yet done or tested on either platform.
+- **Hosted server limits.** Hostnames that resolve to private addresses (DNS rebinding) are not blocked, only literal addresses and local-only names. Anyone who knows the server's address can send it requests with their own keys; add authentication or rate limiting before sharing it widely.
+
 ### Code health
 
 - **LAN runtimes over plain http** are not allowed by the destination policy.
