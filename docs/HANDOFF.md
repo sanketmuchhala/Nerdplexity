@@ -5,7 +5,7 @@ Branch: `codex/engine`. P4 base: `988dae9f8df4563e7e98c63aee2fbcf24e804104` (`cl
 
 ## Current status
 
-The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 through P8 are complete as of 2026-09-12 (P8 merged the `codex/local-workspace` black-and-green UI and logo kit into this branch; open items live in [plan/pending.md](../plan/pending.md)). The current workbench adds inline model switching, immutable request snapshots, presets, explicit context construction, thread branching, safe import/export, bounded text/image attachments, Ollama pull/removal controls, persisted two-model comparisons, and optional bounded tools (calculator on any model; document search/read on local models) through a streaming tool loop for every provider. The historical checkpoint below predates these phases and remains background only; `/v1/local/*` has been replaced by `/v1/runs`, the non-streaming document agent in `runtime/agent.ts` has been replaced by `runtime/toolLoop.ts`, Dexie is at v6, every configured provider streams, and the next phase is P7.
+The active plan and progress log is [plan/implementation-plan.md](../plan/implementation-plan.md). P0 through P9 are complete as of 2026-09-13 (P9 split the repository into `frontend/`, `backend/`, and `shared/`); P0 through P8 were complete as of 2026-09-12 (P8 merged the `codex/local-workspace` black-and-green UI and logo kit into this branch; open items live in [plan/pending.md](../plan/pending.md)). The current workbench adds inline model switching, immutable request snapshots, presets, explicit context construction, thread branching, safe import/export, bounded text/image attachments, Ollama pull/removal controls, persisted two-model comparisons, and optional bounded tools (calculator on any model; document search/read on local models) through a streaming tool loop for every provider. The historical checkpoint below predates these phases and remains background only; `/v1/local/*` has been replaced by `/v1/runs`, the non-streaming document agent in `runtime/agent.ts` has been replaced by `runtime/toolLoop.ts`, Dexie is at v6, every configured provider streams, and the next phase is P7.
 
 ## Read this first
 
@@ -21,9 +21,10 @@ Future, separate product surface: a community directory of legitimate free AI AP
 
 ## Current architecture
 
-- React + TypeScript + Vite frontend in `packages/web`.
-- Express + TypeScript backend in `packages/server`.
-- Shared package in `packages/types`; pnpm workspace.
+- React + TypeScript + Vite frontend in `frontend/` (`@app/web`).
+- Express + TypeScript backend in `backend/` (`@app/server`); `backend/src/app.ts` builds the app, `server.ts` starts it.
+- Shared contracts in `shared/` (`@app/types`); pnpm workspace.
+- Paths in the historical table below use the old layout: `packages/web` is now `frontend/`, `packages/server` is `backend/`, `packages/types` is `shared/`.
 - Dexie/IndexedDB stores conversations, settings, workspace documents, and run records in the browser.
 - Local flow: browser -> Express `/v1/local/*` -> runtime on the app host -> NDJSON run events -> browser.
 - Cloud flow: existing `/v1/chat` endpoint and existing provider adapters. The new UI consumes this response as JSON, not a live stream.

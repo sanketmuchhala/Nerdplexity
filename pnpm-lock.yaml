@@ -60,14 +60,14 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.13)
 
-  packages/server:
+  backend:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.125.0
         version: 0.125.0
       '@app/types':
         specifier: workspace:*
-        version: link:../types
+        version: link:../shared
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -88,13 +88,11 @@ importers:
         specifier: ^4.17.17
         version: 4.17.23
 
-  packages/types: {}
-
-  packages/web:
+  frontend:
     dependencies:
       '@app/types':
         specifier: workspace:*
-        version: link:../types
+        version: link:../shared
       '@lobehub/icons-static-svg':
         specifier: 1.95.0
         version: 1.95.0
@@ -156,6 +154,8 @@ importers:
       fake-indexeddb:
         specifier: ^6.2.5
         version: 6.2.5
+
+  shared: {}
 
 packages:
 

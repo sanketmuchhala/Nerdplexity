@@ -45,3 +45,21 @@ test('the API health check is served under /v1 for proxies and hosted frontends'
   const response = await page.request.get('/v1/health');
   expect(await response.json()).toMatchObject({ status: 'ok' });
 });
+
+const health = (extra: object) => ({ status: 'ok', timestamp: new Date().toISOString(), hosted: false, originAllowed: true, features: { ollamaManagement: true }, ...extra });
+
+test('a server that does not allow this site says how to fix it', async ({ page }) => {
+  await page.route('**/v1/health', route => route.fulfill({ json: health({ originAllowed: false }) }));
+  await page.goto('/app');
+  const notice = page.locator('.np-backend-notice');
+  await expect(notice).toContainText('This Nerdplexity server does not allow this site.');
+  await expect(notice).toContainText('ALLOWED_ORIGINS');
+});
+
+test('a hosted server hides Ollama management and explains why local models are unavailable', async ({ page }) => {
+  await page.route('**/v1/health', route => route.fulfill({ json: health({ hosted: true, features: { ollamaManagement: false } }) }));
+  await page.goto('/app/models');
+  await expect(page.locator('.np-hosted-hint')).toContainText('cannot reach models on your computer');
+  await expect(page.getByRole('heading', { name: 'Install an Ollama model' })).toHaveCount(0);
+  await expect(page.locator('.np-backend-notice')).toHaveCount(0);
+});

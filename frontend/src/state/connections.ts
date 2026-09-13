@@ -5,7 +5,7 @@ import { db, KEYED_KINDS } from '../lib/db';
 import * as credentials from '../lib/credentials';
 import { isLocal, usesBaseURL } from '../lib/cost';
 import { followRun, startRun } from '../workspace/runClient';
-import { apiUrl } from '../lib/backend';
+import { apiUrl, unreachableMessage } from '../lib/backend';
 
 export { isLocal, usesBaseURL };
 
@@ -52,7 +52,7 @@ async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal):
     return await response.json();
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
-    return { ok: false, error: { category: 'offline', message: 'The Nerdplexity backend is not responding. Start it with pnpm dev.' }, checkedAt: Date.now() };
+    return { ok: false, error: { category: 'offline', message: unreachableMessage() }, checkedAt: Date.now() };
   }
 }
 

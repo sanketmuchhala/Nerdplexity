@@ -119,7 +119,7 @@ Do not commit keys or personal conversation exports.
 
 Nerdplexity is built to run on your own computer. You can also put it online, for example the web app on **Vercel** and the server on **Render** or **Railway**.
 
-**Web app on Vercel.** The repo's [`vercel.json`](vercel.json) builds only the web app as a static site. If your Vercel project builds from `packages/server`, [`packages/server/vercel.json`](packages/server/vercel.json) does the same. In the Vercel project, set `VITE_API_URL` to your server's address (for example `https://nerdplexity-api.onrender.com`) and redeploy. Until then, the site shows a notice that no server is connected.
+**Web app on Vercel.** In the Vercel project, set **Root Directory** to `frontend`. [`frontend/vercel.json`](frontend/vercel.json) then builds only the web app as a static site. Set `VITE_API_URL` to your server's address (for example `https://nerdplexity-api.onrender.com`) and redeploy. Until then, the site shows a notice that no server is connected; if the server is up but does not list your site in `ALLOWED_ORIGINS`, the notice says so.
 
 **Server on Render or Railway.** Create a web service (a long-running process, not serverless: runs stream from memory) with:
 
@@ -149,6 +149,7 @@ Before you deploy, know that:
 | `pnpm build` then `pnpm start` | Build, then serve the production build on port 5174 |
 | `pnpm -r test` | Unit tests (Vitest) for the server and web app |
 | `pnpm test` | Browser tests (Playwright) |
+| `pnpm test:split` | End-to-end test of the deployed shape: the web app on its own origin calling a separate backend |
 | `pnpm lint` | Source policy check |
 
 Browser tests start their own backend, web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.
@@ -156,9 +157,9 @@ Browser tests start their own backend, web app, and a fake OpenAI-compatible pro
 To refresh the README screenshots, run `pnpm dev` and then `node scripts/capture-readme.mjs`.
 
 ```text
-packages/web      React + Vite app (Zustand, Dexie)
-packages/server   Express backend: run engine, provider adapters, tools
-packages/types    Shared TypeScript contracts
+frontend/         React + Vite web app (Zustand, Dexie)  -> @app/web
+backend/          Express server: run engine, provider adapters, tools  -> @app/server
+shared/           TypeScript contracts used by both  -> @app/types
 tests/browser     Playwright tests
 logo/             Logo kit: SVG and PNG marks, favicon, brand tokens
 plan/             Implementation plan, open items, release evidence

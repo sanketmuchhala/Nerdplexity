@@ -41,6 +41,7 @@ import { costStatus } from '../lib/cost';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
 import { apiUrl } from '../lib/backend';
+import useBackend from '../state/backend';
 
 interface Preset {
   id: string;
@@ -488,6 +489,9 @@ export function Models({
   const [freeOnly, setFreeOnly] = useState(persistedFreeOnly);
   useEffect(() => setFreeOnly(persistedFreeOnly), [persistedFreeOnly]);
   useConnections((state) => state.keyVersion);
+  // A hosted server cannot reach models on the user's computer, so it offers no Ollama management.
+  const hostedServer = useBackend((state) => state.health?.hosted ?? false);
+  const ollamaManagement = useBackend((state) => state.health?.features.ollamaManagement ?? true);
   const [editing, setEditing] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -780,6 +784,11 @@ export function Models({
             );
           })}
         </ul>
+        {hostedServer && (
+          <p className="np-conn-hint np-hosted-hint">
+            This Nerdplexity server is hosted, so it cannot reach models on your computer (Ollama, LM Studio). Use hosted providers here, or run Nerdplexity locally for local models.
+          </p>
+        )}
         {!connections.length && editing !== 'new' && (
           <p className="np-conn-hint">
             No connections yet. Add Ollama for local models, or a provider with
@@ -804,7 +813,7 @@ export function Models({
 
       {connectionsOnly && <WebSearchSettings />}
 
-      {!connectionsOnly && connections.some(c => c.kind === 'ollama') && (
+      {!connectionsOnly && ollamaManagement && connections.some(c => c.kind === 'ollama') && (
         <section className="np-panel np-ollama-manager" aria-labelledby="ollama-manager-title">
           <div className="np-section-title">
             <div><h2 id="ollama-manager-title">Install an Ollama model</h2><p>Downloads stay on the machine running Ollama. Progress comes directly from the runtime.</p></div>
@@ -974,7 +983,7 @@ export function Models({
                     )}
                   </div>
                   <div className="np-model-row-actions">
-                    {connection.kind === 'ollama' && (
+                    {connection.kind === 'ollama' && ollamaManagement && (
                       <button className="np-button ghost small" onClick={() => void deleteLocalModel(connection, model)}><Trash2 size={12} /> Remove</button>
                     )}
                     <button

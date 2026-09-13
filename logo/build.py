@@ -1,6 +1,6 @@
 """Build the Nerdplexity logo kit from the app's CSS geometry.
 
-Geometry mirrors packages/web/src/workspace/workspace.css (.np-brand*), in CSS px,
+Geometry mirrors frontend/src/workspace/workspace.css (.np-brand*), in CSS px,
 scaled by K. Letters are shaped with HarfBuzz (as Chrome does) and outlined from
 Inter at the same weight and optical size, with overlaps removed.
 """

@@ -12,10 +12,11 @@
     "dev:ollama": "ollama serve",
     "build": "pnpm -r build",
     "start": "pnpm --filter @app/server start",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules",
+    "clean": "rm -rf frontend/dist backend/dist shared/dist frontend/node_modules backend/node_modules shared/node_modules node_modules",
     "lint": "pnpm -r lint && pnpm ci:no-emoji",
     "test": "pnpm test:browser",
     "test:browser": "playwright test",
+    "test:split": "playwright test -c playwright.split.config.ts",
     "ci:no-emoji": "node ./scripts/no-emoji-check.mjs",
     "deadcode": "node ./scripts/deadcode-analyzer.mjs",
     "typecheck": "pnpm -r typecheck"

@@ -8,7 +8,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "npm run ci:no-emoji",
-    "ci:no-emoji": "node ../../scripts/no-emoji-check.mjs",
+    "ci:no-emoji": "node ../scripts/no-emoji-check.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

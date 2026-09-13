@@ -1,8 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm --filter @app/web build && rm -rf packages/server/public && cp -R packages/web/dist packages/server/public",
-  "outputDirectory": "public",
-  "rewrites": [{ "source": "/((?!v1/|health$).*)", "destination": "/index.html" }]
-}

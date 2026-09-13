@@ -471,3 +471,4 @@
 .np-app[data-theme="light"] .np-backend-notice { border-color: #b7791f55; background: #fff6df; }
 .np-app[data-theme="light"] .np-backend-notice > svg { color: #8a5a12; }
 @media (max-width: 760px) { .np-backend-notice { margin: 10px 16px 0; flex-wrap: wrap; } }
+.np-hosted-hint { margin-top: 12px; }

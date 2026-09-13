@@ -9,6 +9,7 @@ node_modules/
 
 # Build outputs
 dist/
+dist-split/
 build/
 .next/
 
@@ -133,5 +134,3 @@ pids
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
-# Vercel fallback build output (see packages/server/vercel.json)
-packages/server/public/

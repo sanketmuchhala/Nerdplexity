@@ -51,7 +51,8 @@ Last reviewed: 2026-09-12 (after P7 verification).
 
 ### Deployment
 
-- **Vercel settings unverified.** The fix is in `vercel.json` files; the project's dashboard settings (root directory, framework, environment) and the original failure log were not seen. Confirm the next deployment succeeds, then set `VITE_API_URL` once the server is deployed.
+- **Change Vercel's Root Directory to `frontend` (owner, required).** The project built from `packages/server`, which no longer exists; deployments fail until the setting is changed (Settings > Build and Deployment > Root Directory).
+- **Set `VITE_API_URL` in Vercel** once the server is deployed, then redeploy.
 - **Server hosting (owner, pending).** Deploy the server to Render or Railway with `NERDPLEXITY_HOSTED=1` and `ALLOWED_ORIGINS`; not yet done or tested on either platform.
 - **Hosted server limits.** Hostnames that resolve to private addresses (DNS rebinding) are not blocked, only literal addresses and local-only names. Anyone who knows the server's address can send it requests with their own keys; add authentication or rate limiting before sharing it widely.
 

@@ -1,5 +1,5 @@
 import type { RunEnvelope, RunStartRequest, RunStartResponse, TerminalPayload } from '@app/types';
-import { apiUrl } from '../lib/backend';
+import { apiUrl, unreachableMessage } from '../lib/backend';
 
 /** The server no longer has this run (restart, expiry) or cannot replay what the client missed. */
 export class RunUnavailable extends Error {}
@@ -22,11 +22,13 @@ export async function startRun(request: RunStartRequest, signal: AbortSignal): P
     try {
       response = await fetch(apiUrl('/v1/runs'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });
     } catch (error) {
-      if (signal.aborted || attempt >= 2) throw signal.aborted ? error : new Error('The Nerdplexity backend is not responding. Start it with pnpm dev.');
+      if (signal.aborted || attempt >= 2) throw signal.aborted ? error : new Error(unreachableMessage());
       await sleep(400 * (attempt + 1), signal);
       continue;
     }
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => null);
+    // A reply that is not JSON came from something other than the Nerdplexity server (a static host).
+    if (!data) throw new Error(unreachableMessage());
     if (!response.ok) throw new Error(data.error || `The run could not start (${response.status}).`);
     return data;
   }

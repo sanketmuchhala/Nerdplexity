@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
@@ -10,10 +10,10 @@
     "noEmit": false,
     "baseUrl": ".",
     "paths": {
-      "@app/types": ["../types/src/index.ts"]
+      "@app/types": ["../shared/src/index.ts"]
     }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../types" }]
+  "references": [{ "path": "../shared" }]
 }

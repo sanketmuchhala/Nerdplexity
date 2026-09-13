@@ -20,9 +20,9 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@app/web/*": ["packages/web/src/*"],
-      "@app/server/*": ["packages/server/src/*"],
-      "@app/types": ["packages/types/src/index.ts"]
+      "@app/web/*": ["frontend/src/*"],
+      "@app/server/*": ["backend/src/*"],
+      "@app/types": ["shared/src/index.ts"]
     }
   }
 }

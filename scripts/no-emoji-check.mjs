@@ -8,7 +8,7 @@ import emojiRegex from 'emoji-regex';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 
-const scanDirs = ['packages/web/src', 'packages/server/src', 'packages/types/src', 'scripts', 'public', 'docs', '.'];
+const scanDirs = ['frontend/src', 'backend/src', 'shared/src', 'scripts', 'public', 'docs', '.'];
 const fileExtensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.md', '.json', '.html', '.sh'];
 const scanFiles = ['README.md', 'CONTRIBUTING.md', 'CHANGELOG.md', 'package.json'];
 
