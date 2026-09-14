@@ -1,5 +1,7 @@
 # Tools and the bounded agent loop
 
+[Back to the backend documentation index](README.md)
+
 Tool-enabled runs let a model ask Nerdplexity to perform one of four narrow, read-only operations. This is the current "agent" capability of the harness.
 
 It is intentionally not a general computer agent: there is no shell, filesystem write, arbitrary HTTP fetch, browser control, or MCP connection.

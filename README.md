@@ -156,7 +156,7 @@ Browser tests start their own backend, web app, and a fake OpenAI-compatible pro
 
 To refresh the README screenshots, run `pnpm dev` and then `node scripts/capture-readme.mjs`.
 
-New to the server or planning harness work? Start with the [beginner-friendly backend guide](docs/backend/README.md). It documents the architecture, run lifecycle and replay protocol, provider adapters, model discovery, tools, complete HTTP API, security boundaries, and development workflow with editable Mermaid diagrams.
+New to the server or planning harness work? Start with the [beginner-friendly backend guide](backend/docs/README.md). It documents the architecture, run lifecycle and replay protocol, provider adapters, model discovery, tools, complete HTTP API, security boundaries, and development workflow with editable Mermaid diagrams.
 
 ```text
 frontend/         React + Vite web app (Zustand, Dexie)  -> @app/web

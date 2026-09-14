@@ -1,5 +1,7 @@
 # Backend API reference
 
+[Back to the backend documentation index](README.md)
+
 Default local base URL: `http://127.0.0.1:5174`.
 
 During frontend development, Vite proxies `/v1` to this server. A separately deployed frontend uses its `VITE_API_URL` build setting.

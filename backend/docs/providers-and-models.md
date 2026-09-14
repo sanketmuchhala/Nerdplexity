@@ -1,5 +1,7 @@
 # Providers and model discovery
 
+[Back to the backend documentation index](README.md)
+
 Nerdplexity presents one run contract to the browser while supporting several provider protocols. Two subsystems make that possible:
 
 - **Destination resolution** decides where a connection may send traffic and how it authenticates.

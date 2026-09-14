@@ -1,4 +1,4 @@
-# Nerdplexity backend guide
+# Nerdplexity backend documentation
 
 This documentation explains the current Nerdplexity backend from first principles. It is written for someone who can read basic TypeScript but has not worked on a model harness before.
 

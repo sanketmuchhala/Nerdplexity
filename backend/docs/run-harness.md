@@ -1,5 +1,7 @@
 # Run harness
 
+[Back to the backend documentation index](README.md)
+
 The run harness is the center of the backend. It turns a browser request into a controlled model attempt with a stable ID, ordered events, cancellation, reconnect support, safe failures, and optional tools.
 
 The relevant files are:

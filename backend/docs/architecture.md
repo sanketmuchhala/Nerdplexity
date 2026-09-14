@@ -1,5 +1,7 @@
 # Backend architecture
 
+[Back to the backend documentation index](README.md)
+
 ## 1. System context
 
 Nerdplexity is a pnpm workspace with three code packages:

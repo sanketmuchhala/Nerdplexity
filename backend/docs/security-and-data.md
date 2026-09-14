@@ -1,5 +1,7 @@
 # Security and data boundaries
 
+[Back to the backend documentation index](README.md)
+
 This page documents implemented controls and known limits. It is not a claim that the application has completed a security audit.
 
 ## 1. Trust boundaries

@@ -1,5 +1,7 @@
 # Backend development and testing
 
+[Back to the backend documentation index](README.md)
+
 This page is the practical guide for running, debugging, testing, and extending the backend.
 
 ## 1. Requirements
