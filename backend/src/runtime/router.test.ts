@@ -3,7 +3,7 @@ import type { RunEnvelope, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import { ProviderFailure } from './adapters.js';
 import { RunRegistry, type ProgressPayload } from './runs.js';
-import { accountOf, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun } from './router.js';
+import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const sse = (records: unknown[], done = true) => records.map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + (done ? 'data: [DONE]\n\n' : '');
@@ -102,6 +102,21 @@ describe('ranking', () => {
     expect(ranking.nextAvailableAt).toBe(1_030_000);
     now += 31_000;
     expect(rankCandidates([candidate('busy-70b')], task('Hi'), health, 'u1').ranked).toHaveLength(1);
+  });
+
+  it('ranks by Bench results once a model has at least three graded answers for the task', () => {
+    const list = [candidate('big-70b'), candidate('small-8b')];
+    const bench = benchIndex([
+      { connectionId: 'openrouter', model: 'big-70b', category: 'math', passed: 0, failed: 3, errors: 0, lastAt: 1 },
+      { connectionId: 'openrouter', model: 'small-8b', category: 'math', passed: 3, failed: 0, errors: 0, lastAt: 1 },
+      { connectionId: 'openrouter', model: 'small-8b', category: 'code', passed: 0, failed: 2, errors: 0, lastAt: 1 },
+    ]);
+    const order = (text: string, index = bench) => rankCandidates(list, task(text), new RouterHealth(), 'u1', index).ranked.map(r => r.candidate.model);
+    expect(order('Solve 12 * 7')).toEqual(['small-8b', 'big-70b']);
+    expect(rankCandidates(list, task('Solve 12 * 7'), new RouterHealth(), 'u1', bench).ranked[0].why).toContain('passed 3 of 3 Bench math tests');
+    // Two graded code answers are too few to count, so size decides.
+    expect(order('Fix this TypeScript bug')).toEqual(['big-70b', 'small-8b']);
+    expect(order('Solve 12 * 7', new Map())).toEqual(['big-70b', 'small-8b']);
   });
 
   it('keeps health separate per account, so a new key or another user starts fresh', () => {
@@ -215,7 +230,7 @@ describe('route validation', () => {
   it('rejects unknown connections, duplicates, missing keys, and unknown strategies', () => {
     expect(() => validateRunRequest({ ...base, route: route([{ connectionId: 'elsewhere', model: 'm' }]) })).toThrow(/must name one of the route connections/);
     expect(() => validateRunRequest({ ...base, route: route([{ connectionId: 'openrouter', model: 'm' }, { connectionId: 'openrouter', model: 'm' }]) })).toThrow(/listed twice/);
-    expect(() => validateRunRequest({ ...base, route: route([{ connectionId: 'openrouter', model: 'm' }], [{ id: 'openrouter', target: { kind: 'openrouter' } }]) })).toThrow(/Route connection openrouter: Add an API key/);
+    expect(() => validateRunRequest({ ...base, route: route([{ connectionId: 'openrouter', model: 'm' }], [{ id: 'openrouter', target: { kind: 'openrouter' } }]) })).toThrow(/Connection openrouter: Add an API key/);
     expect(() => validateRunRequest({ ...base, route: { ...route([{ connectionId: 'openrouter', model: 'm' }]), strategy: 'paid' } })).toThrow(/Unknown route strategy/);
   });
 

@@ -1,5 +1,6 @@
 // Run lifecycle contracts shared by web and server. Type-only.
 import type { Capability, ConnectionTarget } from './connections';
+import type { BenchResult } from './bench';
 
 export type RunState = 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
 
@@ -118,6 +119,8 @@ export type RunEventPayload =
   | { type: 'quota'; quota: RateLimitState; connectionId?: string }
   | ({ type: 'tool' } & ToolTrace)
   | ({ type: 'route' } & RouteStep)
+  /** A Bench job graded one item (result), or skipped planned requests after a limit; done of total requests. */
+  | { type: 'bench'; result?: BenchResult; skipped?: number; done: number; total: number }
   /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */
   | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome; timing: RunTiming }
   | { type: 'failed'; error: ProviderError; timing: RunTiming }

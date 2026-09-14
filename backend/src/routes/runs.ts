@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from 'express';
-import type { RunEnvelope, RunMessage, ToolName } from '@app/types';
+import type { BenchScore, RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
 import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
 import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
-import { RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
+import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 
 type FetchFn = typeof fetch;
 
@@ -23,18 +23,24 @@ const ROUTE_LIMITS = { connections: 12, models: 200 } as const;
 const ID = /^[A-Za-z0-9_.:@-]{1,100}$/;
 const capability = (value: unknown) => value === true || value === false ? value : null;
 
+/** Resolve a list of connections, each through the destination policy, by their unique IDs. */
+export function resolveConnections(connections: unknown, limit = ROUTE_LIMITS.connections): Map<string, ResolvedTarget> {
+  if (!Array.isArray(connections) || !connections.length || connections.length > limit) throw new Error(`Send 1–${limit} connections.`);
+  const targets = new Map<string, ResolvedTarget>();
+  for (const connection of connections) {
+    if (!connection || typeof connection.id !== 'string' || !ID.test(connection.id) || targets.has(connection.id)) throw new Error('Each connection needs a unique ID.');
+    try { targets.set(connection.id, resolveTarget(connection.target)); }
+    catch (error) { throw new Error(`Connection ${connection.id}: ${(error as Error).message}`); }
+  }
+  return targets;
+}
+
 /** Validate a route: every connection passes the destination policy, and every model names one of them. */
 export function validateRoute(route: any): RouteCandidate[] {
   if (!route || typeof route !== 'object' || route.strategy !== 'free') throw new Error('Unknown route strategy.');
-  const { connections, models } = route;
-  if (!Array.isArray(connections) || !connections.length || connections.length > ROUTE_LIMITS.connections) throw new Error(`A route needs 1–${ROUTE_LIMITS.connections} connections.`);
+  const { models } = route;
+  const targets = resolveConnections(route.connections);
   if (!Array.isArray(models) || !models.length || models.length > ROUTE_LIMITS.models) throw new Error(`A route needs 1–${ROUTE_LIMITS.models} models.`);
-  const targets = new Map<string, ResolvedTarget>();
-  for (const connection of connections) {
-    if (!connection || typeof connection.id !== 'string' || !ID.test(connection.id) || targets.has(connection.id)) throw new Error('Each route connection needs a unique ID.');
-    try { targets.set(connection.id, resolveTarget(connection.target)); }
-    catch (error) { throw new Error(`Route connection ${connection.id}: ${(error as Error).message}`); }
-  }
   const seen = new Set<string>();
   return models.map((entry: any): RouteCandidate => {
     const target = entry && targets.get(entry.connectionId);
@@ -107,13 +113,13 @@ export function validateRunRequest(body: any): ValidRun {
   };
 }
 
-function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string): RunExecutor {
+function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex): RunExecutor {
   if (run.route) {
     const { target: _target, model: _model, messages, ...request } = run.request;
     return routedExecutor({
       owner, candidates: run.route.candidates, request, messages: messages as RunMessage[], tools: run.tools, documents: run.documents,
       ...(run.search ? { search: run.search } : {}),
-    }, { health, fetchImpl });
+    }, { health, fetchImpl, ...(bench ? { bench } : {}) });
   }
   return async ({ signal, emit }) => {
     const events = run.tools.length
@@ -127,18 +133,26 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, ow
   };
 }
 
-export function runsRouter(registry: RunRegistry, fetchImpl: FetchFn = fetch, health = new RouterHealth()): Router {
+export function runsRouter(
+  registry: RunRegistry, fetchImpl: FetchFn = fetch, health = new RouterHealth(),
+  /** The user's Bench scores, which the Free Router ranks models with. */
+  scores?: (owner: string) => Promise<BenchScore[]>,
+): Router {
   const router = Router();
 
-  router.post('/', (req, res) => {
+  router.post('/', (req, res, next) => {
     let run: ValidRun;
     try { run = validateRunRequest(req.body); }
     catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
     const owner = req.userId ?? '';
-    // A routed run queues only its attempts on local models, not the whole run.
-    const local = !run.route && run.request.target.execution === 'local';
-    const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner), owner);
-    res.status(started.existing ? 200 : 201).json(started);
+    // Without saved scores the router still ranks by its other signals.
+    const bench = run.route && scores ? scores(owner).then(benchIndex, () => undefined) : Promise.resolve(undefined);
+    bench.then(index => {
+      // A routed run queues only its attempts on local models, not the whole run.
+      const local = !run.route && run.request.target.execution === 'local';
+      const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner, index), owner);
+      res.status(started.existing ? 200 : 201).json(started);
+    }).catch(next);
   });
 
   // Another user's run answers exactly like a run the server does not have.

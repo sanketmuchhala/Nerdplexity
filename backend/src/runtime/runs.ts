@@ -4,7 +4,7 @@ import { enqueueLocal, getLocalQueueStatus } from '../queue/localQueue.js';
 import { ProviderFailure } from './adapters.js';
 
 /** Events an executor may emit. Lifecycle events are emitted by the registry. */
-export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'delta' | 'reasoning' | 'quota' | 'tool' | 'route' }>;
+export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'delta' | 'reasoning' | 'quota' | 'tool' | 'route' | 'bench' }>;
 
 export interface RunContext {
   signal: AbortSignal;
@@ -74,7 +74,7 @@ export class RunRegistry {
    * Start a run, or return the existing run for a repeated idempotency key. Keys are per owner,
    * so one user's key can never return another user's run.
    */
-  start(key: string, local: boolean, execute: RunExecutor, owner = ''): { runId: string; existing: boolean } {
+  start(key: string, local: boolean, execute: RunExecutor, owner = '', options: { timeoutMs?: number } = {}): { runId: string; existing: boolean } {
     key = `${owner}\n${key}`;
     const known = this.byKey.get(key);
     if (known && this.runs.has(known)) return { runId: known, existing: true };
@@ -86,7 +86,7 @@ export class RunRegistry {
     this.runs.set(run.id, run);
     this.byKey.set(key, run.id);
     this.append(run, { type: 'queued', position: local ? this.opts.queuePosition() : 0 });
-    run.timeoutTimer = setTimeout(() => this.cancel(run.id, 'timeout'), this.opts.timeoutMs);
+    run.timeoutTimer = setTimeout(() => this.cancel(run.id, 'timeout'), options.timeoutMs ?? this.opts.timeoutMs);
     run.timeoutTimer.unref?.();
     this.watchOrphan(run);
     void this.drive(run, local, execute);

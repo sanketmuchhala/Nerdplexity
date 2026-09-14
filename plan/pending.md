@@ -6,11 +6,13 @@ Last reviewed: 2026-09-14 (P11, Free Router).
 
 ## In progress
 
-- **P11, Free Router** (2026-09-14, branch `claude/free-router`). Engine and chat done; see the progress log. Next in this track:
-  - **Bench:** a small, automatically graded suite (coding, math, structured output, tool use, short facts) run across every free model, paced for free-tier limits, with results saved per user.
-  - **Learned ranking:** Bench scores, explicit feedback, and run history replace the name-based priors (parameter count, "coder", "r1") for each task kind.
-  - **Router health is in memory** and restarts empty with the server; persist it (or derive it from run records) once Bench exists.
-  - **Research input:** the owner may supply deep research on free API providers and their limits (`plan/research/free-models.md`) to decide which providers get presets (Cerebras, Mistral, GitHub Models, and others).
+- **P11, Free Router and Bench** (2026-09-14, branch `claude/free-router`). Router, providers, and Bench done; see the progress log. Next in this track:
+  - **Feedback and run history in ranking.** Bench results rank models now; explicit helpful/unhelpful feedback and routed-run outcomes are not used yet.
+  - **Router health is in memory** and restarts empty with the server; persist it or derive it from run records.
+  - **Bench jobs stop if the page is closed** for a minute (the run engine's no-client rule), and a reload does not reattach to a running job. Results saved so far are kept.
+  - **The same model on several providers** (e.g. Llama 3.3 70B on Groq and Cerebras) is treated as separate models; grouping them would share Bench results and give more fallbacks (idea from the research).
+  - **Reusing answers to repeated prompts** to save free quota (the research's semantic caching) is not built.
+  - **Bench covers five categories.** Long-context, image input, and multi-turn tool use are not measured.
 - **P12, memory.** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Moved after the Free Router on 2026-09-14 at the owner's direction.
 
 ## Owner decisions

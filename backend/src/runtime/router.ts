@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
+import type { BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
 import { ModelMessage, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
 import { ResolvedTarget } from './destinations.js';
 import { runWithTools } from './toolLoop.js';
@@ -155,10 +155,30 @@ export interface Ranking {
   nextAvailableAt?: number;
 }
 
+/** Bench results per model ("connectionId\nmodel") and category. */
+export type BenchIndex = Map<string, Partial<Record<BenchCategory, { passed: number; failed: number }>>>;
+
+export function benchIndex(scores: BenchScore[]): BenchIndex {
+  const index: BenchIndex = new Map();
+  for (const score of scores) {
+    const key = `${score.connectionId}\n${score.model}`;
+    index.set(key, { ...index.get(key), [score.category]: { passed: score.passed, failed: score.failed } });
+  }
+  return index;
+}
+
+/** The Bench categories that measure what each kind of request needs. */
+const TASK_BENCH: Record<TaskKind, BenchCategory[]> = {
+  code: ['code'], math: ['math'], reasoning: ['math', 'facts'], writing: ['instructions'], extraction: ['instructions'], general: ['facts', 'instructions'],
+};
+const BENCH_LABEL: Record<BenchCategory, string> = { code: 'code', math: 'math', instructions: 'instruction', tools: 'tool', facts: 'reading' };
+/** Graded answers needed before Bench counts at all. */
+const BENCH_MIN = 3;
+
 const CODE_MODEL = /coder|codestral|devstral|\bcode/i;
 const REASONING_MODEL = /(^|[-/_.])r1\b|reason|think|qwq|magistral|math/i;
 
-export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, health: RouterHealth, owner: string): Ranking {
+export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, health: RouterHealth, owner: string, bench?: BenchIndex): Ranking {
   const excluded: Record<string, number> = {};
   const exclude = (reason: string) => { excluded[reason] = (excluded[reason] ?? 0) + 1; };
   let nextAvailableAt: number | undefined;
@@ -198,6 +218,25 @@ export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, 
     else if (task.estimatedTokens > 16_000 && contextLength >= task.estimatedTokens * 4) { score += 0.1; why.push('large context'); }
     if (target.execution === 'local') { score -= 0.1; why.push('on this machine'); }
 
+    // Measured answers outweigh guesses from the name: a model that passes Bench moves up, one that fails moves down.
+    const measured = bench?.get(`${candidate.connectionId}\n${model}`);
+    if (measured) {
+      const categories = [...TASK_BENCH[task.kind], ...(task.tools ? ['tools' as const] : [])];
+      let passed = 0;
+      let graded = 0;
+      for (const category of categories) {
+        passed += measured[category]?.passed ?? 0;
+        graded += (measured[category]?.passed ?? 0) + (measured[category]?.failed ?? 0);
+      }
+      if (graded >= BENCH_MIN) {
+        // A smoothed pass rate (one pass and one fail assumed), trusted more with each graded answer:
+        // 3 answers count half, 10 about three quarters. Enough to outweigh a size guess once results disagree.
+        const rate = (passed + 1) / (graded + 2);
+        score += graded / (graded + 3) * 1.2 * (rate - 0.5);
+        why.push(`passed ${passed} of ${graded} Bench ${categories.map(c => BENCH_LABEL[c]).join(' and ')} tests`);
+      }
+    }
+
     const seen = health.peek(account, model);
     if (seen) {
       const total = seen.successes + seen.failures;
@@ -231,6 +270,8 @@ export interface RoutedRun {
 
 export interface RouterDeps {
   health: RouterHealth;
+  /** This user's Bench results, when any. */
+  bench?: BenchIndex;
   fetchImpl?: FetchFn;
   /** Serializes models on this machine; the run itself is not queued because most candidates are remote. */
   enqueue?: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -267,10 +308,10 @@ function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderE
  * partial answer is never silently continued by a different model. Every attempt is reported.
  */
 export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
-  const { health, fetchImpl = fetch, enqueue = enqueueLocal } = deps;
+  const { health, bench, fetchImpl = fetch, enqueue = enqueueLocal } = deps;
   return async ({ signal, emit }: RunContext) => {
     const task = profileTask(run.messages, run.tools, run.request.maxTokens);
-    const ranking = rankCandidates(run.candidates, task, health, run.owner);
+    const ranking = rankCandidates(run.candidates, task, health, run.owner, bench);
     const blockedAccounts = new Set<string>();
     let attempts = 0;
     let last: ProviderError | undefined;

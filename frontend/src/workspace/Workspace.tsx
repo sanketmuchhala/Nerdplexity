@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   Clock3,
+  FlaskConical,
   GitCompare,
   Command,
   Cpu,
@@ -36,6 +37,7 @@ import { Documents } from './Documents';
 import { Runs } from './Runs';
 import { useRun } from './useRun';
 import { Compare } from './Compare';
+import { Bench } from './Bench';
 import { BackendNotice } from './BackendNotice';
 import './workspace.css';
 
@@ -56,6 +58,7 @@ const destinations = [
   },
   { id: 'runs', label: 'Run history', icon: Clock3, path: '/app/runs' },
   { id: 'compare', label: 'Compare', icon: GitCompare, path: '/app/compare' },
+  { id: 'bench', label: 'Bench', icon: FlaskConical, path: '/app/bench' },
 ];
 
 export default function Workspace() {
@@ -455,6 +458,8 @@ export default function Workspace() {
           <Runs openConversation={openConversation} />
         ) : current.id === 'compare' ? (
           <Compare onChat={() => go('/app')} />
+        ) : current.id === 'bench' ? (
+          <Bench />
         ) : (
           <ChatWorkspace
             run={run}

@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:copy": "tsx src/scripts/db-copy.ts",
-    "user:password": "tsx src/scripts/set-password.ts"
+    "user:password": "tsx src/scripts/set-password.ts",
+    "bench:sample": "tsx src/scripts/bench-sample.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

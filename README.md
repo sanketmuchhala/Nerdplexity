@@ -26,6 +26,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 - **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
 - **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, or any OpenAI-compatible server, all in one catalog.
 - **Free Router.** Choose it like a model: each message goes to the best free model you have, and to the next one when a model is rate limited.
+- **Bench.** Graded questions from published datasets (code, math, instructions, tool calls, reading) run on your free models, paced for free limits. The Free Router ranks models with your results.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
 - **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
 
@@ -171,6 +172,7 @@ Before you deploy, know that:
 | `pnpm test` | Browser tests (Playwright) |
 | `pnpm test:split` | End-to-end tests of the deployed shape: the web app on its own origin calling a separate backend, locally and hosted with accounts |
 | `pnpm --filter @app/server db:generate` | Generate a database migration after changing `backend/src/db/schema.ts` |
+| `pnpm --filter @app/server bench:sample` | Rebuild the Bench questions from their datasets (`backend/bench/`) |
 | `pnpm lint` | Source policy check |
 
 Browser tests start their own backend (with an in-memory database, and a separate user per test), web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Backend tests use in-memory PGlite; set `TEST_DATABASE_URL` to run them against a Postgres server, as CI does. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.
