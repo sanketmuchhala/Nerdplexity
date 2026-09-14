@@ -1,5 +1,5 @@
 // Run lifecycle contracts shared by web and server. Type-only.
-import type { ConnectionTarget } from './connections';
+import type { Capability, ConnectionTarget } from './connections';
 
 export type RunState = 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
 
@@ -27,6 +27,8 @@ export interface ProviderError {
   /** Whether trying again later may succeed. Only short rate-limit waits, before any generation, are retried automatically. */
   retryable: boolean;
   retryAfterMs?: number;
+  /** 'account': the whole connection is affected (bad key, no credits, account-wide free limit), not just this model. */
+  scope?: 'account';
 }
 
 /** Rate-limit state reported in provider response headers. Meaning of the window varies by provider. */
@@ -66,16 +68,58 @@ export interface ToolTrace {
   source?: 'computed' | 'retrieved' | 'web';
 }
 
+/** What a routed request asks for, as the router classified it. */
+export type TaskKind = 'code' | 'math' | 'reasoning' | 'writing' | 'extraction' | 'general';
+
+/** One model the router may use. The client lists only models it has verified as free. */
+export interface RouteModel {
+  connectionId: string;
+  model: string;
+  displayName?: string;
+  capabilities?: { tools: Capability; vision: Capability };
+  contextLength?: number;
+}
+
+/** Let the server choose the model: candidates across connections, each connection's key sent once. */
+export interface RouteRequest {
+  strategy: 'free';
+  connections: { id: string; target: ConnectionTarget }[];
+  models: RouteModel[];
+}
+
+/** One step of the router's decision, shown with the answer. */
+export interface RouteStep {
+  attempt: number;
+  connectionId: string;
+  model: string;
+  /** 'skipped': never sent (unsuitable or cooling down). 'trying': sent. 'failed': failed before any answer, so the next model was tried. */
+  status: 'skipped' | 'trying' | 'failed';
+  /** Safe to show: why this model was chosen, skipped, or failed. */
+  reason: string;
+  category?: ProviderErrorCategory;
+}
+
+/** Which model answered a routed run. */
+export interface RouteOutcome {
+  connectionId: string;
+  model: string;
+  task: TaskKind;
+  /** Models sent the request, including the one that answered. */
+  attempts: number;
+}
+
 export type RunEventPayload =
   | { type: 'queued'; position: number }
   | { type: 'started' }
   | { type: 'status'; message: string }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
-  | { type: 'quota'; quota: RateLimitState }
+  /** connectionId: set on routed runs, whose quota may come from several connections. */
+  | { type: 'quota'; quota: RateLimitState; connectionId?: string }
   | ({ type: 'tool' } & ToolTrace)
+  | ({ type: 'route' } & RouteStep)
   /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */
-  | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; timing: RunTiming }
+  | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome; timing: RunTiming }
   | { type: 'failed'; error: ProviderError; timing: RunTiming }
   | { type: 'canceled'; reason: 'user' | 'no-client' | 'timeout'; timing: RunTiming };
 
@@ -99,11 +143,9 @@ export type RunContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mimeType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'; data: string };
 
-export interface RunStartRequest {
+interface RunStartBase {
   /** Client-generated; repeating a start with the same key returns the same run. */
   idempotencyKey: string;
-  target: ConnectionTarget;
-  model: string;
   messages: RunMessage[];
   settings?: { temperature?: number; maxTokens?: number; numCtx?: number };
   /** Tools the model may call. Document tools require `documents` and a model on this machine. */
@@ -112,6 +154,12 @@ export interface RunStartRequest {
   /** Required for web_search. The key is used for this run only and never stored or echoed. */
   search?: { provider: 'exa'; apiKey: string };
 }
+
+/** Either one explicit model, or a route the server chooses from. */
+export type RunStartRequest = RunStartBase & (
+  | { target: ConnectionTarget; model: string; route?: undefined }
+  | { route: RouteRequest; target?: undefined; model?: undefined }
+);
 
 export interface RunStartResponse {
   runId: string;

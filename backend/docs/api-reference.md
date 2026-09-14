@@ -249,6 +249,37 @@ Starting a run returns before generation finishes. Follow the event endpoint imm
 
 The two keys have different scopes and are not placed in events.
 
+### Free Router example
+
+Instead of `target` and `model`, a run may send `route`: free models across up to 12 connections (200 models), each connection's key sent once. The server chooses the model (`backend/src/runtime/router.ts`).
+
+```json
+{
+  "idempotencyKey": "example_route_12345",
+  "route": {
+    "strategy": "free",
+    "connections": [
+      { "id": "openrouter", "target": { "kind": "openrouter", "apiKey": "<key>" } },
+      { "id": "lmstudio", "target": { "kind": "openai-compatible", "baseURL": "http://127.0.0.1:1234/v1" } }
+    ],
+    "models": [
+      { "connectionId": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free", "capabilities": { "tools": true, "vision": false }, "contextLength": 131072 },
+      { "connectionId": "lmstudio", "model": "qwen2.5-7b-instruct" }
+    ]
+  },
+  "messages": [{ "role": "user", "content": "Explain recursion briefly." }]
+}
+```
+
+Every connection passes the same destination policy as `target`. The web app lists only models it has verified as free (on this machine, catalog $0, or an account marked as having no billing); the server does not re-check prices. With document tools on, only models on this machine are kept. How the router chooses:
+
+1. Classify the latest message (code, math, reasoning, writing, structured output, general) and what it needs (images, tools, estimated tokens).
+2. Leave out models that report no image or tool support, whose context is too small, or that are cooling down after a failure.
+3. Rank by parameter count read from the model ID, task fit (coding or reasoning models), tool support, and this server's recent success rate and latency for the model. `openrouter/free` and `openrouter/auto` go last.
+4. Send to the best model with short rate-limit waits turned off. If it fails with quota, unavailable, transport, timeout, invalid request, context, or auth before any text, reasoning, or tool call, try the next one (at most 4). A refusal is never routed around, and once any output was shown the run stays on that model.
+
+Rate limits put a model (or, for account-wide limits such as OpenRouter's free-model quota and bad keys, every model on that account) on cooldown until the provider's reset. Health is kept in memory per user, provider, address, and key hash.
+
 ## 6. Follow and replay events
 
 ### `GET /v1/runs/:id/events?after=N`
@@ -287,9 +318,10 @@ Errors:
 | `status` | `message` | Visible retry, tool-step, or parameter notice |
 | `delta` | `text` | Answer text to append |
 | `reasoning` | `text` | Provider-exposed reasoning text to append |
-| `quota` | `quota` | Rate-limit snapshot from response headers |
+| `quota` | `quota`, `connectionId` on routed runs | Rate-limit snapshot from response headers |
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
-| `completed` | usage/finishReason/loadMs/timing | Successful terminal event |
+| `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
+| `completed` | usage/finishReason/loadMs/route/timing | Successful terminal event; `route` names the model that answered a routed run |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |
 

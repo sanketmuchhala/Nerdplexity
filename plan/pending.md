@@ -2,11 +2,16 @@
 
 The single list of work that is not done, deferred, or waiting on a decision. The progress log in [implementation-plan.md](implementation-plan.md) stays the history of each phase; this file is the current to-do list. When an item is finished, move it to **Resolved** with the date and commit.
 
-Last reviewed: 2026-09-14 (after P10, database and accounts).
+Last reviewed: 2026-09-14 (P11, Free Router).
 
 ## In progress
 
-- **P11, memory (next).** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Decided 2026-09-14: database first (P10), memory next.
+- **P11, Free Router** (2026-09-14, branch `claude/free-router`). Engine and chat done; see the progress log. Next in this track:
+  - **Bench:** a small, automatically graded suite (coding, math, structured output, tool use, short facts) run across every free model, paced for free-tier limits, with results saved per user.
+  - **Learned ranking:** Bench scores, explicit feedback, and run history replace the name-based priors (parameter count, "coder", "r1") for each task kind.
+  - **Router health is in memory** and restarts empty with the server; persist it (or derive it from run records) once Bench exists.
+  - **Research input:** the owner may supply deep research on free API providers and their limits (`plan/research/free-models.md`) to decide which providers get presets (Cerebras, Mistral, GitHub Models, and others).
+- **P12, memory.** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Moved after the Free Router on 2026-09-14 at the owner's direction.
 
 ## Owner decisions
 

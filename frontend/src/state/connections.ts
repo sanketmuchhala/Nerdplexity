@@ -8,6 +8,7 @@ import * as credentials from '../lib/credentials';
 import { isLocal, usesBaseURL } from '../lib/cost';
 import { followRun, startRun } from '../workspace/runClient';
 import { apiUrl, unreachableMessage } from '../lib/backend';
+import { routerPool, type RouterPool } from '../lib/router';
 
 export { isLocal, usesBaseURL };
 
@@ -44,6 +45,12 @@ export const modelKey = (connectionId: string, modelId: string) => `${connection
 
 /** The newest discovery result, including one shown while a refresh is in progress. */
 export const latestResult = (state?: CatalogState): DiscoveryResult | undefined => state?.status === 'done' ? state.result : state?.previous;
+
+/** The free models the Free Router can use right now, with the keys to reach them. */
+export function currentRouterPool(connections: Connection[], catalog: Record<string, CatalogState>): RouterPool {
+  const catalogs = Object.fromEntries(Object.entries(catalog).map(([id, state]) => [id, latestResult(state)]));
+  return routerPool(connections, catalogs, targetFor, connection => !requiresKey(connection.kind) || !!credentials.getKey(connection.id));
+}
 
 async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
   try {

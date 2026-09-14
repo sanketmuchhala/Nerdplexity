@@ -15,6 +15,9 @@ const MODELS = [
   'reasoning-model',
   'tool-model',
 ];
+// Under /router/v1 the catalog lists two sizes, so the Free Router tries the larger one first.
+// A "-70b"-style suffix selects the same behavior as the plain name.
+const ROUTER_MODELS = ['limit-model-70b', 'fast-model-8b'];
 // Groq-style rate-limit headers on every successful response.
 const QUOTA = {
   'x-ratelimit-limit-requests': '1000',
@@ -34,6 +37,8 @@ async function readJSON(req) {
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
+    const routerCatalog = url.pathname.startsWith('/router/');
+    const path = routerCatalog ? url.pathname.slice('/router'.length) : url.pathname;
     if (url.pathname === '/_log') {
       const prompt = url.searchParams.get('prompt');
       res
@@ -64,18 +69,19 @@ http
       }));
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/v1/models') {
+    if (req.method === 'GET' && path === '/v1/models') {
       res
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ data: MODELS.map((id) => ({ id })) }));
+        .end(JSON.stringify({ data: (routerCatalog ? ROUTER_MODELS : MODELS).map((id) => ({ id })) }));
       return;
     }
-    if (req.method !== 'POST' || url.pathname !== '/v1/chat/completions') {
+    if (req.method !== 'POST' || path !== '/v1/chat/completions') {
       res.writeHead(404).end();
       return;
     }
 
     const body = await readJSON(req);
+    const model = String(body.model).replace(/-\d+b$/, '');
     const userContent = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
     const prompt = Array.isArray(userContent)
       ? userContent.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
@@ -99,7 +105,7 @@ http
       if (!entry.completed) entry.aborted = true;
     });
 
-    if (body.model === 'limit-model') {
+    if (model === 'limit-model') {
       res
         .writeHead(429, {
           'content-type': 'application/json',
@@ -115,7 +121,7 @@ http
     }
     // busy-model: the first request for a prompt is rate limited briefly, then succeeds.
     if (
-      body.model === 'busy-model' &&
+      model === 'busy-model' &&
       log.filter((e) => e.prompt === prompt).length === 1
     ) {
       res
@@ -131,7 +137,7 @@ http
     }
     // tool-model: calls tools by prompt. "[[expr]]" uses the calculator, "malformed" sends
     // broken arguments, "notes" searches then reads a document. Answers from the results.
-    if (body.model === 'tool-model') {
+    if (model === 'tool-model') {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const lastUser = body.messages.map((m) => m.role).lastIndexOf('user');
       const results = body.messages
@@ -172,19 +178,19 @@ http
       return !res.destroyed;
     };
 
-    if (body.model === 'slow-model') {
+    if (model === 'slow-model') {
       for (let i = 0; i < 30; i++)
         if (!(await send(delta(`token-${i} `), 100))) return;
-    } else if (body.model === 'restart-model') {
+    } else if (model === 'restart-model') {
       // Reach persisted partial output quickly, then leave a deterministic reload window.
       for (let i = 0; i < 30; i++)
         if (!(await send(delta(`token-${i} `), i < 3 ? 50 : 500))) return;
-    } else if (body.model === 'broken-model') {
+    } else if (model === 'broken-model') {
       await send(delta('partial-a '), 50);
       await send(delta('partial-b'), 50);
       res.destroy();
       return;
-    } else if (body.model === 'reasoning-model') {
+    } else if (model === 'reasoning-model') {
       await send(
         frame({
           choices: [
@@ -194,7 +200,7 @@ http
         20,
       );
       await send(delta('Reasoned answer.'));
-    } else if (body.model === 'busy-model') {
+    } else if (model === 'busy-model') {
       await send(delta('Answered after waiting.'));
     } else {
       // Split the answer mid-character to exercise chunk reassembly end to end.
