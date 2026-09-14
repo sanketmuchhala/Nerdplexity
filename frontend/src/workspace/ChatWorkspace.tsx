@@ -49,7 +49,7 @@ import { hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
-import { AILoadingState } from '../components/ui/AILoadingState';
+
 const RUN_STATUS_LABEL = {
   canceled: 'Stopped · partial answer',
   failed: 'Failed · partial answer',
@@ -628,23 +628,20 @@ export function ChatWorkspace({
             ))}
             {ownRun && !saved && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
             {ownRun && !saved && <ToolActivity tools={run.tools} />}
-            {ownRun && !saved && (run.partial || run.reasoning) && (
+            {ownRun && !saved && (run.running || run.partial || run.reasoning) && (
               <Message
                 message={{
                   id: 'stream',
                   role: 'assistant',
-                  content: run.partial,
+                  content: run.partial || '',
                   timestamp: Date.now(),
-                  metadata: run.reasoning
-                    ? { reasoning: run.reasoning }
+                  metadata: run.reasoning || run.running
+                    ? { reasoning: run.reasoning || '' }
                     : undefined,
                 }}
                 model={liveModel}
                 streaming={run.running}
               />
-            )}
-            {ownRun && run.running && !run.partial && !run.reasoning && (
-              <AILoadingState phase={run.phase} />
             )}
             {ownRun && !run.running && run.phase && (
               <div className="np-live-status">{run.phase}</div>

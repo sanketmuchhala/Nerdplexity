@@ -82,12 +82,23 @@ export function Message({ message, animate = true, model, streaming = false }: P
               aria-controls={`reasoning-${message.id}`}
               onClick={() => setShowReasoning(value => !value)}
             >
-              <Brain size={13} />
+              {streaming ? (
+                <div className="np-inline-orb">
+                  <div className="np-inline-orb-inner">
+                    <div className="np-orb-node color-magenta"></div>
+                    <div className="np-orb-node color-blue"></div>
+                    <div className="np-orb-node color-green"></div>
+                    <div className="np-orb-node color-yellow"></div>
+                    <div className="np-orb-node color-purple"></div>
+                  </div>
+                  <div className="np-inline-orb-glass"></div>
+                </div>
+              ) : (
+                <Brain size={13} />
+              )}
               {streaming ? (
                 <>
-                  <span className="np-reasoning-pulse" aria-hidden="true" />
-                  <strong>Thinking live</strong>
-                  <span className="np-reasoning-state">Streaming</span>
+                  <strong>Thinking...</strong>
                 </>
               ) : (
                 <>
@@ -101,7 +112,6 @@ export function Message({ message, animate = true, model, streaming = false }: P
             {showReasoning && (
               <div id={`reasoning-${message.id}`} className="np-reasoning-body">
                 {formatContent(reasoning)}
-                {streaming && <span className="np-reasoning-caret" aria-hidden="true" />}
               </div>
             )}
           </section>
