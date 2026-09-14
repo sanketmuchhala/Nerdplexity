@@ -446,7 +446,7 @@ export function ChatWorkspace({
               <span className="np-orbit-point b" />
               <span className="np-orbit-point c" />
               <div className="np-orbit-center">
-                n<span>.</span>
+                <img src="/brand/nerdplexity-mark.svg" alt="" />
               </div>
               <span className="np-orbit-caption">LOCAL INTELLIGENCE</span>
             </div>

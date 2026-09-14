@@ -206,13 +206,17 @@ export default function Workspace() {
         >
           <X size={18} />
         </button>
-        <button className="np-brand" onClick={() => go('/app')}>
-          <span className="np-brand-mark">
-            n<span>.</span>
-          </span>
-          <span>
-            Nerdplexity<small>INDEPENDENT INTELLIGENCE</small>
-          </span>
+        <button
+          className="np-brand"
+          onClick={() => go('/app')}
+          aria-label="Nerdplexity home"
+        >
+          <img
+            src="/brand/nerdplexity-lockup-on-dark.svg"
+            alt="Nerdplexity"
+            width={184}
+            height={42}
+          />
         </button>
         <button className="np-new-thread" onClick={() => void newThread()}>
           <Plus size={16} />

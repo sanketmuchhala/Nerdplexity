@@ -55,7 +55,13 @@ export function Message({ message, animate = true, model, streaming = false }: P
           {model ? (
             <ModelLogo modelId={model.id} provider={model.provider} size={26} />
           ) : (
-            <span className="np-answer-mark" aria-hidden>n<span>.</span></span>
+            <img
+              src="/brand/nerdplexity-mark.svg"
+              alt=""
+              width={26}
+              height={26}
+              className="h-[26px] w-[26px] flex-shrink-0 rounded-lg"
+            />
           )}
           <span className="text-[15px] font-medium" style={{ color: 'var(--t1)' }}>
             {model ? formatModelName(model.displayName, model.id) : 'Nerdplexity'}

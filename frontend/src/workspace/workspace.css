@@ -32,7 +32,8 @@
 .np-app ::selection { background: rgba(var(--np-accent-rgb), 0.200); }
 .np-app ::placeholder { color: var(--np-faint); opacity: 1; }
 .np-sidebar { flex: 0 0 248px; width: 248px; display: flex; flex-direction: column; background: var(--np-sidebar); border-right: 1px solid var(--np-border); padding: 27px 16px 0; }
-.np-brand { display: flex; gap: 10px; align-items: center; text-align: left; padding: 0 5px 30px; width: fit-content; }
+.np-brand { display: flex; align-items: center; text-align: left; padding: 0 5px 30px; width: fit-content; max-width: 100%; }
+.np-brand img { width: 184px; height: auto; max-width: 100%; }
 .np-brand-mark { font-size: 29px; font-weight: 750; line-height: 1; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 11px; color: var(--np-sidebar); background: var(--np-accent); letter-spacing: -3px; padding-right: 3px; }
 .np-brand-mark span { color: var(--np-faint); }
 .np-brand > span:last-child { font-size: 17px; font-weight: 600; letter-spacing: -.6px; }
@@ -99,7 +100,8 @@
 .np-orbit-ring.one { width: 101px; height: 101px; border-style: dashed; border-color: rgba(var(--np-accent-rgb), 0.145); }
 .np-orbit-ring.two { width: 157px; height: 120px; transform: translate(-50%, -50%) rotate(-28deg); }
 .np-orbit-ring.three { width: 194px; height: 126px; transform: translate(-50%, -50%) rotate(27deg); border-color: rgba(var(--np-accent-rgb), 0.063); }
-.np-orbit-center { position: absolute; top: 43%; left: 50%; transform: translate(-50%,-50%) rotate(-8deg); display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; background: linear-gradient(135deg,var(--np-raised),var(--np-bg)); border: 1px solid rgba(var(--np-accent-rgb), 0.251); border-radius: 17px; box-shadow: 0 12px 35px #0003, inset 0 1px 0 rgba(var(--np-contrast-rgb), 0.082); font-size: 42px; font-weight: 600; color: var(--np-accent); letter-spacing: -5px; padding-right: 7px; padding-bottom: 3px; }
+.np-orbit-center { position: absolute; top: 43%; left: 50%; transform: translate(-50%,-50%) rotate(-8deg); display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 17px; box-shadow: 0 12px 35px #0003, inset 0 1px 0 rgba(var(--np-contrast-rgb), 0.082); font-size: 42px; font-weight: 600; color: var(--np-accent); letter-spacing: -5px; padding-right: 7px; padding-bottom: 3px; }
+.np-orbit-center img { width: 100%; height: 100%; display: block; }
 .np-orbit-center span { color: var(--np-muted); }
 .np-orbit-point { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: rgba(var(--np-accent-rgb), 0.502); }
 .np-orbit-point.a { top: 38px; left: 39px; box-shadow: 0 0 0 4px rgba(var(--np-accent-rgb), 0.035); }
