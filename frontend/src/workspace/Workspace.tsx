@@ -23,7 +23,10 @@ import {
   X,
 } from 'lucide-react';
 import useChat from '../state/chatStore';
-import { db, WorkspaceDocument } from '../lib/db';
+import type { WorkspaceDocument } from '../lib/db';
+import { AccountMenu } from './AccountMenu';
+import useAccount from '../state/account';
+import * as store from '../lib/store';
 import useConnections from '../state/connections';
 import { WorkbenchDialog } from './WorkbenchDialog';
 import { ChatWorkspace } from './ChatWorkspace';
@@ -70,6 +73,7 @@ export default function Workspace() {
   const current = destinations.find((d) => d.id === view) || destinations[0];
   const [documents, setDocuments] = useState<WorkspaceDocument[]>([]);
   const [storageError, setStorageError] = useState('');
+  const { account, importedThreads } = useAccount();
   const [sidebar, setSidebar] = useState(false);
   const [palette, setPalette] = useState(false);
   const [query, setQuery] = useState('');
@@ -93,11 +97,9 @@ export default function Workspace() {
   );
   const refreshDocuments = useCallback(async () => {
     try {
-      setDocuments(await db.documents.orderBy('updatedAt').reverse().toArray());
-    } catch {
-      setStorageError(
-        'Unable to read workspace documents. Check browser storage.',
-      );
+      setDocuments(await store.documents.list());
+    } catch (reason) {
+      setStorageError(`Unable to read workspace documents. ${(reason as Error).message}`);
     }
   }, []);
   useEffect(() => {
@@ -413,10 +415,18 @@ export default function Workspace() {
               {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <span className="np-top-note">Your space. Your rules.</span>
-            <span className="np-avatar">N</span>
+            <AccountMenu />
           </div>
         </header>
         <BackendNotice />
+        {importedThreads ? (
+          <div className="np-success np-storage-error" role="status">
+            Copied {importedThreads} {importedThreads === 1 ? 'thread' : 'threads'} from this browser to {account?.local === false ? 'your account' : 'the Nerdplexity server'}.
+            <button onClick={() => useAccount.setState({ importedThreads: undefined })} className="np-icon-button" aria-label="Dismiss">
+              <X size={13} />
+            </button>
+          </div>
+        ) : null}
         {storageError && (
           <div className="np-error np-storage-error" role="alert">
             {storageError}

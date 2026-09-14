@@ -25,8 +25,12 @@ export default defineConfig({
     {
       command: 'pnpm dev:server',
       url: `http://127.0.0.1:${apiPort}/health`,
-      // Web search goes to the fake provider's Exa stand-in, never to Exa, in tests.
-      env: { PORT: String(apiPort), EXA_API_URL: `http://127.0.0.1:${fakePort}/exa` },
+      // Web search goes to the fake provider's Exa stand-in, never to Exa, in tests. Saved data lives
+      // in memory for this run only, and each test picks its own user (tests/browser/fixtures.ts).
+      env: {
+        PORT: String(apiPort), EXA_API_URL: `http://127.0.0.1:${fakePort}/exa`,
+        NERDPLEXITY_DATA_DIR: 'memory://', NERDPLEXITY_TEST_USERS: '1', NERDPLEXITY_HOSTED: '', DATABASE_URL: '',
+      },
       reuseExistingServer,
       timeout: 30_000,
     },

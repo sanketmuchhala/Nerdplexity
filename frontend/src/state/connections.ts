@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { BillingStatus, Connection, ConnectionKind, ConnectionTarget, DiscoveryResult, ProviderError, RateLimitState } from '@app/types';
-import { db, KEYED_KINDS } from '../lib/db';
+import { KEYED_KINDS } from '../lib/db';
+import * as store from '../lib/store';
+import { authHeaders, sessionEnded } from '../lib/api';
 import * as credentials from '../lib/credentials';
 import { isLocal, usesBaseURL } from '../lib/cost';
 import { followRun, startRun } from '../workspace/runClient';
@@ -46,8 +48,12 @@ export const latestResult = (state?: CatalogState): DiscoveryResult | undefined 
 async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
   try {
     const response = await fetch(apiUrl('/v1/models/discover'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target }), signal,
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ target }), signal,
     });
+    if (response.status === 401) {
+      try { sessionEnded(); } catch { /* sign-in is shown */ }
+      return { ok: false, error: { category: 'auth', message: 'Sign in to continue.' }, checkedAt: Date.now() };
+    }
     if (!response.ok) throw new Error(`Backend returned ${response.status}`);
     return await response.json();
   } catch (error) {
@@ -88,7 +94,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
   setQuota: (connectionId, quota) => {
     const snapshot = { ...quota, at: Date.now() };
     set(state => ({ quota: { ...state.quota, [connectionId]: snapshot } }));
-    void db.connections.update(connectionId, { quota: snapshot }).catch(() => undefined);
+    void store.connections.patch(connectionId, { quota: snapshot }).catch(() => undefined);
   },
 
   checkModel: async (connectionId, modelId) => {
@@ -119,7 +125,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
 
   load: async () => {
     await credentials.loadRememberedKeys();
-    const connections = await db.connections.orderBy('id').toArray();
+    const connections = await store.connections.list();
     connections.sort((a, b) => a.createdAt - b.createdAt || a.name.localeCompare(b.name));
     const quota = Object.fromEntries(connections.filter(c => c.quota).map(c => [c.id, c.quota!]));
     set(state => ({ connections, quota, keyVersion: state.keyVersion + 1 }));
@@ -145,7 +151,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
-    await db.connections.put(connection);
+    await store.connections.put(connection);
     set(state => ({
       connections: existing ? state.connections.map(c => (c.id === id ? connection : c)) : [...state.connections, connection],
       keyVersion: state.keyVersion + 1,
@@ -155,10 +161,8 @@ const useConnections = create<ConnectionStore>((set, get) => ({
 
   remove: async id => {
     inflight.get(id)?.abort();
-    await db.transaction('rw', db.connections, db.credentials, async () => {
-      await db.connections.delete(id);
-      await credentials.clearKey(id);
-    });
+    await store.connections.remove(id);
+    await credentials.clearKey(id);
     set(state => {
       const catalog = { ...state.catalog };
       delete catalog[id];

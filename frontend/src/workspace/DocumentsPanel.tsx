@@ -37,7 +37,7 @@ export function DocumentsPanel({
       <p className="np-dialog-note">
         {documents.length
           ? `${documents.length} ${documents.length === 1 ? 'document' : 'documents'} · ${totalChars.toLocaleString()} characters. The model can search and read them, one page at a time; each call appears with the answer.`
-          : 'Your workspace is empty. Documents stay in this browser.'}
+          : 'Your workspace is empty. Documents are saved with your threads and never sent to online models.'}
       </p>
 
       <div className={`np-docs-switch ${enabled ? 'on' : ''}`}>

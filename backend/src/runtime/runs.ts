@@ -33,6 +33,8 @@ type Listener = (envelope: RunEnvelope) => void;
 interface ServerRun {
   id: string;
   key: string;
+  /** The user who started it; only they can follow or cancel it. */
+  owner: string;
   state: RunState;
   events: RunEnvelope[];
   nextSeq: number;
@@ -68,13 +70,17 @@ export class RunRegistry {
     };
   }
 
-  /** Start a run, or return the existing run for a repeated idempotency key. */
-  start(key: string, local: boolean, execute: RunExecutor): { runId: string; existing: boolean } {
+  /**
+   * Start a run, or return the existing run for a repeated idempotency key. Keys are per owner,
+   * so one user's key can never return another user's run.
+   */
+  start(key: string, local: boolean, execute: RunExecutor, owner = ''): { runId: string; existing: boolean } {
+    key = `${owner}\n${key}`;
     const known = this.byKey.get(key);
     if (known && this.runs.has(known)) return { runId: known, existing: true };
     this.prune();
     const run: ServerRun = {
-      id: randomUUID(), key, state: 'queued', events: [], nextSeq: 1, bytes: 0, listeners: new Set(),
+      id: randomUUID(), key, owner, state: 'queued', events: [], nextSeq: 1, bytes: 0, listeners: new Set(),
       controller: new AbortController(), createdAt: Date.now(),
     };
     this.runs.set(run.id, run);
@@ -85,6 +91,11 @@ export class RunRegistry {
     this.watchOrphan(run);
     void this.drive(run, local, execute);
     return { runId: run.id, existing: false };
+  }
+
+  /** Who started this run, or undefined when the server does not have it. */
+  ownerOf(id: string): string | undefined {
+    return this.runs.get(id)?.owner;
   }
 
   state(id: string): RunState | undefined {

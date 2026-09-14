@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('backend starts without an Ollama service', async ({ request }) => {
   const response = await request.get(`http://127.0.0.1:${Number(process.env.PORT) || 5174}/health`);

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { DiscoveryResult, ModelRef, ProviderErrorCategory, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
-import { db, RunRecord, WorkspaceDocument } from '../lib/db';
+import type { RunRecord, WorkspaceDocument } from '../lib/db';
+import * as store from '../lib/store';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { isLocal, latestResult, targetFor } from '../state/connections';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
@@ -90,12 +91,7 @@ export function useRun() {
     };
     let claimed = false;
     try {
-      claimed = await db.transaction('rw', db.runs, async () => {
-        const current = await db.runs.get(record.id);
-        if (current && current.status !== 'running') return false;
-        await db.runs.put(final);
-        return true;
-      });
+      ({ claimed } = await store.runs.finish(final));
       const chat = useChat.getState();
       if (claimed && record.output) {
         const metadata = { ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}) };
@@ -109,7 +105,7 @@ export function useRun() {
         await chat.loadConversations();
       }
     } catch {
-      setError({ message: 'Browser storage failed. Copy the visible answer before leaving.', retryable: false });
+      setError({ message: 'The answer could not be saved to the server. Copy the visible answer before leaving.', retryable: false });
     }
     if (active.current?.record.id === record.id) active.current = null;
     setRunning(false); setPartial(''); setReasoning('');
@@ -140,7 +136,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void db.runs.update(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
+      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -200,7 +196,7 @@ export function useRun() {
     showRunning(record, 'Starting');
     try {
       // Durable before contacting the model, so a reload can find this run.
-      await db.runs.put(record);
+      await store.runs.put(record);
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: attempt.model, messages: attempt.messages,
         settings: attempt.input.settings,
@@ -211,7 +207,7 @@ export function useRun() {
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);
-      await db.runs.update(record.id, { runId });
+      await store.runs.patch(record.id, { runId });
     } catch (err) {
       const canceled = active.current?.cancelRequested;
       await finalize(record, { type: 'local', status: canceled ? 'canceled' : 'failed', message: canceled ? undefined : (err as Error).message });
@@ -227,9 +223,9 @@ export function useRun() {
     let state = useChat.getState();
     try {
       if (!state.activeConversation()) { await state.newConversation(); state = useChat.getState(); }
-    } catch { setError({ message: 'Unable to create a thread. Check browser storage.', retryable: false }); return; }
+    } catch (err) { setError({ message: (err as Error).message || 'Unable to create a thread.', retryable: false }); return; }
     const conversation = state.activeConversation();
-    if (!conversation) { setError({ message: 'Unable to create a thread. Check browser storage.', retryable: false }); return; }
+    if (!conversation) { setError({ message: 'Unable to create a thread.', retryable: false }); return; }
     const connection = useConnections.getState().connections.find(c => c.id === conversation.connectionId);
     if (!conversation.model || !conversation.connectionId) { setError({ message: 'Choose a model in Models first.', retryable: false }); return; }
     if (!connection) { setError({ message: 'This thread’s connection was removed. Choose another model in Models.', retryable: false }); return; }
@@ -257,7 +253,7 @@ export function useRun() {
       attachments: (conversation.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })),
     };
     try { await state.addMessage('user', prompt, undefined, conversation.id); }
-    catch { setError({ message: 'Unable to save your message. Check browser storage.', retryable: false }); return; }
+    catch (err) { setError({ message: (err as Error).message || 'Unable to save your message.', retryable: false }); return; }
     await execute({
       conversationId: conversation.id, connectionId: connection.id, model: conversation.model, prompt, tools, documents: input.documents,
       messages: context.messages, input,
@@ -303,7 +299,7 @@ export function useRun() {
     let disposed = false;
     let mine: AbortController | null = null;
     void (async () => {
-      const pending = (await db.runs.where('status').equals('running').toArray().catch(() => [])).sort((a, b) => b.startedAt - a.startedAt);
+      const pending = (await store.runs.list({ status: 'running' }).catch(() => [])).sort((a, b) => b.startedAt - a.startedAt);
       if (disposed) return;
       for (const record of pending) {
         if (active.current) break;

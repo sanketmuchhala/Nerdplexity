@@ -2,15 +2,16 @@
 
 The single list of work that is not done, deferred, or waiting on a decision. The progress log in [implementation-plan.md](implementation-plan.md) stays the history of each phase; this file is the current to-do list. When an item is finished, move it to **Resolved** with the date and commit.
 
-Last reviewed: 2026-09-13 (after P8.2 cleanup).
+Last reviewed: 2026-09-14 (after P10, database and accounts).
 
 ## In progress
 
-- Nothing. P0–P7 are complete; use the release candidate and prioritize the open items from real workflows.
+- **P11, memory (next).** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Decided 2026-09-14: database first (P10), memory next.
 
 ## Owner decisions
 
-- **Documents stay local** (2026-09-11). Document tools run only on models on this machine and are not offered for online models.
+- **Documents stay local** (2026-09-11). Document tools run only on models on this machine and are not offered for online models. Since P10 the documents themselves are saved by the Nerdplexity server with the user's other data (on the user's computer, or in the hosted database).
+- **Database and hosting** (2026-09-14). Postgres everywhere: PGlite locally, Railway Postgres (Hobby plan) when hosted. Real accounts when hosted; the local server has a single built-in owner. Browser data is imported automatically; `db:copy` moves local data to Railway.
 - **Web search provider is Exa** (2026-09-11). Other providers can be added behind the same tool later.
 
 ## Deferred by the owner
@@ -51,16 +52,28 @@ Last reviewed: 2026-09-13 (after P8.2 cleanup).
 
 ### Deployment
 
-- **Change Vercel's Root Directory to `frontend` (owner, required).** The project built from `packages/server`, which no longer exists; deployments fail until the setting is changed (Settings > Build and Deployment > Root Directory).
-- **Set `VITE_API_URL` in Vercel** once the server is deployed, then redeploy.
-- **Server hosting (owner, pending).** Deploy the server to Render or Railway with `NERDPLEXITY_HOSTED=1` and `ALLOWED_ORIGINS`; not yet done or tested on either platform.
-- **Hosted server limits.** Hostnames that resolve to private addresses (DNS rebinding) are not blocked, only literal addresses and local-only names. Anyone who knows the server's address can send it requests with their own keys; add authentication or rate limiting before sharing it widely.
+- **Deploy to Railway (owner).** Postgres from the pgvector template, the service from this repository, and the variables in the README's Deploying section. Not yet done or tested on Railway itself; the hosted mode, Postgres driver, and accounts are tested locally and in CI.
+- **Set `VITE_API_URL` in Vercel** to the Railway address, add the Vercel address to `ALLOWED_ORIGINS` on Railway, then redeploy.
+- **Hosted server limits.** Hostnames that resolve to private addresses (DNS rebinding) are not blocked, only literal addresses and local-only names. Sign-in rate limiting reads the visitor's address from `X-Real-IP`/`X-Forwarded-For` (set by Railway and Render); elsewhere all visitors share one limit.
+
+### Accounts and data (P10)
+
+- **Password reset and email verification** need an email provider (for example Resend). Until then the owner resets a password with `pnpm --filter @app/server user:password`.
+- **GitHub or Google sign-in** is not built.
+- **Remembered API keys are per browser, not per account.** They are keyed by connection ID; on a shared browser, a second account with a connection of the same fixed ID (for example `openrouter`) can use the first account's remembered key. Sign-out does not forget keys.
+- **Only one browser's earlier data is imported per account.** Threads saved by earlier versions in a second browser stay in that browser (IndexedDB is never deleted).
+- **The thread list loads every message** at startup, as the browser version did. Paginate before histories grow large.
+- **No offline use or multi-device conflict handling.** The server is the single source of truth; changes wait for it.
+- **PGlite serves one process.** Stop the local server before running `db:copy` against `backend/data`.
 
 ### Code health
 
 - **LAN runtimes over plain http** are not allowed by the destination policy.
 
 ## Resolved
+
+- P10 (2026-09-14): data moved to a server database (PGlite locally, Postgres when hosted) with accounts on hosted servers, which closes "anyone who knows the server's address can use it": hosted servers now require a session for data, runs, and discovery.
+- Vercel Root Directory set to `frontend` by the owner (2026-09-13); production serves the web app.
 
 - P8 (2026-09-12): the `codex/local-workspace` UI (black and green theme, model logos, list catalog, provider modal, logo-headed answers) merged into `codex/engine`, and the logo kit adopted. The other checkout's branch is now contained in `codex/engine`.
 - P7 added canonical run measurements and release hardening (2026-09-12). P8.2 later removed the aggregate Analytics page while retaining useful per-run measurements in Run history.

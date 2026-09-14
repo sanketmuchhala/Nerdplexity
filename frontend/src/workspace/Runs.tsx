@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { liveQuery } from 'dexie';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CheckCircle2, Clock, Download, XCircle } from 'lucide-react';
-import { db, RunRecord, RunStatus } from '../lib/db';
+import type { RunRecord, RunStatus } from '../lib/db';
+import * as store from '../lib/store';
+import useChat from '../state/chatStore';
 import { exportRuns, measurementFor } from '../lib/runMetrics';
 import { exportText } from './api';
 import { ToolActivity } from './ToolActivity';
@@ -10,27 +11,30 @@ const STATUS_LABEL: Record<RunStatus, string> = { running: 'running', completed:
 const seconds = (ms?: number) => ms === undefined ? 'Not reported' : `${(ms / 1000).toFixed(2)}s`;
 const percent = (value?: number) => value === undefined ? 'Not available' : `${(value * 100).toFixed(1)}%`;
 const money = (value?: number) => value === undefined ? 'Not available' : value === 0 ? '$0' : value < 0.01 ? '<$0.01' : `$${value.toFixed(2)}`;
+/** How often to refresh while a run is still in progress. */
+const LIVE_MS = 3000;
 
 export function Runs({ openConversation }: { openConversation: (id: string) => void }) {
   const [runs, setRuns] = useState<RunRecord[]>([]);
   const [selected, setSelected] = useState<RunRecord | null>(null);
-  const [conversationIds, setConversationIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
+  const conversations = useChat(state => state.conversations);
+  const conversationIds = useMemo(() => new Set(conversations.map(c => c.id)), [conversations]);
+  const running = runs.some(run => run.status === 'running');
   useEffect(() => {
-    const subscription = liveQuery(async () => ({
-      runs: await db.runs.orderBy('startedAt').reverse().limit(100).toArray(),
-      conversationIds: new Set((await db.conversations.toCollection().primaryKeys()).map(String)),
-    })).subscribe({
-      next: value => {
-        setRuns(value.runs);
-        setConversationIds(value.conversationIds);
-        setSelected(current => current ? value.runs.find(run => run.id === current.id) ?? null : null);
-        setError('');
-      },
-      error: () => setError('Unable to read run history. Check browser storage.'),
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+    let disposed = false;
+    const refresh = () => store.runs.list({ limit: 100 }).then(value => {
+      if (disposed) return;
+      setRuns(value);
+      setSelected(current => current ? value.find(run => run.id === current.id) ?? null : null);
+      setError('');
+    }, (reason: Error) => { if (!disposed) setError(`Unable to read run history. ${reason.message}`); });
+    void refresh();
+    // Finished runs announce themselves; runs still in progress are refreshed periodically.
+    window.addEventListener('nerdplexity:runs', refresh);
+    const timer = running ? setInterval(refresh, LIVE_MS) : undefined;
+    return () => { disposed = true; window.removeEventListener('nerdplexity:runs', refresh); clearInterval(timer); };
+  }, [running]);
   const complete = runs.filter(run => run.status === 'completed');
   const measured = runs.filter(run => run.usage);
   const selectedMetric = selected ? measurementFor(selected) : undefined;

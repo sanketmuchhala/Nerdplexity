@@ -10,6 +10,7 @@ node_modules/
 # Build outputs
 dist/
 dist-split/
+dist-hosted/
 build/
 .next/
 
@@ -86,7 +87,8 @@ backups/
 ehthumbs.db
 Thumbs.db
 
-# Local database files
+# Local database files (PGlite keeps the local server's data in backend/data)
+backend/data/
 *.db
 *.sqlite
 *.sqlite3

@@ -523,3 +523,28 @@
 @media (prefers-reduced-motion: reduce) {
   .np-dialog[open], .np-dialog[open]::backdrop { animation: none !important; }
 }
+
+/* Sign in (hosted servers). */
+.np-auth { align-items: center; justify-content: center; overflow-y: auto; padding: 32px 16px; background: radial-gradient(circle at 50% -10%, rgba(var(--np-accent-rgb), .10), transparent 55%), var(--np-bg); }
+.np-auth-card { width: min(400px, 100%); padding: 34px 32px 26px; border: 1px solid var(--np-border); border-radius: 18px; background: var(--np-panel); box-shadow: 0 24px 80px #0008; animation: np-dialog-in .38s cubic-bezier(.16, 1, .3, 1) both; }
+.np-auth-card .np-brand-mark { margin-bottom: 22px; }
+.np-auth-card h1 { font-size: 24px; font-weight: 650; letter-spacing: -.8px; line-height: 1.2; }
+.np-auth-sub { margin: 8px 0 24px; color: var(--np-muted); font-size: 13px; }
+.np-auth-card form { display: flex; flex-direction: column; gap: 16px; }
+.np-auth-card .np-error { margin: 0; }
+.np-auth-submit { justify-content: center; height: 42px; margin-top: 4px; }
+.np-auth-switch { margin-top: 20px; font-size: 13px; color: var(--np-muted); text-align: center; }
+.np-auth-switch button { color: var(--np-accent); font-weight: 600; }
+.np-auth-switch button:hover { text-decoration: underline; }
+.np-auth-foot { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--np-border); font-size: 11px; color: var(--np-faint); text-align: center; }
+
+/* Account menu on the top-bar avatar. */
+.np-account { position: relative; }
+.np-account > .np-avatar { cursor: pointer; transition: border-color .15s ease, background-color .15s ease; }
+.np-account > .np-avatar:hover, .np-account > .np-avatar[aria-expanded="true"] { border-color: var(--np-accent); background: var(--np-accent-dim); }
+.np-account-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; width: 250px; padding: 12px; border: 1px solid var(--np-border); border-radius: 12px; background: var(--np-panel); box-shadow: 0 16px 50px #0007; animation: np-drop .2s ease both; }
+.np-account-menu strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.np-account-menu p { margin: 3px 0 0; font-size: 11px; color: var(--np-muted); }
+.np-account-menu .np-button { width: 100%; justify-content: center; margin-top: 12px; }
+.np-success.np-storage-error { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
+.np-success.np-storage-error > .np-icon-button { margin-left: auto; flex-shrink: 0; }

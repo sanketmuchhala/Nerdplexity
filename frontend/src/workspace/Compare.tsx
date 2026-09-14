@@ -5,7 +5,8 @@ import type { ModelDescriptor, ModelRef, RunEnvelope, TerminalPayload } from '@a
 import useChat from '../state/chatStore';
 import useConnections, { latestResult, modelKey, requiresKey, targetFor } from '../state/connections';
 import { hasKey } from '../lib/credentials';
-import { db, legacyProvider, type ComparisonRecord, type ComparisonSide, type Message, type RunRecord } from '../lib/db';
+import { legacyProvider, type ComparisonRecord, type ComparisonSide, type Message, type RunRecord } from '../lib/db';
+import * as store from '../lib/store';
 import { buildContext, workbenchSettings } from '../lib/workbench';
 import { cancelRun, followRun, startRun } from './runClient';
 import { exportText } from './api';
@@ -39,7 +40,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
     return result.models.map(descriptor => ({ ref: { connectionId: connection.id, modelId: descriptor.id }, descriptor, label: `${descriptor.displayName} · ${connection.name}` }));
   }), [connectionState.connections, connectionState.catalog]);
 
-  const refresh = async () => setRecords(await db.comparisons.orderBy('createdAt').reverse().toArray());
+  const refresh = async () => setRecords(await store.comparisons.list().catch(() => []));
   useEffect(() => { void refresh(); return () => controllers.current.forEach(controller => controller.abort()); }, []);
   useEffect(() => {
     if (chosen[0] || choices.length < 2) return;
@@ -47,7 +48,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
   }, [choices, chosen]);
 
   const choiceFor = (key: string) => choices.find(choice => modelKey(choice.ref.connectionId, choice.ref.modelId) === key);
-  const persist = async (record: ComparisonRecord) => { record.updatedAt = Date.now(); await db.comparisons.put(structuredClone(record)); };
+  const persist = async (record: ComparisonRecord) => { record.updatedAt = Date.now(); await store.comparisons.put(structuredClone(record)); };
   const show = (record: ComparisonRecord) => { setCurrent(structuredClone(record)); };
 
   const runSide = async (comparison: ComparisonRecord, index: 0 | 1) => {
@@ -64,10 +65,10 @@ export function Compare({ onChat }: { onChat: () => void }) {
       ...(discovery?.ok ? { pricing: { execution: discovery.execution, classification: discovery.execution === 'local' ? 'local' as const : descriptor?.pricing ?? 'unknown' as const, ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}), catalogCheckedAt: discovery.checkedAt } } : {}),
     };
     side.runRecordId = record.id;
-    await db.runs.put(record);
+    await store.runs.put(record);
     try {
       const started = await startRun({ idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: side.modelId, messages: comparison.input.messages, settings: comparison.input.settings }, controller.signal);
-      side.runId = started.runId; record.runId = started.runId; await db.runs.update(record.id, { runId: started.runId });
+      side.runId = started.runId; record.runId = started.runId; await store.runs.patch(record.id, { runId: started.runId });
       const terminal = await followRun(started.runId, 0, (envelope: RunEnvelope) => {
         record.lastSeq = envelope.seq;
         if (envelope.event.type === 'queued' && envelope.event.position > 0) side.status = 'queued';
@@ -82,7 +83,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
       side.status = controller.signal.aborted ? 'canceled' : 'failed'; side.error = controller.signal.aborted ? 'Stopped.' : (reason as Error).message;
       record.status = side.status; record.error = side.error; record.durationMs = Date.now() - record.startedAt;
     }
-    await db.runs.put(record); await persist(comparison); show(comparison);
+    await store.runs.put(record); await persist(comparison); show(comparison);
   };
 
   const finishSide = (side: ComparisonSide, record: RunRecord, terminal: TerminalPayload) => {
@@ -144,6 +145,6 @@ export function Compare({ onChat }: { onChat: () => void }) {
     </section>
     {current && <p className="np-conn-hint np-compare-settings">Shared settings: {settingsLabel(current.input.settings)}.{current.sides.every(side => { const result = latestResult(connectionState.catalog[side.connectionId]); return result?.ok && result.execution === 'local'; }) && ' Both models run on this machine, so they run one at a time and do not compete for memory. Run time excludes the wait.'}</p>}
     {current && <section className="np-compare-results" aria-label="Comparison results">{current.sides.map((side, index) => <article className="np-panel np-compare-side" key={index}><header><div><span className="np-eyebrow">MODEL {index === 0 ? 'A' : 'B'}</span><h2>{side.modelId}</h2></div><span className={`np-label ${side.status === 'failed' ? 'error' : ''}`}>{side.status}</span></header><div className="np-compare-metrics"><span>Measured run time <strong>{formatMs(runTime(side))}</strong></span><span>Measured first text <strong>{formatMs(side.ttftMs)}</strong></span><span>Provider-reported tokens <strong>{side.usage?.total_tokens?.toLocaleString() ?? '—'}</strong></span><span>Estimated shared input <strong>~{current.input.context.estimatedTokens.toLocaleString()}</strong></span><span>Runtime-reported model load <strong>{side.loadMs === undefined ? 'Not reported' : formatMs(side.loadMs)}</strong></span><span>Waited in local queue <strong>{formatMs(side.queuedMs)}</strong></span></div>{side.reasoning && <details><summary>Reasoning</summary><pre>{side.reasoning}</pre></details>}<div className="np-compare-output">{side.output || (side.error ? <span className="np-error">{side.error}</span> : side.status === 'queued' ? 'Waiting for the other local model to finish…' : 'Waiting for output…')}</div>{side.output && <button className="np-button small" onClick={() => void continueFrom(current, side)}>Continue in chat</button>}</article>)}</section>}
-    <section className="np-compare-history"><div className="np-section-title"><div><h2>Saved comparisons</h2><p>Results stay in this browser until you remove them.</p></div></div>{records.map(record => <article className="np-run-row" key={record.id}><GitCompare size={15} /><button onClick={() => show(record)}><strong>{record.prompt}</strong><small>{record.sides.map(side => side.modelId).join(' vs ')}</small></button><span className="np-label">{new Date(record.createdAt).toLocaleDateString()}</span><button className="np-icon-button" aria-label="Export comparison" onClick={() => exportText('nerdplexity-comparison.json', exported(record), 'application/json')}><Download size={13} /></button><button className="np-icon-button" aria-label="Delete comparison" onClick={async () => { await db.comparisons.delete(record.id); if (current?.id === record.id) setCurrent(null); await refresh(); }}><Trash2 size={13} /></button></article>)}</section>
+    <section className="np-compare-history"><div className="np-section-title"><div><h2>Saved comparisons</h2><p>Results are saved with your threads until you remove them.</p></div></div>{records.map(record => <article className="np-run-row" key={record.id}><GitCompare size={15} /><button onClick={() => show(record)}><strong>{record.prompt}</strong><small>{record.sides.map(side => side.modelId).join(' vs ')}</small></button><span className="np-label">{new Date(record.createdAt).toLocaleDateString()}</span><button className="np-icon-button" aria-label="Export comparison" onClick={() => exportText('nerdplexity-comparison.json', exported(record), 'application/json')}><Download size={13} /></button><button className="np-icon-button" aria-label="Delete comparison" onClick={async () => { await store.comparisons.remove(record.id); if (current?.id === record.id) setCurrent(null); await refresh(); }}><Trash2 size={13} /></button></article>)}</section>
   </div>;
 }

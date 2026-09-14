@@ -20,11 +20,14 @@ export function allowedOrigins(value = process.env.ALLOWED_ORIGINS ?? ''): Set<s
   return origins;
 }
 
-/** Whether a browser page at this origin may call the API. */
-export function originAllowed(origin: string, extra: ReadonlySet<string>): boolean {
+/**
+ * Whether a browser page at this origin may call the API: this machine, a listed site, or the
+ * server's own address (`host`, from the Host header), where a hosted server serves the web app.
+ */
+export function originAllowed(origin: string, extra: ReadonlySet<string>, host?: string): boolean {
   try {
     const url = new URL(origin);
-    return LOOPBACK_HOSTS.has(url.hostname) || extra.has(url.origin);
+    return LOOPBACK_HOSTS.has(url.hostname) || extra.has(url.origin) || (!!host && url.host === host.toLowerCase());
   } catch {
     return false;
   }
@@ -34,7 +37,7 @@ export function originAllowed(origin: string, extra: ReadonlySet<string>): boole
 export function originGuard(extra: ReadonlySet<string>): RequestHandler {
   return (req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && !originAllowed(origin, extra)) {
+    if (origin && !originAllowed(origin, extra, req.headers.host)) {
       res.status(403).json({ error: extra.size ? 'This site is not allowed to use this Nerdplexity server.' : 'Open Nerdplexity on localhost.' });
       return;
     }

@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test } from './fixtures';
 
 type Target = { kind: string; baseURL?: string; apiKey?: string };
 
