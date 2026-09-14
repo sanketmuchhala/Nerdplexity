@@ -121,6 +121,11 @@ export function ChatWorkspace({
       provider: owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '',
     };
   };
+  const liveModel = (() => {
+    if (!ref || !model) return undefined;
+    const listed = answerModel({ connectionId: ref.connectionId, modelId: run.selectedModel || model });
+    return listed ? { ...listed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) } : undefined;
+  })();
   const enabledTools = configured.tools;
   const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
@@ -616,7 +621,7 @@ export function ChatWorkspace({
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
-                model={ref && model ? answerModel({ connectionId: ref.connectionId, modelId: model }) : undefined}
+                model={liveModel}
                 streaming={run.running}
               />
             )}

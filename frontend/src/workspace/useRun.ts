@@ -61,6 +61,8 @@ export function useRun() {
   const [running, setRunning] = useState(false);
   const [partial, setPartial] = useState('');
   const [reasoning, setReasoning] = useState('');
+  const [selectedModel, setSelectedModel] = useState<string | undefined>();
+  const [selectedProvider, setSelectedProvider] = useState<string | undefined>();
   const [phase, setPhase] = useState('');
   const [error, setError] = useState<RunError | null>(null);
   const [tools, setTools] = useState<ToolTrace[]>([]);
@@ -73,6 +75,7 @@ export function useRun() {
 
   const showRunning = (record: RunRecord, phaseText: string) => {
     setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools);
+    setSelectedModel(record.routedModel); setSelectedProvider(record.routedProvider);
     setError(null); setCanRetry(false); setPhase(phaseText); setRunConversationId(record.conversationId);
   };
 
@@ -96,7 +99,7 @@ export function useRun() {
       if (claimed && (record.output || record.reasoning)) {
         const metadata = { ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}) };
         await chat.addMessage('assistant', record.output, Object.keys(metadata).length ? metadata : undefined, record.conversationId, {
-          ...(record.connectionId ? { provenance: { connectionId: record.connectionId, modelId: record.model } } : {}),
+          ...(record.connectionId ? { provenance: { connectionId: record.connectionId, modelId: record.routedModel || record.model } } : {}),
           ...(record.runId ? { runId: record.runId } : {}),
           ...(status !== 'completed' ? { runStatus: status as 'canceled' | 'failed' | 'interrupted' } : {}),
           ...(final.finishReason ? { finishReason: final.finishReason } : {}),
@@ -108,7 +111,7 @@ export function useRun() {
       setError({ message: 'The answer could not be saved to the server. Copy the visible answer before leaving.', retryable: false });
     }
     if (active.current?.record.id === record.id) active.current = null;
-    setRunning(false); setPartial(''); setReasoning('');
+    setRunning(false); setPartial(''); setReasoning(''); setSelectedModel(undefined); setSelectedProvider(undefined);
     setPhase(status === 'canceled' ? 'Stopped' : '');
     if (outcome.type === 'failed') {
       const ref = { connectionId: record.connectionId || '', modelId: record.model };
@@ -136,7 +139,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
+      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -146,6 +149,7 @@ export function useRun() {
           case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
           case 'started': setPhase('Waiting for the model'); break;
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
+          case 'route': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); setPhase(`Using ${event.model}`); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'delta': record.output += event.text; setPhase('Generating'); break;
           case 'tool': {
@@ -330,7 +334,7 @@ export function useRun() {
   useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
 
   return {
-    send, retry, stop, running, partial, reasoning, phase, error, tools, runConversationId, streamRunId,
+    send, retry, stop, running, partial, reasoning, selectedModel, selectedProvider, phase, error, tools, runConversationId, streamRunId,
     canRetry: canRetry && !!lastAttempt.current && !running,
     clearError: () => setError(null),
   };

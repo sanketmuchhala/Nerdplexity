@@ -19,6 +19,8 @@ export interface ThreadAttachment {
 export type RunStatus = 'running' | 'completed' | 'failed' | 'canceled' | 'interrupted' | 'stopped';
 export interface RunRecord {
   id: string; conversationId: string; model: string; provider: string;
+  /** Concrete model selected by a router such as OpenRouter's free router. */
+  routedModel?: string; routedProvider?: string;
   connectionId?: string;
   prompt: string; startedAt: number; durationMs: number;
   status: RunStatus; mode: 'chat' | 'agent';

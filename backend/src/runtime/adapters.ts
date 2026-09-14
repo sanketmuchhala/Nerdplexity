@@ -41,6 +41,7 @@ export interface ModelRequest {
 
 export type AdapterEvent =
   | { type: 'delta'; text: string }
+  | { type: 'route'; model: string; provider?: string }
   | { type: 'reasoning'; text: string }
   | { type: 'status'; message: string }
   | { type: 'quota'; quota: RateLimitState }
@@ -353,6 +354,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   let usage: Usage | undefined;
   let finishReason: string | undefined;
   let done = false;
+  let routeReported = false;
   const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
     if (!line.startsWith('data:')) continue;
@@ -362,6 +364,11 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     const data = parseRecord(payload, target);
     if (data.error) throw failureFromStatus(Number(data.error.code) || 500, providerMessage(JSON.stringify(data)), target);
     const choice = data.choices?.[0];
+    const routedModel = data.model;
+    if (target.kind === 'openrouter' && !routeReported && typeof routedModel === 'string' && routedModel) {
+      routeReported = true;
+      yield { type: 'route', model: routedModel, ...(typeof data.provider === 'string' ? { provider: data.provider } : {}) };
+    }
     // Groq has reported streaming usage under x_groq.
     const reasoning = reasoningText(choice?.delta);
     if (typeof reasoning === 'string' && reasoning) yield { type: 'reasoning', text: reasoning };

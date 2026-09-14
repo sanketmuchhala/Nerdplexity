@@ -70,6 +70,8 @@ export type RunEventPayload =
   | { type: 'queued'; position: number }
   | { type: 'started' }
   | { type: 'status'; message: string }
+  /** OpenRouter's router can report the concrete model selected for this request. */
+  | { type: 'route'; model: string; provider?: string }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'quota'; quota: RateLimitState }

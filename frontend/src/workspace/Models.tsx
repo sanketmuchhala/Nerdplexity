@@ -303,6 +303,13 @@ function ConnectionForm({
         remember,
         billing,
       });
+      if (kind === 'openrouter' && !initial && checked.models.some(model => model.id === 'openrouter/free') && !useChat.getState().settings?.activeModel) {
+        const defaultModel = { connectionId: connection.id, modelId: 'openrouter/free' };
+        await useChat.getState().saveSettings({ activeModel: defaultModel });
+        const current = useChat.getState().activeConversation();
+        if (current && !current.model && current.messages.length === 0)
+          await useChat.getState().setConversationModel(current.id, defaultModel);
+      }
       onDone();
       void discover(connection.id);
     } catch (err) {

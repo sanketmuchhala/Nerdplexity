@@ -83,9 +83,27 @@ export default function Workspace() {
   const theme = settings?.theme ?? 'dark';
   const run = useRun();
   const { connections, catalog, discoverAll } = useConnections();
+  const defaultedOpenRouter = useRef(false);
   useEffect(() => {
     void discoverAll();
   }, [discoverAll]);
+  useEffect(() => {
+    if (defaultedOpenRouter.current || !settings || settings.activeModel) return;
+    const connection = connections.find(item => item.enabled && item.kind === 'openrouter');
+    const result = connection ? catalog[connection.id] : undefined;
+    const freeRouter = result?.status === 'done' && result.result.ok
+      ? result.result.models.find(model => model.id === 'openrouter/free')
+      : undefined;
+    if (!connection || !freeRouter) return;
+    defaultedOpenRouter.current = true;
+    const ref = { connectionId: connection.id, modelId: freeRouter.id };
+    void (async () => {
+      await state.saveSettings({ activeModel: ref });
+      const conversation = state.activeConversation();
+      if (conversation && !conversation.model && conversation.messages.length === 0)
+        await state.setConversationModel(conversation.id, ref);
+    })().catch(() => { defaultedOpenRouter.current = false; });
+  }, [catalog, connections, settings, state]);
   const checking = Object.values(catalog).some((c) => c.status === 'loading');
   const modelCount = Object.values(catalog).reduce(
     (n, c) =>

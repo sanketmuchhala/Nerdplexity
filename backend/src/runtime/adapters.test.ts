@@ -132,6 +132,14 @@ describe('OpenAI-style streaming', () => {
     expect(result.text).toBe('works');
   });
 
+  it('reports the concrete model selected by the OpenRouter free router', async () => {
+    const { fn } = fakeFetch(() => stream(sse([
+      { model: 'nvidia/nemotron-3-nano-v1:free', provider: 'Nvidia', choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] },
+    ])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }, { model: 'openrouter/free' }), fn);
+    expect(result.events).toContainEqual({ type: 'route', model: 'nvidia/nemotron-3-nano-v1:free', provider: 'Nvidia' });
+  });
+
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {
     // A long wait is left to the user rather than retried automatically.
     const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '30' })).fn)).error);
