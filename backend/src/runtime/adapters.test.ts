@@ -96,6 +96,26 @@ describe('OpenAI-style streaming', () => {
     expect(result.text).toBe('fine');
   });
 
+  it('combines adjacent OpenRouter roles for strict NVIDIA-compatible histories', async () => {
+    const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'works' }, finish_reason: 'stop' }] }])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }, { messages: [
+      { role: 'system', content: 'Saved instruction' },
+      { role: 'system', content: 'Workbench instruction' },
+      { role: 'user', content: 'First question' },
+      { role: 'user', content: 'Attached context' },
+      { role: 'assistant', content: 'First answer' },
+      { role: 'assistant', content: 'Additional answer' },
+      { role: 'user', content: 'Next question' },
+    ] }), fn);
+    expect(calls[0].body.messages).toEqual([
+      { role: 'system', content: 'Saved instruction\n\nWorkbench instruction' },
+      { role: 'user', content: 'First question\n\nAttached context' },
+      { role: 'assistant', content: 'First answer\n\nAdditional answer' },
+      { role: 'user', content: 'Next question' },
+    ]);
+    expect(result.text).toBe('works');
+  });
+
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {
     // A long wait is left to the user rather than retried automatically.
     const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '30' })).fn)).error);

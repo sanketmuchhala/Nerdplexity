@@ -258,6 +258,33 @@ function openAIMessage(message: ModelMessage) {
   };
 }
 
+/**
+ * Some OpenRouter routes (notably NVIDIA NIM) require strict role alternation.
+ * Consecutive turns from the same role are semantically one turn, so combine
+ * them while leaving assistant tool calls and their tool results untouched.
+ */
+function alternatingOpenAIMessages(messages: ModelMessage[]) {
+  const out: any[] = [];
+  const appendContent = (left: any, right: any) => {
+    if (typeof left === 'string' && typeof right === 'string') return `${left}\n\n${right}`;
+    const parts = (content: any) => typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
+    const a = parts(left);
+    const b = parts(right);
+    return [...a, ...(a.length && b.length ? [{ type: 'text', text: '\n\n' }] : []), ...b];
+  };
+  for (const message of messages.map(openAIMessage) as any[]) {
+    const last = out[out.length - 1];
+    const mergeable = message.role === 'system' || message.role === 'user'
+      || (message.role === 'assistant' && !message.tool_calls && !last?.tool_calls);
+    if (mergeable && last?.role === message.role) {
+      last.content = appendContent(last.content, message.content);
+    } else {
+      out.push(message);
+    }
+  }
+  return out;
+}
+
 function ollamaMessage(message: ModelMessage) {
   if (message.role === 'tool') return { role: 'tool', content: message.content, tool_name: message.name };
   if (hasToolCalls(message)) return { role: 'assistant', content: message.content, tool_calls: message.toolCalls.map(call => ({ function: { name: call.name, arguments: argumentsObject(call.arguments) } })) };
@@ -291,7 +318,9 @@ function toolCallAccumulator() {
 async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const body: Record<string, unknown> = {
-    model: req.model, messages: req.messages.map(openAIMessage), stream: true, stream_options: { include_usage: true },
+    model: req.model,
+    messages: target.kind === 'openrouter' ? alternatingOpenAIMessages(req.messages) : req.messages.map(openAIMessage),
+    stream: true, stream_options: { include_usage: true },
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),

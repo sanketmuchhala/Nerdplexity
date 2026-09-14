@@ -18,6 +18,7 @@ import type {
   BillingStatus,
   Connection,
   ConnectionKind,
+  ConnectionTarget,
   ModelDescriptor,
   ModelRef,
   RateLimitState,
@@ -32,6 +33,7 @@ import useConnections, {
   requiresKey,
   targetFor,
   usesBaseURL,
+  verifyConnection,
 } from '../state/connections';
 import { hasKey } from '../lib/credentials';
 import { WebSearchSettings } from './WebSearchSettings';
@@ -280,6 +282,18 @@ function ConnectionForm({
     setSaving(true);
     setError('');
     try {
+      const enteredKey = key.trim();
+      const apiKey = enteredKey || (initial ? targetFor(initial).apiKey : undefined);
+      const target: ConnectionTarget = {
+        kind,
+        ...(usesBaseURL(kind) ? { baseURL: baseURL.trim() } : {}),
+        ...(apiKey ? { apiKey } : {}),
+      };
+      const checked = await verifyConnection(target);
+      if (!checked.ok) {
+        setError(checked.error.message);
+        return;
+      }
       const connection = await save({
         id: initial?.id,
         kind,
@@ -454,7 +468,7 @@ function ConnectionForm({
           Cancel
         </button>
         <button className="np-button primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save Connection'}
+          {saving ? 'Checking…' : 'Save Connection'}
         </button>
       </div>
     </form>

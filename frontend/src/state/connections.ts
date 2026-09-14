@@ -45,7 +45,7 @@ export const modelKey = (connectionId: string, modelId: string) => `${connection
 /** The newest discovery result, including one shown while a refresh is in progress. */
 export const latestResult = (state?: CatalogState): DiscoveryResult | undefined => state?.status === 'done' ? state.result : state?.previous;
 
-async function requestDiscovery(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
+export async function verifyConnection(target: ConnectionTarget, signal?: AbortSignal): Promise<DiscoveryResult> {
   try {
     const response = await fetch(apiUrl('/v1/models/discover'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ target }), signal,
@@ -181,7 +181,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
     try {
       const result = requiresKey(connection.kind) && !credentials.hasKey(id)
         ? { ok: false as const, error: { category: 'auth' as const, message: 'Add an API key to list models.' }, checkedAt: Date.now() }
-        : await requestDiscovery(targetFor(connection), controller.signal);
+        : await verifyConnection(targetFor(connection), controller.signal);
       if (inflight.get(id) === controller) set(state => ({ catalog: { ...state.catalog, [id]: { status: 'done', result } } }));
     } catch {
       // Superseded by a newer request or removal.
