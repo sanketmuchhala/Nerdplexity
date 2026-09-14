@@ -389,6 +389,8 @@ Types live in `shared/src/runs.ts`.
 }
 ```
 
+With automatic web search on, the request also carries `search: { provider: 'exa', apiKey, auto: true }`; the router searches once before the first attempt when the message needs current information, and every attempt gets the results ([Tools, automatic web search](tools.md#automatic-web-search)).
+
 Validation (`validateRoute`): `strategy` must be `"free"`; 1–12 connections with unique IDs (letters, digits, `_ . : @ -`, up to 100 characters); 1–200 models, each naming one of the connections, with no duplicates; capabilities other than `true`/`false` become unknown. Everything else (messages, settings, tools, documents, search) is validated as for any run.
 
 **Events** (in addition to the usual ones):

@@ -9,7 +9,7 @@ import useConnections, { currentRouterPool, isLocal, latestResult, targetFor } f
 import { isRouter, ROUTER_NAME } from '../lib/router';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
-import { hasSearchKey, searchKey } from '../lib/searchKey';
+import { autoWebSearch, searchKey } from '../lib/searchKey';
 
 export interface RunError {
   message: string;
@@ -246,7 +246,8 @@ export function useRun() {
         ...(attempt.tools.length ? { tools: attempt.tools } : {}),
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
         // Read at send time so the key never enters the saved run snapshot.
-        ...(attempt.tools.includes('web_search') ? { search: { provider: 'exa' as const, apiKey: searchKey() } } : {}),
+        // With automatic web search, the server searches first when the message needs current information.
+        ...(autoWebSearch(useChat.getState().settings?.webSearch) ? { search: { provider: 'exa' as const, apiKey: searchKey(), auto: true } } : {}),
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);
@@ -288,7 +289,6 @@ export function useRun() {
       : documentTools && pool && !pool.local ? 'Document tools run only on models on this machine, and the Free Router has none. Turn off Documents or connect a local model.'
       : documentTools && connection && !isLocal(connection) ? 'Document tools run only on models on this machine, so documents are never sent online. Turn off Documents or choose a local model.'
       : documentTools && !documents.length ? 'Add a document in Workspace, or turn off Documents.'
-      : tools.includes('web_search') && !hasSearchKey() ? 'Web search needs an Exa API key. Add it in Connections, or turn off Web.'
       : null;
     const context = buildContext(conversation.messages, prompt, configured, descriptor, connection, conversation.attachments);
     if (context.warnings.length || toolProblem) {

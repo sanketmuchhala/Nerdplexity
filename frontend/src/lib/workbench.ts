@@ -8,12 +8,14 @@ import type {
 } from '@app/types';
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
 
-/** Tool groups a thread can enable; 'documents' is search plus read. */
+/**
+ * Tool groups a thread can enable; 'documents' is search plus read. 'web' is kept for threads and
+ * presets saved before web search became automatic, and enables nothing.
+ */
 export type WorkbenchTool = 'calculator' | 'documents' | 'web';
 const WORKBENCH_TOOLS = new Map<string, ToolName[]>([
   ['calculator', ['calculator']],
   ['documents', ['search_documents', 'read_document']],
-  ['web', ['web_search']],
 ]);
 export const toolNamesFor = (tools: WorkbenchTool[] = []): ToolName[] => tools.flatMap(tool => WORKBENCH_TOOLS.get(tool) ?? []);
 export const usesDocumentTools = (tools: ToolName[]) => tools.some(name => name === 'search_documents' || name === 'read_document');

@@ -201,6 +201,8 @@ export interface AppSettings {
   favoriteModels?: string[];
   /** Set once legacy provider settings have been converted to connections. */
   connectionsVersion?: number;
+  /** Web search runs automatically when a message needs current information and an Exa key is set. Default 'auto'. */
+  webSearch?: 'auto' | 'off';
   /** 'free-only' blocks runs that cannot be confirmed free. */
   costPolicy?: 'any' | 'free-only';
   theme?: 'dark' | 'light';
