@@ -58,11 +58,13 @@ test('switches models inline with coherent history and preserved provenance', as
   const log = await upstream(page, second);
   expect(log[0].model).toBe('reasoning-model');
   expect(log[0].messages.map((m: { role: string }) => m.role)).toEqual([
+    'system',
     'user',
     'assistant',
     'user',
   ]);
-  expect(log[0].messages[0].content).toBe(first);
+  expect(log[0].messages[0].content).toContain('everyday-chat-v1');
+  expect(log[0].messages[1].content).toBe(first);
 });
 
 test('presets survive reload and retries retain the original input/settings snapshot', async ({
@@ -95,7 +97,8 @@ test('presets survive reload and retries retain the original input/settings snap
   await expect.poll(async () => (await upstream(page, text)).length).toBe(2);
   const requests = await upstream(page, text);
   expect(requests[0].messages).toEqual(requests[1].messages);
-  expect(requests[1].messages[0].content).toBe('Original instruction');
+  expect(requests[1].messages[0].content).toContain('everyday-chat-v1');
+  expect(requests[1].messages[1].content).toContain('Original instruction');
   expect(requests.map((r: { maxTokens: number }) => r.maxTokens)).toEqual([
     321, 321,
   ]);
@@ -149,7 +152,7 @@ test('editing and regenerating create branches without changing the original thr
   await expect(page.locator('.np-history-row')).toHaveCount(3);
 });
 
-test('context limits require deliberate trimming, and export/import preserves text without routing', async ({
+test('context limits trim whole old turns automatically, and export/import preserves the transcript', async ({
   page,
 }) => {
   await setup(page);
@@ -180,28 +183,21 @@ test('context limits require deliberate trimming, and export/import preserves te
   await choose(page, 'fast-model');
   await page.getByRole('button', { name: 'Generation settings' }).click();
   await page.getByLabel('Maximum output tokens').fill('100');
-  await page.getByLabel('Context budget', { exact: true }).fill('1024');
+  await page.getByLabel('Context budget', { exact: true }).fill('2048');
   await page.getByRole('button', { name: 'Apply to this thread' }).click();
   const text = unique('trim');
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill(text);
-  await expect(
-    page.getByRole('button', { name: 'Send message' }),
-  ).toBeDisabled();
-  expect(await upstream(page, text)).toHaveLength(0);
-  await page.getByRole('button', { name: 'Review context' }).click();
-  await page.getByLabel('Conversation history').selectOption('recent');
-  await page.getByLabel('Previous turns to include').fill('1');
-  await expect(
-    page.getByText(
-      '2 earlier messages omitted from this request. The full transcript is retained.',
-    ),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Apply to this thread' }).click();
+  await expect(page.getByRole('button', { name: 'Inspect context' })).toContainText('2 messages omitted');
   await send(page, text, 1);
   const requests = await upstream(page, text);
   expect(
     requests[0].messages.map((m: { content: string }) => m.content),
-  ).toEqual(['Recent question', 'Recent answer', text]);
+  ).toEqual([
+    expect.stringContaining('everyday-chat-v1'),
+    'Recent question',
+    'Recent answer',
+    text,
+  ]);
   await expect(page.locator('.np-thread')).toContainText('Old answer');
   const downloadPromise = page.waitForEvent('download');
   await page
@@ -310,7 +306,7 @@ test('attachments are inspectable and comparisons run identical frozen context',
   const contextPrompt = unique('attached');
   await send(page, contextPrompt, 1);
   const attachedRequest = await upstream(page, contextPrompt);
-  expect(attachedRequest[0].messages[0].content).toContain('--- BEGIN FILE: facts.md ---');
+  expect(attachedRequest[0].messages[1].content).toContain('--- BEGIN FILE: facts.md ---');
   expect(attachedRequest[0].messages.at(-1).content[1]).toMatchObject({ type: 'image_url', image_url: { url: expect.stringContaining('data:image/png;base64,') } });
 
   await page.getByRole('button', { name: 'Compare', exact: true }).click();
@@ -325,7 +321,7 @@ test('attachments are inspectable and comparisons run identical frozen context',
   const compared = await upstream(page, comparePrompt);
   expect(compared).toHaveLength(2);
   expect(compared[0].messages).toEqual(compared[1].messages);
-  expect(compared[0].messages[0].content).toContain('facts.md');
+  expect(compared[0].messages[1].content).toContain('facts.md');
   // Both models are on this machine: the second request starts only after the first finishes.
   const [firstRun, secondRun] = [...compared].sort((a, b) => a.startedAt - b.startedAt);
   expect(secondRun.startedAt).toBeGreaterThanOrEqual(firstRun.endedAt);
@@ -387,30 +383,31 @@ test('calculator tool: the exact call and result stay separate from model text a
   const text = unique('What is [[2+3*4]]?');
   await send(page, text, 1);
   const activity = page.locator('.np-thread .np-tool');
-  await expect(activity).toHaveCount(1);
-  await expect(activity).toContainText('Calculator');
-  await expect(activity).toContainText('2+3*4 = 14');
-  await expect(page.locator('.np-thread')).toContainText('The result is 14.');
-  await activity.locator('summary').click();
-  await expect(activity).toContainText('Computed by the app, not by the model.');
+  await expect(activity).toHaveCount(2);
+  await expect(activity.first()).toContainText('I will calculate this exactly.');
+  await expect(activity.nth(1)).toContainText('Calculator');
+  await expect(activity.nth(1)).toContainText('2+3*4 = 14');
+  await expect(page.locator('.np-answer-content')).toHaveText('The result is 14.');
+  await activity.nth(1).locator('summary').click();
+  await expect(activity.nth(1)).toContainText('Computed by the app, not by the model.');
 
   const requests = await upstream(page, text);
   expect(requests).toHaveLength(2);
   expect(requests[0].tools).toEqual(['calculator']);
   expect(requests[1].messages.slice(-2)).toEqual([
-    { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'calculator', arguments: '{"expression":"2+3*4"}' } }] },
+    { role: 'assistant', content: 'I will calculate this exactly.', tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'calculator', arguments: '{"expression":"2+3*4"}' } }] },
     { role: 'tool', tool_call_id: 'call_1', content: '{"expression":"2+3*4","result":14}' },
   ]);
 
   await page.reload();
   await page.locator('.np-history-row > button:first-child').filter({ hasText: text }).click();
-  await expect(page.locator('.np-thread .np-tool')).toContainText('2+3*4 = 14');
+  await expect(page.locator('.np-thread .np-tool').filter({ hasText: 'Calculator' })).toContainText('2+3*4 = 14');
   await expect(page.getByRole('button', { name: 'Calculator tool' })).toHaveAttribute('aria-pressed', 'true');
   await page.goto('/app/runs');
   const row = page.locator('.np-run-list').getByRole('button', { name: new RegExp(text.replace(/[[\]+*?]/g, '\\$&')) }).first();
   await expect(row).toContainText('With tools');
   await row.click();
-  await expect(page.locator('.np-run-detail .np-tool')).toContainText('2+3*4 = 14');
+  await expect(page.locator('.np-run-detail .np-tool').filter({ hasText: 'Calculator' })).toContainText('2+3*4 = 14');
 });
 
 test('malformed tool arguments are returned to the model and the run still completes', async ({ page }) => {

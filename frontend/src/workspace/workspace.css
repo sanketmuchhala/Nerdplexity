@@ -144,6 +144,33 @@
 .np-thread .t-caps { color: var(--np-muted)!important; }
 .np-thread .text-sm { color: var(--np-text); }
 .np-thread pre { max-width: 100%; overflow: auto; }
+.np-markdown { color: var(--np-text); overflow-wrap: anywhere; }
+.np-markdown > :first-child { margin-top: 0; }
+.np-markdown > :last-child { margin-bottom: 0; }
+.np-markdown p { margin: .55em 0; }
+.np-markdown h1, .np-markdown h2, .np-markdown h3, .np-markdown h4 { color: var(--np-text); font-family: 'Bricolage Grotesque', sans-serif; font-weight: 600; line-height: 1.3; }
+.np-markdown h1 { margin: 1.35em 0 .55em; padding-bottom: .35em; border-bottom: 1px solid var(--np-line); font-size: 1.35em; }
+.np-markdown h2 { margin: 1.25em 0 .5em; font-size: 1.2em; }
+.np-markdown h3 { margin: 1.1em 0 .4em; font-size: 1.08em; }
+.np-markdown h4 { margin: 1em 0 .35em; font-size: 1em; }
+.np-markdown ul, .np-markdown ol { margin: .7em 0; padding-left: 1.55em; }
+.np-markdown ul { list-style: disc; }
+.np-markdown ol { list-style: decimal; }
+.np-markdown li { margin: .25em 0; padding-left: .25em; }
+.np-markdown li > ul, .np-markdown li > ol { margin: .2em 0; }
+.np-markdown input[type='checkbox'] { margin-right: .45em; accent-color: var(--np-accent); }
+.np-markdown blockquote { margin: .9em 0; padding: .35em .9em; border-left: 2px solid rgba(var(--np-accent-rgb), .4); border-radius: 0 8px 8px 0; background: rgba(var(--np-accent-rgb), .04); color: var(--np-muted); }
+.np-markdown blockquote p { margin: .25em 0; }
+.np-markdown a { color: var(--np-accent); text-decoration: underline; text-decoration-color: rgba(var(--np-accent-rgb), .45); text-underline-offset: 2px; }
+.np-markdown a:hover { text-decoration-color: currentColor; }
+.np-markdown :not(pre) > code { padding: .12em .38em; border: 1px solid rgba(var(--np-accent-rgb), .2); border-radius: 4px; background: rgba(var(--np-accent-rgb), .1); color: var(--np-accent); font-family: 'IBM Plex Mono', monospace; font-size: .9em; }
+.np-markdown table { width: 100%; margin: 1em 0; border: 1px solid var(--np-line); border-collapse: separate; border-spacing: 0; border-radius: 9px; font-size: .92em; overflow: hidden; }
+.np-markdown th, .np-markdown td { padding: .55em .8em; border-bottom: 1px solid var(--np-line); text-align: left; }
+.np-markdown th { background: var(--np-raised); color: var(--np-text); font-size: .82em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.np-markdown tr:last-child td { border-bottom: 0; }
+.np-markdown hr { margin: 1.25em 0; border: 0; border-top: 1px solid var(--np-line); }
+.np-markdown del { color: var(--np-muted); }
+.np-markdown-image { color: var(--np-muted); font-size: .9em; font-style: italic; }
 .np-reasoning { margin: 0 0 18px; border: 1px solid var(--np-line); border-radius: 12px; background: var(--np-raised); }
 .np-reasoning.live { border-color: rgba(var(--np-accent-rgb), .3); box-shadow: inset 3px 0 0 rgba(var(--np-accent-rgb), .6); }
 .np-reasoning-heading { width: 100%; min-height: 41px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; color: var(--np-muted); font-size: 11px; text-align: left; }

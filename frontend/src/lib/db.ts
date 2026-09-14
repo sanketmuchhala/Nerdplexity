@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
-import type { Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
+import type { ActivityTrace, Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -25,6 +25,7 @@ export interface RunRecord {
   prompt: string; startedAt: number; durationMs: number;
   status: RunStatus; mode: 'chat' | 'agent';
   output: string; reasoning?: string;
+  activities?: ActivityTrace[];
   error?: string; errorCategory?: ProviderErrorCategory; retryAfterMs?: number;
   ttftMs?: number; queuedMs?: number; loadMs?: number; finishReason?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -96,6 +97,8 @@ export interface Message {
   metadata?: {
     webSearchResults?: WebSearchResult[];
     reasoning?: string;
+    /** Model-authored preparation emitted before tool calls; never merged into the answer. */
+    activities?: ActivityTrace[];
     /** Tool calls made while producing this answer, kept with it in the transcript. */
     tools?: ToolTrace[];
     /** How the Free Router chose the model; provenance names the model that answered. */

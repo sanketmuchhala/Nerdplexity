@@ -182,7 +182,7 @@ export function ChatWorkspace({
   useEffect(() => {
     if (sticky.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages.length, run.partial, run.reasoning, run.tools.length]);
+  }, [messages.length, run.partial, run.reasoning, run.activities.length, run.tools.length]);
   useEffect(() => {
     if (textarea.current) {
       textarea.current.style.height = 'auto';
@@ -519,8 +519,8 @@ export function ChatWorkspace({
                 {message.role === 'assistant' && message.metadata?.route && (
                   <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />
                 )}
-                {message.role === 'assistant' && message.metadata?.tools && (
-                  <ToolActivity tools={message.metadata.tools} />
+                {message.role === 'assistant' && (message.metadata?.tools || message.metadata?.activities) && (
+                  <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />
                 )}
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
@@ -626,7 +626,7 @@ export function ChatWorkspace({
               </Fragment>
             ))}
             {ownRun && !saved && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-            {ownRun && !saved && <ToolActivity tools={run.tools} />}
+            {ownRun && !saved && <ToolActivity tools={run.tools} activities={run.activities} />}
             {ownRun && !saved && (run.partial || run.reasoning) && (
               <Message
                 message={{

@@ -1,5 +1,5 @@
 import { AlertTriangle, Ban, Calculator, FileSearch, FileText, Globe, Loader2, Wrench } from 'lucide-react';
-import type { ToolTrace } from '@app/types';
+import type { ActivityTrace, ToolTrace } from '@app/types';
 
 type Status = NonNullable<ToolTrace['status']>;
 
@@ -66,10 +66,21 @@ const SOURCE_NOTE: Record<Status, (tool: ToolTrace) => string> = {
 };
 
 /** Exact tool calls and results, kept visually separate from model text. */
-export function ToolActivity({ tools }: { tools: ToolTrace[] }) {
-  if (!tools.length) return null;
+export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; activities?: ActivityTrace[] }) {
+  if (!tools.length && !activities.length) return null;
   return (
     <div className="np-inline-tools" aria-label="Tool activity">
+      {activities.map(activity => (
+        <details key={activity.id} className="np-tool np-tool-completed">
+          <summary>
+            <Wrench size={13} aria-hidden />
+            <strong>Prepared tool step</strong>
+            <span className="np-tool-summary">Model-provided activity</span>
+            <span className="np-tool-meta">Step {activity.step}</span>
+          </summary>
+          <div className="np-tool-body"><p>{activity.text}</p></div>
+        </details>
+      ))}
       {tools.map((tool, index) => {
         const status: Status = tool.status ?? 'completed';
         const Icon = icon(tool.name, status);
