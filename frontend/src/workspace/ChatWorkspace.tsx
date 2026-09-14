@@ -632,8 +632,8 @@ export function ChatWorkspace({
                   role: 'assistant',
                   content: run.partial || '',
                   timestamp: Date.now(),
-                  metadata: run.reasoning || run.running
-                    ? { reasoning: run.reasoning || '' }
+                  metadata: run.reasoning
+                    ? { reasoning: run.reasoning }
                     : undefined,
                 }}
                 model={liveModel}

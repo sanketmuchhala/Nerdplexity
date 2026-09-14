@@ -68,8 +68,8 @@ export function Message({ message, animate = true, model, streaming = false }: P
           </span>
         </div>
 
-        {/* Reasoning is a separate, complete stream and always precedes the answer. */}
-        {reasoning && (
+        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning is present. */}
+        {(streaming || reasoning) && (
           <section
             className={`np-reasoning ${streaming ? 'live' : 'complete'}`}
             role="region"
@@ -81,6 +81,8 @@ export function Message({ message, animate = true, model, streaming = false }: P
               aria-expanded={showReasoning}
               aria-controls={`reasoning-${message.id}`}
               onClick={() => setShowReasoning(value => !value)}
+              disabled={!reasoning}
+              style={{ cursor: reasoning ? 'pointer' : 'default' }}
             >
               {streaming ? (
                 <div className="np-inline-orb">
@@ -109,7 +111,7 @@ export function Message({ message, animate = true, model, streaming = false }: P
               {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
             </button>
             
-            {showReasoning && (
+            {showReasoning && reasoning && (
               <div id={`reasoning-${message.id}`} className="np-reasoning-body">
                 {formatContent(reasoning)}
               </div>
