@@ -24,7 +24,8 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 ## Why Nerdplexity
 
 - **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
-- **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible server, all in one catalog.
+- **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, or any OpenAI-compatible server, all in one catalog.
+- **Free Router.** Choose it like a model: each message goes to the best free model you have, and to the next one when a model is rate limited.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
 - **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
 
@@ -79,6 +80,9 @@ The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both se
 | OpenAI, Anthropic, Gemini, DeepSeek | Your API key | Pinned to each provider's official endpoint. |
 | OpenRouter | Your API key | Lists $0 models as **Free model** and shows per-token prices. Shared free routes can be rate limited even though usage is $0; `openrouter/free` chooses a compatible free model with capacity. |
 | Groq | Your API key | Free plan limits per model; rate limits are shown. |
+| Cerebras, SambaNova | Your API key | Fast open models with small free tiers (Cerebras about 5 requests per minute; SambaNova 20 per day). |
+| Mistral | Your API key | Mistral's models; a free plan needs no card. |
+| Hugging Face | A fine-grained token | Many hosted providers behind one token, paid from small monthly credits. |
 | Custom endpoint | Address, optional key | Any OpenAI-compatible server. Must use https unless it is on this machine. |
 
 Each connection says whether it is offline, rejected the key, has the wrong address, or lists no models. Listing models does not prove one runs: use **Check** on a model to send one short prompt.

@@ -9,6 +9,7 @@ import aws from '@lobehub/icons-static-svg/icons/aws-color.svg?url';
 import baseten from '@lobehub/icons-static-svg/icons/baseten.svg?url';
 import bfl from '@lobehub/icons-static-svg/icons/bfl.svg?url';
 import bytedance from '@lobehub/icons-static-svg/icons/bytedance-color.svg?url';
+import cerebras from '@lobehub/icons-static-svg/icons/cerebras-color.svg?url';
 import claude from '@lobehub/icons-static-svg/icons/claude-color.svg?url';
 import cloudflare from '@lobehub/icons-static-svg/icons/cloudflare-color.svg?url';
 import cohere from '@lobehub/icons-static-svg/icons/cohere-color.svg?url';
@@ -39,6 +40,7 @@ import perplexity from '@lobehub/icons-static-svg/icons/perplexity-color.svg?url
 import poolside from '@lobehub/icons-static-svg/icons/poolside-color.svg?url';
 import qwen from '@lobehub/icons-static-svg/icons/qwen-color.svg?url';
 import relace from '@lobehub/icons-static-svg/icons/relace.svg?url';
+import sambanova from '@lobehub/icons-static-svg/icons/sambanova-color.svg?url';
 import stepfun from '@lobehub/icons-static-svg/icons/stepfun-color.svg?url';
 import tencent from '@lobehub/icons-static-svg/icons/tencent-color.svg?url';
 import together from '@lobehub/icons-static-svg/icons/together-color.svg?url';
@@ -49,10 +51,10 @@ import yi from '@lobehub/icons-static-svg/icons/yi-color.svg?url';
 import zhipu from '@lobehub/icons-static-svg/icons/zhipu-color.svg?url';
 
 const LOGOS = {
-  ai21, aionlabs, alibaba, arcee, aws, baseten, bfl, bytedance, claude, cloudflare, cohere, dbrx, deepseek,
+  ai21, aionlabs, alibaba, arcee, aws, baseten, bfl, bytedance, cerebras, claude, cloudflare, cohere, dbrx, deepseek,
   gemini, gemma, google, groq, huggingface, ibm, kimi, kwaipilot, liquid, lmstudio, meta, microsoft, minimax,
   mistral, moonshot, morph, nousresearch, nvidia, ollama, openai, openrouter, perplexity, poolside, qwen,
-  relace, stepfun, tencent, together, upstage, xai, xiaomimimo, yi, zhipu,
+  relace, sambanova, stepfun, tencent, together, upstage, xai, xiaomimimo, yi, zhipu,
 };
 type Brand = keyof typeof LOGOS;
 
@@ -88,7 +90,7 @@ const ALIASES = new Map<string, Brand>(Object.entries({
   huggingface: 'huggingface', 'huggingface-api': 'huggingface',
   together: 'together', togetherai: 'together',
   ollama: 'ollama', lmstudio: 'lmstudio', 'lm-studio': 'lmstudio',
-  groq: 'groq', baseten: 'baseten', cloudflare: 'cloudflare',
+  groq: 'groq', baseten: 'baseten', cloudflare: 'cloudflare', cerebras: 'cerebras', sambanova: 'sambanova',
   'aion-labs': 'aionlabs', aionlabs: 'aionlabs',
   'ibm-granite': 'ibm', ibm: 'ibm', granite: 'ibm',
   kwaipilot: 'kwaipilot', poolside: 'poolside', laguna: 'poolside', relace: 'relace', upstage: 'upstage', solar: 'upstage',

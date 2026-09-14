@@ -96,6 +96,25 @@ describe('OpenAI-style streaming', () => {
     expect(result.text).toBe('fine');
   });
 
+  it('omits stream_options for Mistral, and resends without it when another server rejects it', async () => {
+    const mistral = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 1 } }])));
+    const first = await run(request({ kind: 'mistral', apiKey: 'ms-key' }), mistral.fn);
+    expect(mistral.calls[0].url).toBe('https://api.mistral.ai/v1/chat/completions');
+    expect(mistral.calls[0].body.stream_options).toBeUndefined();
+    expect(first.done?.usage?.total_tokens).toBe(4);
+
+    const strict = fakeFetch(
+      () => json({ detail: [{ type: 'extra_forbidden', loc: ['body', 'stream_options'], msg: 'Extra inputs are not permitted' }] }, 422),
+      () => stream(sse([{ choices: [{ delta: { content: 'fine' }, finish_reason: 'stop' }] }])),
+    );
+    const second = await run(request({ kind: 'cerebras', apiKey: 'csk-key' }), strict.fn);
+    expect(strict.calls).toHaveLength(2);
+    expect(strict.calls[0].body.stream_options).toEqual({ include_usage: true });
+    expect(strict.calls[1].body.stream_options).toBeUndefined();
+    expect(strict.calls[1].body.temperature).toBe(0.7);
+    expect(second.text).toBe('fine');
+  });
+
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {
     // A long wait is left to the user rather than retried automatically.
     const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '30' })).fn)).error);

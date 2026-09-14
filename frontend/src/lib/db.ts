@@ -353,7 +353,7 @@ export const migrateFromLocalStorage = async () => {
 /** Providers that had per-provider key fields before connections existed. */
 export const LEGACY_HOSTED_PROVIDERS = ['openai', 'anthropic', 'gemini', 'deepseek'] as const;
 /** Connection kinds that always need an API key. */
-export const KEYED_KINDS: readonly ConnectionKind[] = [...LEGACY_HOSTED_PROVIDERS, 'openrouter', 'groq'];
+export const KEYED_KINDS: readonly ConnectionKind[] = [...LEGACY_HOSTED_PROVIDERS, 'openrouter', 'groq', 'cerebras', 'mistral', 'sambanova', 'huggingface'];
 export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   ollama: 'Ollama',
   'openai-compatible': 'OpenAI compatible',
@@ -363,6 +363,10 @@ export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   deepseek: 'DeepSeek',
   openrouter: 'OpenRouter',
   groq: 'Groq',
+  cerebras: 'Cerebras',
+  mistral: 'Mistral',
+  sambanova: 'SambaNova',
+  huggingface: 'Hugging Face',
 };
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_COMPATIBLE_URL = 'http://127.0.0.1:1234/v1';
@@ -376,8 +380,8 @@ export const legacyConnectionId = (provider: string, runtime?: RuntimeKind) =>
 export const legacyProvider = (kind: ConnectionKind): Provider =>
   kind === 'ollama' || kind === 'openai-compatible' ? 'local-ollama'
   // Legacy screens predate these providers; the label is informational only.
-  : kind === 'openrouter' || kind === 'groq' ? 'openai'
-  : kind;
+  : (LEGACY_HOSTED_PROVIDERS as readonly string[]).includes(kind) ? kind as Provider
+  : 'openai';
 
 /**
  * Convert per-provider settings into connections. Idempotent: adds only missing

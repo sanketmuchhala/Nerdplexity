@@ -125,6 +125,50 @@ const PRESETS: Preset[] = [
     },
   },
   {
+    id: 'cerebras',
+    label: 'Cerebras',
+    kind: 'cerebras',
+    name: 'Cerebras',
+    hint: 'Very fast open models. The free tier allows about 5 requests per minute and 1 million tokens per day per model. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://inference-docs.cerebras.ai/support/rate-limits',
+      label: 'Cerebras rate limits',
+    },
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    kind: 'mistral',
+    name: 'Mistral',
+    hint: "Mistral's own models, with a free plan that needs no card. Rate limits apply; check Mistral's terms for how free-plan prompts may be used. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.",
+    link: {
+      href: 'https://mistral.ai/pricing/',
+      label: 'Mistral plans and terms',
+    },
+  },
+  {
+    id: 'sambanova',
+    label: 'SambaNova',
+    kind: 'sambanova',
+    name: 'SambaNova',
+    hint: 'Fast open models. Without a payment method, the free tier covers a few models at 20 requests per minute and 20 per day. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://docs.sambanova.ai/docs/en/models/rate-limits',
+      label: 'SambaNova rate limits',
+    },
+  },
+  {
+    id: 'huggingface',
+    label: 'Hugging Face',
+    kind: 'huggingface',
+    name: 'Hugging Face',
+    hint: 'One token reaches many hosted providers. Free accounts get small monthly credits ($0.10 at last check); going further requires buying credits. Use a fine-grained token that can call Inference Providers. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://huggingface.co/docs/inference-providers/pricing',
+      label: 'Hugging Face credits',
+    },
+  },
+  {
     id: 'custom',
     label: 'Custom OpenAI-compatible',
     kind: 'openai-compatible',

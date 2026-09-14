@@ -74,25 +74,79 @@ async function discoverOllama(target: ResolvedTarget, fetchImpl: FetchFn): Promi
   });
 }
 
-async function discoverOpenAIStyle(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
-  const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
-  if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'This endpoint did not return an OpenAI-compatible model list.');
-  const pricing = target.execution === 'local' ? 'local' : 'unknown';
-  const nonChat = target.kind === 'openai' ? OPENAI_NON_CHAT : target.kind === 'groq' ? GROQ_NON_CHAT : null;
-  return data.data
-    .filter((m: any) => typeof m?.id === 'string' && m.active !== false && !nonChat?.test(m.id))
-    .map((m: any) => withDefaults({
-      id: m.id,
-      displayName: typeof m.name === 'string' ? m.name : m.id,
-      contextLength: Number(m.context_length ?? m.context_window) || undefined,
-      maxOutputTokens: Number(m.max_completion_tokens) || undefined,
-    }, pricing));
-}
-
 const perMillion = (value: unknown) => {
   const n = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
   return Number.isFinite(n) ? n * 1_000_000 : undefined;
 };
+
+/**
+ * Pricing from a catalog that reports USD per token as `pricing.prompt` / `pricing.completion`
+ * (OpenRouter, SambaNova). Negative or missing prices mean the cost is decided per request.
+ */
+function tokenPricing(prices: any): Pick<ModelDescriptor, 'pricing' | 'price'> {
+  const input = perMillion(prices?.prompt);
+  const output = perMillion(prices?.completion);
+  const perRequest = Number(prices?.request || 0);
+  if (input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0) return { pricing: 'unknown' };
+  return input === 0 && output === 0 && perRequest === 0 ? { pricing: 'zero-price' } : { pricing: 'paid', price: { input, output } };
+}
+
+const hasImageInput = (m: any): boolean | null => Array.isArray(m?.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null;
+
+async function discoverOpenAIStyle(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
+  const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
+  if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'This endpoint did not return an OpenAI-compatible model list.');
+  const nonChat = target.kind === 'openai' ? OPENAI_NON_CHAT : target.kind === 'groq' ? GROQ_NON_CHAT : null;
+  return data.data
+    // Mistral marks what each model can do; archived and non-chat models cannot serve chat completions.
+    .filter((m: any) => typeof m?.id === 'string' && m.active !== false && m.archived !== true && m.capabilities?.completion_chat !== false && !nonChat?.test(m.id))
+    .map((m: any) => {
+      // A price the server's own catalog reports is used like OpenRouter's; a local server has no hosted fee.
+      const { pricing, price } = target.execution === 'local' ? { pricing: 'local' as const, price: undefined } : m.pricing ? tokenPricing(m.pricing) : { pricing: 'unknown' as const, price: undefined };
+      const capabilities = m.capabilities && typeof m.capabilities === 'object' ? m.capabilities : undefined;
+      return withDefaults({
+        id: m.id,
+        displayName: typeof m.name === 'string' ? m.name : m.id,
+        contextLength: Number(m.context_length ?? m.context_window ?? m.max_context_length) || undefined,
+        maxOutputTokens: Number(m.max_completion_tokens) || undefined,
+        capabilities: {
+          tools: typeof capabilities?.function_calling === 'boolean' ? capabilities.function_calling : null,
+          vision: typeof capabilities?.vision === 'boolean' ? capabilities.vision : hasImageInput(m),
+        },
+        ...(price ? { price } : {}),
+      }, pricing);
+    });
+}
+
+/**
+ * Hugging Face's router lists each model with the providers serving it. The default route picks the
+ * fastest provider, so a model is $0 only through a provider marked free, which is listed as its own
+ * `model:provider` entry. Otherwise the cheapest live provider's price is shown.
+ */
+async function discoverHuggingFace(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
+  const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
+  if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'Hugging Face did not return a model list.');
+  return data.data.flatMap((m: any): ModelDescriptor[] => {
+    if (typeof m?.id !== 'string' || (Array.isArray(m.architecture?.output_modalities) && !m.architecture.output_modalities.includes('text'))) return [];
+    const live = (Array.isArray(m.providers) ? m.providers : []).filter((p: any) => p && typeof p.provider === 'string' && p.status === 'live');
+    if (!live.length) return [];
+    const vision = hasImageInput(m);
+    const describe = (id: string, providers: any[], pricing: ModelDescriptor['pricing'], price?: ModelDescriptor['price']) => withDefaults({
+      id,
+      contextLength: Math.max(0, ...providers.map(p => Number(p.context_length) || 0)) || undefined,
+      capabilities: { tools: providers.some(p => p.supports_tools === true) ? true : providers.every(p => p.supports_tools === false) ? false : null, vision },
+      details: providers.length === 1 ? `Served by ${providers[0].provider}` : `${providers.length} providers`,
+      ...(price ? { price } : {}),
+    }, pricing);
+    const priced = live.filter((p: any) => Number.isFinite(p.pricing?.input) && Number.isFinite(p.pricing?.output));
+    const cheapest = priced.sort((a: any, b: any) => a.pricing.output - b.pricing.output)[0];
+    const all = cheapest && cheapest.pricing.input + cheapest.pricing.output > 0
+      ? describe(m.id, live, 'paid', { input: cheapest.pricing.input, output: cheapest.pricing.output })
+      : describe(m.id, live, 'unknown');
+    const free = live.filter((p: any) => p.is_free === true).map((p: any) => describe(`${m.id}:${p.provider}`, [p], 'zero-price'));
+    return [all, ...free];
+  });
+}
 
 /** OpenRouter's catalog reports per-token prices, so zero-price models can be verified. */
 async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
@@ -105,15 +159,8 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
       && !(m.expiration_date && Date.parse(m.expiration_date) <= now))
     .map((m: any) => {
       const freeRouter = m.id === 'openrouter/free';
-      const input = perMillion(m.pricing?.prompt);
-      const output = perMillion(m.pricing?.completion);
-      const perRequest = Number(m.pricing?.request || 0);
-      // Negative or missing prices mean the cost is decided per request (for example, routers).
       // OpenRouter documents openrouter/free as an always-$0 router even though its selected model varies per request.
-      const pricing: ModelDescriptor['pricing'] = freeRouter ? 'zero-price'
-        : input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0
-          ? 'unknown'
-          : input === 0 && output === 0 && perRequest === 0 ? 'zero-price' : 'paid';
+      const { pricing, price } = freeRouter ? { pricing: 'zero-price' as const, price: undefined } : tokenPricing(m.pricing);
       return withDefaults({
         id: m.id,
         displayName: typeof m.name === 'string' ? m.name : m.id,
@@ -123,9 +170,9 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
         capabilities: {
           tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : null,
           temperature: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('temperature') : null,
-          vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null,
+          vision: hasImageInput(m),
         },
-        ...(pricing === 'paid' ? { price: { input: input!, output: output! } } : {}),
+        ...(price ? { price } : {}),
         ...(typeof m.expiration_date === 'string' ? { expiresAt: m.expiration_date } : {}),
       }, pricing);
     });
@@ -209,6 +256,7 @@ export async function discover(input: unknown, fetchImpl: FetchFn = fetch): Prom
       : target.kind === 'anthropic' ? await discoverAnthropic(target, fetchImpl)
       : target.kind === 'gemini' ? await discoverGemini(target, fetchImpl)
       : target.kind === 'openrouter' ? await discoverOpenRouter(target, fetchImpl)
+      : target.kind === 'huggingface' ? await discoverHuggingFace(target, fetchImpl)
       : await discoverOpenAIStyle(target, fetchImpl);
     models.sort((a, b) => a.id.localeCompare(b.id));
     return {

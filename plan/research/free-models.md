@@ -9,6 +9,12 @@ Treat this as leads to check against each provider's official docs before buildi
 - **The "mini" evaluation sets are not published datasets.** "HumanEval-Mini", "GSM8K-Tiny", "IFEval-30", "BFCL-Micro", and "SQuAD-Mini" read as subsets we would build ourselves. The parent datasets and licenses are real and usable (HumanEval MIT, GSM8K MIT, IFEval Apache 2.0, BFCL Apache 2.0, SQuAD CC BY-SA 4.0); Bench should sample from those and record the source of every item.
 - **Some limits and model names need confirmation:** Groq 14,400 requests/day, SambaNova "no rate limits", GitHub Models offering Claude 3.5 Sonnet, Ollama Cloud's September change, Cloudflare "GLM 5.3 Flash", and model release dates (gpt-oss-120b is dated "mid-2026" here).
 - **Data use differs and matters for defaults:** Google AI Studio's free tier and Mistral's Experiment tier may train on prompts; the app should say so at setup, as it already does for Gemini.
+- **Checked against official docs (2026-09-14), with corrections:**
+  - **GitHub Models retired on 2026-07-30** (GitHub REST docs); the report still lists it.
+  - **Cerebras:** 5 requests per minute and 1M tokens per day for the listed free models, not 30 RPM; endpoint `https://api.cerebras.ai/v1`, model list returns IDs only.
+  - **SambaNova:** free tier means no payment method; 20 RPM, **20 requests per day**, 200K tokens per day, on five models (DeepSeek-V3.1/V3.2, Llama 3.3 70B, gpt-oss-120b, Gemma 4 31B). Not "uncapped".
+  - **Hugging Face:** free users get $0.10 of monthly credits; more requires buying credits. The router's `/v1/models` is public and lists providers with `is_free`, prices, context, and tool support; no provider was marked free on 2026-09-14.
+  - **Mistral:** free tier with no card confirmed; `stream_options` is not in the documented request fields; model list reports capabilities and `max_context_length`. The claim that free-tier prompts are used for training was not confirmed on an official page.
 - **Useful immediately:** the permanent free tiers worth presets (Cerebras, Mistral, GitHub Models, Cloudflare, SambaNova, Hugging Face), their OpenAI-compatible URLs, and that Together, DeepInfra, and Fireworks are now credit trials only. The router design recommended at the end (health-sorted cascade with cooldowns) matches what P11 built; semantic caching and the same model across several providers are new ideas.
 
 ---

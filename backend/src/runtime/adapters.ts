@@ -59,10 +59,12 @@ const MAX_AUTO_RETRIES = 2;
 const INCOMPLETE = 'The stream ended before the model finished. The partial answer was kept.';
 const LABEL: Record<ResolvedTarget['kind'], string> = {
   ollama: 'Ollama', 'openai-compatible': 'The endpoint', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', deepseek: 'DeepSeek',
-  openrouter: 'OpenRouter', groq: 'Groq',
+  openrouter: 'OpenRouter', groq: 'Groq', cerebras: 'Cerebras', mistral: 'Mistral', sambanova: 'SambaNova', huggingface: 'Hugging Face',
 };
 // These providers replaced max_tokens with max_completion_tokens.
 const COMPLETION_TOKENS_PARAM = new Set<ResolvedTarget['kind']>(['openai', 'groq']);
+// Mistral's chat API does not list stream_options; it reports usage in the final chunk on its own.
+const NO_STREAM_OPTIONS = new Set<ResolvedTarget['kind']>(['mistral']);
 
 function retryAfter(header: string | null | undefined): number | undefined {
   if (!header) return undefined;
@@ -219,6 +221,12 @@ const rejectsTemperature = (error: unknown) =>
   error instanceof ProviderFailure && error.error.category === 'invalid-request' && /temperature/i.test(error.message);
 const TEMPERATURE_NOTICE = 'This model does not accept a temperature setting; using its default.';
 
+/** An optional parameter a server rejected by name, so the request can be resent without it. */
+function rejectedParameter(error: unknown, body: Record<string, unknown>): 'temperature' | 'stream_options' | undefined {
+  if (!(error instanceof ProviderFailure) || error.error.category !== 'invalid-request') return undefined;
+  return (['temperature', 'stream_options'] as const).find(name => body[name] !== undefined && error.message.toLowerCase().includes(name));
+}
+
 function parseRecord(payload: string, target: ResolvedTarget): any {
   try { return JSON.parse(payload); }
   catch { throw new ProviderFailure({ category: 'transport', message: `${LABEL[target.kind]} sent a malformed stream record.`, retryable: true }); }
@@ -297,7 +305,8 @@ function toolCallAccumulator() {
 async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const body: Record<string, unknown> = {
-    model: req.model, messages: req.messages.map(openAIMessage), stream: true, stream_options: { include_usage: true },
+    model: req.model, messages: req.messages.map(openAIMessage), stream: true,
+    ...(NO_STREAM_OPTIONS.has(target.kind) ? {} : { stream_options: { include_usage: true } }),
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -306,13 +315,15 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   const url = `${target.baseURL}/chat/completions`;
   const send = () => post(fetchImpl, url, target, body, signal);
   let response: Response;
-  try { response = yield* sendWithRetry(target, send, signal, req.waitOnRateLimit); }
-  catch (error) {
-    if (!rejectsTemperature(error) || body.temperature === undefined) throw error;
-    // A validation rejection happens before generation, so resending cannot duplicate output or billing.
-    yield { type: 'status', message: TEMPERATURE_NOTICE };
-    delete body.temperature;
-    response = yield* sendWithRetry(target, send, signal, req.waitOnRateLimit);
+  for (let resends = 0; ; resends++) {
+    try { response = yield* sendWithRetry(target, send, signal, req.waitOnRateLimit); break; }
+    catch (error) {
+      // A validation rejection happens before generation, so resending cannot duplicate output or billing.
+      const parameter = resends < 2 ? rejectedParameter(error, body) : undefined;
+      if (!parameter) throw error;
+      if (parameter === 'temperature') yield { type: 'status', message: TEMPERATURE_NOTICE };
+      delete body[parameter];
+    }
   }
   let usage: Usage | undefined;
   let finishReason: string | undefined;
