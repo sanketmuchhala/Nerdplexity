@@ -6,6 +6,9 @@ import useConnections from '../state/connections';
 export const EXA_KEY_ID = 'search:exa';
 
 export const hasSearchKey = () => credentials.hasKey(EXA_KEY_ID);
+
+/** Web search is automatic when an Exa key is set, unless it was turned off in Connections. */
+export const autoWebSearch = (setting?: 'auto' | 'off') => setting !== 'off' && hasSearchKey();
 export const searchKey = () => credentials.getKey(EXA_KEY_ID);
 export const searchKeyRemembered = async () => !!(await db.credentials.get(EXA_KEY_ID));
 

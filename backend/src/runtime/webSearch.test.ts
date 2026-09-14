@@ -90,6 +90,6 @@ describe('web_search tool', () => {
     const base = { idempotencyKey: 'web-key-0001', target: { kind: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1' }, model: 'm', messages: [{ role: 'user', content: 'news?' }], tools: ['web_search'] };
     expect(() => validateRunRequest(base)).toThrow('Exa API key');
     expect(() => validateRunRequest({ ...base, search: { provider: 'other', apiKey: KEY } })).toThrow('Exa API key');
-    expect(validateRunRequest({ ...base, search: { provider: 'exa', apiKey: KEY } }).search).toEqual({ apiKey: KEY });
+    expect(validateRunRequest({ ...base, search: { provider: 'exa', apiKey: KEY } }).search).toEqual({ apiKey: KEY, auto: false });
   });
 });

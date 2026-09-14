@@ -9,7 +9,6 @@ import {
   Download,
   FileText,
   GitBranch,
-  Globe,
   Lightbulb,
   Paperclip,
   Pencil,
@@ -45,7 +44,7 @@ import {
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
-import { hasSearchKey } from '../lib/searchKey';
+import { autoWebSearch } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -61,13 +60,11 @@ export function ChatWorkspace({
   documents,
   onModels,
   onDocuments,
-  onConnections,
 }: {
   run: ReturnType<typeof useRun>;
   documents: WorkspaceDocument[];
   onModels: () => void;
   onDocuments: () => void;
-  onConnections: () => void;
 }) {
   const {
     activeConversation,
@@ -128,6 +125,8 @@ export function ChatWorkspace({
     };
   };
   const enabledTools = configured.tools;
+  // Searches run on their own when a message needs current information; there is no Web button.
+  const webAuto = autoWebSearch(settings?.webSearch);
   const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
     conversation?.messages ?? [],
@@ -215,9 +214,7 @@ export function ChatWorkspace({
   const toggleTool = async (tool: WorkbenchTool) => {
     // Documents open their panel: the documents are shown even when this model cannot use them.
     if (tool === 'documents') { setShowDocs(true); return; }
-    const turningOn = !enabledTools.includes(tool);
-    if (turningOn && tool === 'web' && !hasSearchKey()) { onConnections(); return; }
-    await setTool(tool, turningOn);
+    await setTool(tool, !enabledTools.includes(tool));
   };
   const branch = async (
     messageId: string,
@@ -862,7 +859,6 @@ export function ChatWorkspace({
               {([
                 ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
                 ['documents', Workflow, 'Documents', 'Open your Workspace documents and choose whether this thread may search them'],
-                ['web', Globe, 'Web', 'Lets the model search the web with Exa using your key; queries are sent to Exa'],
               ] as const).map(([tool, Icon, name, hint]) => (
                 <button
                   key={tool}
@@ -915,20 +911,20 @@ export function ChatWorkspace({
         <div className="np-composer-footnote">
           <span>
             {[
-              enabledTools.length > 0 &&
+              (enabledTools.includes('calculator') || documentsOn) &&
                 `Tools: ${[
                   enabledTools.includes('calculator') && 'Calculator',
                   documentsOn && `Documents (${documents.length}, search and read only)`,
-                  enabledTools.includes('web') && 'Web (search queries go to Exa)',
                 ]
                   .filter(Boolean)
                   .join(', ')}`,
+              webAuto && 'Web search is automatic (Exa)',
               routed
                 ? `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'
                 : local
-                  ? enabledTools.includes('web') ? 'The model runs on this machine.' : 'Requests stay on this machine.'
+                  ? webAuto ? 'The model runs on this machine.' : 'Requests stay on this machine.'
                   : `Prompts are sent to ${connection.name}${hasKey(connection.id) ? ' with your API key' : ''}.`,
             ]
               .filter(Boolean)

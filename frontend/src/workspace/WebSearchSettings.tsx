@@ -1,12 +1,23 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Eye, EyeOff, Globe } from 'lucide-react';
 import useConnections from '../state/connections';
+import useChat from '../state/chatStore';
 import { maskKey } from '../lib/credentials';
 import { clearSearchKey, hasSearchKey, searchKey, searchKeyRemembered, setSearchKey } from '../lib/searchKey';
 
 /** Exa key for the Web search tool. Stored like provider keys: this tab only unless remembered. */
 export function WebSearchSettings() {
   useConnections((state) => state.keyVersion);
+  const { settings, saveSettings } = useChat();
+  // Shown at once when toggled; the saved setting wins once it loads or changes.
+  const [automatic, setAutomatic] = useState(settings?.webSearch !== 'off');
+  useEffect(() => { setAutomatic(settings?.webSearch !== 'off'); }, [settings?.webSearch]);
+  const toggleAutomatic = async (on: boolean) => {
+    setAutomatic(on);
+    setError('');
+    try { await saveSettings({ webSearch: on ? 'auto' : 'off' }); }
+    catch { setAutomatic(!on); setError('Unable to save this setting.'); }
+  };
   const saved = hasSearchKey();
   const [key, setKeyValue] = useState('');
   const [show, setShow] = useState(false);
@@ -41,8 +52,10 @@ export function WebSearchSettings() {
         <div>
           <h2 id="web-search-title"><Globe size={16} /> Web search</h2>
           <p>
-            The Web tool searches with Exa using your own key. Search queries go to Exa, even when the model runs on this
-            machine. Exa bills after its free allowance; check your usage at exa.ai.
+            With a key saved, Nerdplexity searches the web on its own when a message needs current information: news,
+            prices, recent releases, a link, or a request like &ldquo;search for&hellip;&rdquo;. The model then answers from the
+            results and the sources are shown. Searches use Exa with your own key, and queries go to Exa even when the
+            model runs on this machine. Exa bills after its free allowance; check your usage at exa.ai.
           </p>
         </div>
         <span className={`np-label ${saved ? '' : 'error'}`} role="status">{saved ? `Key ${maskKey(searchKey())}` : 'No key'}</span>
@@ -70,6 +83,17 @@ export function WebSearchSettings() {
           <span>
             <strong>Remember this key on this device</strong>Saved unencrypted in this browser profile's storage. Otherwise the key
             is forgotten when you close or reload the tab.
+          </span>
+        </label>
+        <label className="np-check">
+          <input
+            type="checkbox"
+            checked={automatic}
+            onChange={(e) => void toggleAutomatic(e.target.checked)}
+          />
+          <span>
+            <strong>Search automatically</strong>When a message needs current information, search before the model answers.
+            Turn off to never search the web.
           </span>
         </label>
         {error && <p className="np-error" role="alert">{error}</p>}

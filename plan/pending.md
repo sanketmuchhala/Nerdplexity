@@ -14,6 +14,7 @@ Last reviewed: 2026-09-14 (P11, Free Router).
   - **Reusing answers to repeated prompts** to save free quota (the research's semantic caching) is not built.
   - **Bench covers five categories.** Long-context, image input, and multi-turn tool use are not measured.
 - **Default model** (2026-09-14, owner direction): the Free Router, not `openrouter/free`, whenever no model is chosen and it has a free model; shown with the Nerdplexity logo. Existing choices, including an earlier automatic `openrouter/free` default, are kept.
+- **Automatic web search** (2026-09-14, owner direction): no Web button; with an Exa key and the default **Search automatically** setting, the server searches before answering when the latest message needs current information (wording check in `runtime/autoSearch.ts`), for every model and once per Free Router run. Open: the check is keyword-based; tool-capable models are not given the tool to search on their own (to avoid spurious searches on small models).
 - **P12, memory.** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Moved after the Free Router on 2026-09-14 at the owner's direction.
 
 ## Owner decisions

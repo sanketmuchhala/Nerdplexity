@@ -110,7 +110,7 @@ Turn tools on from the message box; the choice is saved with the thread and in p
 
 - **Calculator:** exact arithmetic computed by the app, on any model.
 - **Documents:** search and read the notes in **Workspace**. Only for models on this machine; documents are never sent online.
-- **Web:** web search through [Exa](https://exa.ai) with your own key, added under **Connections**. Your search queries go to Exa, even when the model is local. Results are shown with their links.
+- **Web search, automatic:** add an [Exa](https://exa.ai) key under **Connections** and there is nothing to turn on. When a message needs current information (news, prices, recent releases, a link, or "search the web for…"), Nerdplexity searches before the model answers, the model answers from the results, and the sources are shown. Works with every model, including the Free Router. Switch it off under **Connections → Web search**. Search queries go to Exa, even when the model is local.
 
 A run may use at most 6 model steps and 12 tool calls. Each call appears above the answer with its exact input, result, and time, and is kept in Run history. Tool results are treated as data, not instructions, and no tool changes anything outside the app.
 
