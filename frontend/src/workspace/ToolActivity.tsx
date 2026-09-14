@@ -69,7 +69,7 @@ const SOURCE_NOTE: Record<Status, (tool: ToolTrace) => string> = {
 export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; activities?: ActivityTrace[] }) {
   if (!tools.length && !activities.length) return null;
   return (
-    <div className="np-inline-tools" aria-label="Tool activity">
+    <div aria-label="Tool activity">
       {activities.map(activity => (
         <details key={activity.id} className="np-tool np-tool-completed">
           <summary>
@@ -90,7 +90,7 @@ export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; a
               <Icon size={13} className={status === 'running' ? 'np-spin' : undefined} aria-hidden />
               <strong>{label(tool.name)}</strong>
               <span className="np-tool-summary">{summary(tool, status)}</span>
-              <span className="np-tool-meta">Step {tool.step}{tool.durationMs !== undefined ? ` · ${tool.durationMs} ms` : ''}</span>
+              <span className="np-tool-meta">{tool.step === 0 ? 'Automatic' : `Step ${tool.step}`}{tool.durationMs !== undefined ? ` · ${tool.durationMs} ms` : ''}</span>
             </summary>
             <div className="np-tool-body">
               <p>{SOURCE_NOTE[status](tool)}</p>

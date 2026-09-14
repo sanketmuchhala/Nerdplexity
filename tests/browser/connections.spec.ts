@@ -111,9 +111,9 @@ test('a provider connection is only saved after its API key passes validation', 
   expect(targets.filter(target => target.kind === 'openrouter').map(target => target.apiKey)).toEqual(['bad-key', 'valid-key', 'valid-key']);
 });
 
-test('OpenRouter free router becomes the default for a new thread', async ({ page }) => {
+test('the Free Router becomes the default once a free model is connected, and never replaces a chosen model', async ({ page }) => {
   await mockDiscovery(page, target => target.kind === 'openrouter'
-    ? { ok: true, execution: 'remote', models: [model('openrouter/free', { displayName: 'Free Models Router', pricing: 'zero-price' })] }
+    ? { ok: true, execution: 'remote', models: [model('openrouter/free', { displayName: 'Free Models Router', pricing: 'zero-price' }), model('meta/llama:free', { pricing: 'zero-price' })] }
     : offline);
   await page.goto('/app/models');
   await page.getByRole('button', { name: 'Add Provider' }).click();
@@ -121,7 +121,18 @@ test('OpenRouter free router becomes the default for a new thread', async ({ pag
   await form.getByLabel('Connection type').selectOption('openrouter');
   await form.getByLabel('API key').fill('sk-or-test');
   await form.getByRole('button', { name: 'Save Connection' }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: 'OpenRouter' }).getByRole('status')).toHaveText('1 model');
-  await page.goto('/app');
-  await expect(page.getByRole('button', { name: 'Choose model', exact: true })).toContainText('openrouter/free');
+  await expect(page.getByRole('listitem').filter({ hasText: 'OpenRouter' }).getByRole('status')).toHaveText('2 models');
+  // In-app navigation keeps the session-only key.
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
+  const toolbar = page.getByRole('button', { name: 'Choose model', exact: true });
+  await expect(toolbar).toContainText('Free Router');
+  await expect(toolbar.locator('img.np-router-mark')).toHaveAttribute('src', '/brand/nerdplexity-mark.svg');
+
+  // A model the user picks stays chosen.
+  await toolbar.click();
+  await page.getByRole('button', { name: 'Use meta/llama:free on OpenRouter' }).click();
+  await expect(toolbar).toContainText('meta/llama:free');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Models' }).click();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
+  await expect(toolbar).toContainText('meta/llama:free');
 });

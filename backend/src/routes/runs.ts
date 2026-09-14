@@ -6,6 +6,7 @@ import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.
 import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
 import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
+import { withWebResults } from '../runtime/autoSearch.js';
 
 type FetchFn = typeof fetch;
 
@@ -16,7 +17,8 @@ interface ValidRun {
   route?: { candidates: RouteCandidate[] };
   tools: ToolName[];
   documents: WorkspaceDocument[];
-  search?: { apiKey: string };
+  /** auto: search the web before answering when the latest message needs current information. */
+  search?: { apiKey: string; auto: boolean };
 }
 
 const ROUTE_LIMITS = { connections: 12, models: 200 } as const;
@@ -86,10 +88,11 @@ export function validateRunRequest(body: any): ValidRun {
   if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
   if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
   let search: ValidRun['search'];
-  if (tools.includes('web_search')) {
+  const auto = body.search?.auto === true;
+  if (tools.includes('web_search') || auto) {
     const key = body.search?.apiKey;
     if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) throw new Error('Web search needs an Exa API key. Add one in Connections.');
-    search = { apiKey: key };
+    search = { apiKey: key, auto };
   }
   const documentTools = tools.some(name => DOCUMENT_TOOLS.has(name));
   if (documentTools) {
@@ -122,9 +125,12 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, ow
     }, { health, fetchImpl, ...(bench ? { bench } : {}) });
   }
   return async ({ signal, emit }) => {
+    const request = run.search?.auto
+      ? { ...run.request, messages: await withWebResults(run.request.messages as RunMessage[], run.search.apiKey, signal, emit, fetchImpl) }
+      : run.request;
     const events = run.tools.length
-      ? runWithTools(run.request, run.tools, run.documents, signal, fetchImpl, run.search)
-      : streamModel(run.request, signal, fetchImpl);
+      ? runWithTools(request, run.tools, run.documents, signal, fetchImpl, run.search)
+      : streamModel(request, signal, fetchImpl);
     for await (const event of events) {
       if (event.type === 'done') return { usage: event.usage, finishReason: event.finishReason, ...(event.loadMs !== undefined ? { loadMs: event.loadMs } : {}) };
       emit(event);

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Shuffle, Search, Star } from 'lucide-react';
+import { Check, Search, Star } from 'lucide-react';
 import type { ModelDescriptor, ModelRef } from '@app/types';
 import useConnections, {
   currentRouterPool,
@@ -8,6 +8,7 @@ import useConnections, {
   modelKey,
 } from '../state/connections';
 import { isRouter, ROUTER_NAME, ROUTER_REF } from '../lib/router';
+import { RouterMark } from './RouterMark';
 import useChat from '../state/chatStore';
 import { WorkbenchDialog } from './WorkbenchDialog';
 
@@ -100,7 +101,7 @@ export function ModelPicker({
               onClick={() => void choose(ROUTER_REF)}
             >
               <span>
-                <strong><Shuffle size={14} aria-hidden /> {ROUTER_NAME}</strong>
+                <strong><RouterMark size={18} /> {ROUTER_NAME}</strong>
                 <small>
                   {pool.models
                     ? `Picks the best of ${pool.models} free model${pool.models === 1 ? '' : 's'} on ${pool.connections} connection${pool.connections === 1 ? '' : 's'} for each message, and tries the next when one is busy`

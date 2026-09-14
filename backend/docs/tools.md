@@ -142,6 +142,25 @@ At most eight results are allowed. Exa error details are redacted and bounded; 4
 
 Nerdplexity does not open result pages. Search excerpts are untrusted external data, and the model is explicitly instructed never to follow instructions inside them.
 
+### Automatic web search
+
+In the web app, web search has no button: with an Exa key saved and **Search automatically** on (the default, under Connections → Web search), every run sends `search: { provider: 'exa', apiKey, auto: true }`. The server then decides, per message, whether to search before the model answers (`backend/src/runtime/autoSearch.ts`):
+
+1. `webSearchQuery` reads the latest user message. It searches when the message:
+   - asks for it: "search the web", "search for", "web search", "look it up", "google it", "on the web", "find sources / links / articles / reviews", "with sources", "cite sources", "fact-check";
+   - contains a link (`http(s)://…` or `www.…`);
+   - asks about something that changes: latest, newest, most recent, recent(ly), today, tonight, yesterday, tomorrow, this week/weekend/month/year/season, right now, as of, breaking, news, headline(s), upcoming, trending, just announced/released/launched, nowadays; "current" followed by events, news, price, version, release, status, state, situation, leader, CEO, president, weather, rate, standings, or champion; "what's happening / what's new";
+   - asks for live data: price(s) of, stock price, share price, market cap, weather, forecast, exchange rate, who won, election, release date, box office, standings, live score, CEO of, president of, prime minister of, population of;
+   - mentions a year from 2024 to 2039.
+
+   A message containing a code fence is searched only when it asks for a search outright, so "update this function" does not trigger one. The query is the message itself, cut at a word boundary to at most 300 characters.
+2. `withWebResults` runs one Exa search (5 results) through the same `web_search` tool, with its validation, timeout, and output limits. It emits the usual two `tool` events with ID `web_auto` and **step 0**, which the app labels "Automatic".
+3. On success, the results go to the model as a system message placed after any leading system messages, dated, marked as untrusted pages, with instructions to rely on them over older knowledge, cite the URLs used, and say when they do not answer the question. On failure (bad key, no credits, time-out), the failed search is shown and the model answers without it; the run never fails because of the search.
+
+It works for every model, including ones without tool support: the model does not have to call anything. For the [Free Router](free-router.md), the search runs once before the first attempt and every attempt gets the same results; they count toward each candidate's context size. Bench and Compare never search automatically.
+
+The model does not get the `web_search` tool from automatic search. Small models often call tools they do not need, which would slow answers and spend Exa credits; the wording check is predictable, and a message can always ask for a search ("search the web for …"). Threads and presets saved with the old **Web** tool keep the setting, but it no longer enables anything.
+
 ## 8. Tool trace events
 
 Each call normally produces two public events with the same call ID, name, and step:

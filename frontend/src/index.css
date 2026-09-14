@@ -177,7 +177,10 @@
 /* ════════════════════════════════════════════
    ANIMATIONS
 ════════════════════════════════════════════ */
-@keyframes msgIn     { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
+@keyframes msgIn {
+  0% { opacity: 0; transform: translateY(24px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
 @keyframes fadeIn    { from { opacity:0; transform:translateY(8px)  } to { opacity:1; transform:none } }
 @keyframes slideUp   { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
 @keyframes slideDown { from { opacity:0; transform:translateY(-8px); max-height:0 } to { opacity:1; transform:none; max-height:400px } }
@@ -185,14 +188,14 @@
 @keyframes thinking  { 0%,100% { opacity:.3 } 50% { opacity:1 } }
 @keyframes shimmer   { 0% { background-position:-600px 0 } 100% { background-position:600px 0 } }
 
-.animate-msg-in     { animation: msgIn .22s ease-out; }
+.animate-msg-in     { animation: msgIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-fade-in    { animation: fadeIn .3s ease-out forwards; }
 .animate-slide-up   { animation: slideUp .35s ease-out forwards; }
 .animate-slideDown  { animation: slideDown .25s ease-out forwards; }
 .animate-spin-slow  { animation: spin-slow 3s linear infinite; }
 .animate-thinking   { animation: thinking 2s ease-in-out infinite; }
 .animate-thinking-text { animation: thinking 2s ease-in-out infinite; }
-.animate-message-in { animation: msgIn .22s ease-out; }
+.animate-message-in { animation: msgIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
 .progress-shimmer {
   background: linear-gradient(90deg, transparent 0%, rgba(66,133,244,.3) 50%, transparent 100%);

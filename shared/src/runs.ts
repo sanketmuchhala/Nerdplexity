@@ -166,8 +166,11 @@ interface RunStartBase {
   /** Tools the model may call. Document tools require `documents` and a model on this machine. */
   tools?: ToolName[];
   documents?: { id: string; title: string; content: string }[];
-  /** Required for web_search. The key is used for this run only and never stored or echoed. */
-  search?: { provider: 'exa'; apiKey: string };
+  /**
+   * Required for web_search. With auto, the server also searches before answering when the latest
+   * message needs current information. The key is used for this run only and never stored or echoed.
+   */
+  search?: { provider: 'exa'; apiKey: string; auto?: boolean };
 }
 
 /** Either one explicit model, or a route the server chooses from. */

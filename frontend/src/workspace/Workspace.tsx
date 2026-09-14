@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { isRouter, ROUTER_NAME } from '../lib/router';
+import { chooseRouterByDefault, isRouter, ROUTER_NAME } from '../lib/router';
+import { RouterMark } from './RouterMark';
 import {
   ArrowUpRight,
   ChevronRight,
@@ -29,7 +30,7 @@ import type { WorkspaceDocument } from '../lib/db';
 import { AccountMenu } from './AccountMenu';
 import useAccount from '../state/account';
 import * as store from '../lib/store';
-import useConnections from '../state/connections';
+import useConnections, { currentRouterPool } from '../state/connections';
 import { WorkbenchDialog } from './WorkbenchDialog';
 import { ChatWorkspace } from './ChatWorkspace';
 import { Models } from './Models';
@@ -87,26 +88,17 @@ export default function Workspace() {
   const theme = settings?.theme ?? 'dark';
   const run = useRun();
   const { connections, catalog, discoverAll } = useConnections();
-  const defaultedOpenRouter = useRef(false);
+  const defaultedRouter = useRef(false);
   useEffect(() => {
     void discoverAll();
   }, [discoverAll]);
+  // With no model chosen yet, the default is the Free Router, as soon as it has a free model to use.
+  // A model someone chose is never replaced.
   useEffect(() => {
-    if (defaultedOpenRouter.current || !settings || settings.activeModel) return;
-    const connection = connections.find(item => item.enabled && item.kind === 'openrouter');
-    const result = connection ? catalog[connection.id] : undefined;
-    const freeRouter = result?.status === 'done' && result.result.ok
-      ? result.result.models.find(model => model.id === 'openrouter/free')
-      : undefined;
-    if (!connection || !freeRouter) return;
-    defaultedOpenRouter.current = true;
-    const ref = { connectionId: connection.id, modelId: freeRouter.id };
-    void (async () => {
-      await state.saveSettings({ activeModel: ref });
-      const conversation = state.activeConversation();
-      if (conversation && !conversation.model && conversation.messages.length === 0)
-        await state.setConversationModel(conversation.id, ref);
-    })().catch(() => { defaultedOpenRouter.current = false; });
+    if (defaultedRouter.current || !settings || settings.activeModel) return;
+    if (!currentRouterPool(connections, catalog).models) return;
+    defaultedRouter.current = true;
+    void chooseRouterByDefault(state).catch(() => { defaultedRouter.current = false; });
   }, [catalog, connections, settings, state]);
   const checking = Object.values(catalog).some((c) => c.status === 'loading');
   const modelCount = Object.values(catalog).reduce(
@@ -370,7 +362,7 @@ export default function Workspace() {
             </span>
             <div>
               <strong>
-                {isRouter(settings?.activeModel) ? ROUTER_NAME : settings?.activeModel?.modelId || 'No model chosen'}
+                {isRouter(settings?.activeModel) ? <><RouterMark size={13} /> {ROUTER_NAME}</> : settings?.activeModel?.modelId || 'No model chosen'}
               </strong>
               <span>
                 {checking
@@ -484,7 +476,6 @@ export default function Workspace() {
             documents={documents}
             onModels={() => go('/app/models')}
             onDocuments={() => go('/app/workspace')}
-            onConnections={() => go('/app/connections')}
           />
         )}
       </main>

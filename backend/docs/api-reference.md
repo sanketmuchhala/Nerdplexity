@@ -258,6 +258,8 @@ Starting a run returns before generation finishes. Follow the event endpoint imm
 
 The two keys have different scopes and are not placed in events.
 
+With `"search": { "provider": "exa", "apiKey": "…", "auto": true }` the `web_search` tool is not needed: the server searches once before the model answers when the latest message needs current information, and shows it as a `tool` event at step 0 with ID `web_auto` ([Tools, automatic web search](tools.md#automatic-web-search)).
+
 ### Free Router example
 
 Instead of `target` and `model`, a run may send `route`: free models across up to 12 connections (200 models), each connection's key sent once. The server chooses the model (`backend/src/runtime/router.ts`).

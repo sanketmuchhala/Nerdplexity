@@ -14,6 +14,8 @@ async function chooseRouter(page: Page) {
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
   await page.getByRole('button', { name: 'Choose model' }).click();
   await page.getByRole('button', { name: 'Use the Free Router' }).click();
+  // The Free Router may already be the default, so wait for the picker to close, not for the label.
+  await expect(page.getByRole('dialog', { name: 'Choose a model' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Choose model' })).toContainText('Free Router');
 }
 

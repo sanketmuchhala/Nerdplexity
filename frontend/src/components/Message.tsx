@@ -9,21 +9,21 @@ import ModelLogo, { formatModelName } from '../workspace/ModelLogo';
 
 interface Props {
   message: Omit<StoredMessage, 'createdAt'> & { timestamp: number; metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
-  /** Skip the entrance animation when the message replaces text already on screen. */
   animate?: boolean;
-  /** The model that wrote an assistant answer, when known; its logo and name head the answer. */
   model?: { id: string; displayName?: string; provider: string };
-  /** The answer is still arriving: show a caret after the text. */
   streaming?: boolean;
+  /** What the run is doing right now ("Asking model X", "Retrying in 1s"), shown while it streams. */
+  status?: string;
+  children?: React.ReactNode;
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
 const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 
-export function Message({ message, animate = true, model, streaming = false }: Props) {
+export function Message({ message, animate = true, model, streaming = false, status, children }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
-  const [showReasoning, setShowReasoning] = useState(true);
+  const [showReasoning, setShowReasoning] = useState(false);
 
   if (isSystem) return null;
 
@@ -34,12 +34,12 @@ export function Message({ message, animate = true, model, streaming = false }: P
   /* ── User ── */
   if (isUser) {
     return (
-      <div className="w-full px-4 py-4 animate-message-in">
+      <div className={`w-full px-4 py-4 ${animate ? 'animate-message-in' : ''}`}>
         <div className={COL}>
           <div className="flex justify-end">
-            <div className="max-w-[78%] px-5 py-3.5 rounded-[22px]"
+            <div className="max-w-[85%] px-5 py-3.5 rounded-[24px]"
               style={{ background: 'var(--s2)' }}>
-              <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
+              <p className="text-[15px] leading-[1.65] whitespace-pre-wrap" style={{ color: 'var(--t1)', overflowWrap: 'break-word' }}>
                 {message.content}
               </p>
             </div>
@@ -71,39 +71,54 @@ export function Message({ message, animate = true, model, streaming = false }: P
           </span>
         </div>
 
-        {/* Reasoning is a separate, complete stream and always precedes the answer. */}
-        {reasoning && (
+        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning or children are present. */}
+        {(streaming || reasoning || children) && (
           <section
             className={`np-reasoning ${streaming ? 'live' : 'complete'}`}
             role="region"
             aria-label={streaming ? 'Thinking live' : 'Thought process'}
           >
-            {streaming ? (
-              <div className="np-reasoning-heading" role="status">
+            <button
+              type="button"
+              className="np-reasoning-heading"
+              aria-expanded={showReasoning}
+              aria-controls={`reasoning-${message.id}`}
+              onClick={() => setShowReasoning(value => !value)}
+              disabled={!reasoning && !children}
+              style={{ cursor: (reasoning || children) ? 'pointer' : 'default' }}
+            >
+              {streaming ? (
+                <div className="np-inline-orb">
+                  <div className="np-inline-orb-inner">
+                    <div className="np-orb-node color-magenta"></div>
+                    <div className="np-orb-node color-blue"></div>
+                    <div className="np-orb-node color-green"></div>
+                    <div className="np-orb-node color-yellow"></div>
+                    <div className="np-orb-node color-purple"></div>
+                  </div>
+                  <div className="np-inline-orb-glass"></div>
+                </div>
+              ) : (
                 <Brain size={13} />
-                <span className="np-reasoning-pulse" aria-hidden="true" />
-                <strong>Thinking live</strong>
-                <span className="np-reasoning-state">Streaming</span>
-                <ChevronDown size={12} className="ml-auto" />
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="np-reasoning-heading"
-                aria-expanded={showReasoning}
-                aria-controls={`reasoning-${message.id}`}
-                onClick={() => setShowReasoning(value => !value)}
-              >
-                <Brain size={13} />
-                <strong>Thought process</strong>
-                <span className="np-reasoning-state">Complete</span>
-                {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
-              </button>
-            )}
-            {(streaming || showReasoning) && (
+              )}
+              {streaming ? (
+                <>
+                  <strong>Thinking...</strong>
+                  {status && <span className="np-reasoning-status" role="status">{status}</span>}
+                </>
+              ) : (
+                <>
+                  <strong>Thought process</strong>
+                  <span className="np-reasoning-state">Complete</span>
+                </>
+              )}
+              {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
+            </button>
+            
+            {showReasoning && (reasoning || children) && (
               <div id={`reasoning-${message.id}`} className="np-reasoning-body">
-                {formatContent(reasoning)}
-                {streaming && <span className="np-reasoning-caret" aria-hidden="true" />}
+                {children}
+                {reasoning && formatContent(reasoning)}
               </div>
             )}
           </section>
@@ -147,11 +162,14 @@ export function Message({ message, animate = true, model, streaming = false }: P
   );
 }
 
-/* CommonMark plus GFM. Raw HTML is ignored and the resulting tree is sanitized;
- * provider output never reaches dangerouslySetInnerHTML. */
+/* CommonMark plus GFM. Raw HTML is ignored and the resulting tree is sanitized. The only
+ * provider text that reaches dangerouslySetInnerHTML is code-block content after Prism, which
+ * escapes it; Message.test.tsx checks that. */
 const markdownComponents: Components = {
   a: ({ href, children, ...props }) => <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
   img: ({ alt }) => <span className="np-markdown-image">[Image: {alt || 'unnamed'}]</span>,
+  // Wide tables scroll inside their own box instead of widening the page.
+  table: ({ children }) => <div className="np-markdown-table"><table>{children}</table></div>,
   pre: ({ children }) => {
     if (isValidElement<{ children?: ReactNode; className?: string }>(children)) {
       const language = /language-([^\s]+)/.exec(children.props.className ?? '')?.[1];

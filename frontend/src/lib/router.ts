@@ -9,6 +9,23 @@ export const ROUTER_REF: ModelRef = { connectionId: ROUTER_CONNECTION_ID, modelI
 
 export const isRouter = (ref?: { connectionId?: string } | null) => ref?.connectionId === ROUTER_CONNECTION_ID;
 
+/** The chat store actions needed to choose a model. */
+interface ChatActions {
+  saveSettings: (patch: { activeModel: ModelRef }) => Promise<void>;
+  activeConversation: () => { id: string; model?: string; messages: unknown[] } | null | undefined;
+  setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
+}
+
+/**
+ * Make the Free Router the chosen model, and the model of the open thread if it is new and empty.
+ * Callers use it only when no model has been chosen, so a person's choice is never replaced.
+ */
+export async function chooseRouterByDefault(chat: ChatActions) {
+  await chat.saveSettings({ activeModel: ROUTER_REF });
+  const conversation = chat.activeConversation();
+  if (conversation && !conversation.model && conversation.messages.length === 0) await chat.setConversationModel(conversation.id, ROUTER_REF);
+}
+
 /** The server's limits on one route. */
 const MAX_CONNECTIONS = 12;
 const MAX_MODELS = 200;

@@ -1,4 +1,5 @@
-import { AlertTriangle, Check, Shuffle } from 'lucide-react';
+import { AlertTriangle, Check } from 'lucide-react';
+import { RouterMark } from './RouterMark';
 import type { RouteStep, TaskKind } from '@app/types';
 
 const TASK: Record<TaskKind, string> = {
@@ -14,10 +15,10 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
   const last = attempts[attempts.length - 1];
   const fallbacks = attempts.filter(attempt => attempt.failure).length;
   return (
-    <div className="np-inline-tools" aria-label="Free Router decision">
+    <div aria-label="Free Router decision">
       <details className="np-tool np-route">
         <summary>
-          <Shuffle size={13} aria-hidden />
+          <RouterMark size={14} />
           <strong>Free Router</strong>
           <span className="np-tool-summary">{last.step.model}{task ? ` for ${TASK[task]}` : ''}</span>
           <span className="np-tool-meta">{fallbacks ? `${fallbacks} fallback${fallbacks === 1 ? '' : 's'}` : 'First choice'}</span>

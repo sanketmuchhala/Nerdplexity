@@ -40,6 +40,7 @@ import { WebSearchSettings } from './WebSearchSettings';
 import ModelLogo, { formatModelName } from './ModelLogo';
 import { WorkbenchDialog } from './WorkbenchDialog';
 import { costStatus } from '../lib/cost';
+import { chooseRouterByDefault } from '../lib/router';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
 import { apiUrl } from '../lib/backend';
@@ -347,12 +348,9 @@ function ConnectionForm({
         remember,
         billing,
       });
-      if (kind === 'openrouter' && !initial && checked.models.some(model => model.id === 'openrouter/free') && !useChat.getState().settings?.activeModel) {
-        const defaultModel = { connectionId: connection.id, modelId: 'openrouter/free' };
-        await useChat.getState().saveSettings({ activeModel: defaultModel });
-        const current = useChat.getState().activeConversation();
-        if (current && !current.model && current.messages.length === 0)
-          await useChat.getState().setConversationModel(current.id, defaultModel);
+      // The first connection with a free model makes the Free Router the default, unless a model is already chosen.
+      if (!initial && !useChat.getState().settings?.activeModel && checked.models.some(model => costStatus(connection, model, checked.execution).free)) {
+        await chooseRouterByDefault(useChat.getState());
       }
       onDone();
       void discover(connection.id);

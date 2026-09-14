@@ -5,6 +5,7 @@ import { ResolvedTarget } from './destinations.js';
 import { runWithTools } from './toolLoop.js';
 import { WorkspaceDocument } from './tools.js';
 import { enqueueLocal } from '../queue/localQueue.js';
+import { withWebResults } from './autoSearch.js';
 import type { RunContext, RunExecutor } from './runs.js';
 
 type FetchFn = typeof fetch;
@@ -30,7 +31,7 @@ export const MAX_ATTEMPTS = 4;
 const FALLBACK = new Set<ProviderErrorCategory>(['quota', 'unavailable', 'transport', 'timeout', 'invalid-request', 'context', 'auth']);
 
 const CODE = /```|\b(function|class|def|const|compile[sd]?|stack ?trace|exception|bug|debug|refactor|regex|sql|typescript|javascript|python|rust|golang|java|c\+\+|html|css|endpoint|unit tests?|script|snippet|code)\b/i;
-const MATH = /\b(solve|equation|integral|derivative|probability|prove|proof|theorem|calculate|compute|percent(age)?|matrix|algebra|geometry|arithmetic)\b|\d\s*[-+*/^×÷=]\s*\d/i;
+const MATH = /\b(solve|equation|integral|derivative|probability|prove|proof|theorem|calculate|compute|percent(age)?|matrix|algebra|geometry|arithmetic)\b|\d\s*[-+*/^×÷=]\s*\d|\d\s*%\s*of\b/i;
 const EXTRACTION = /\b(json|yaml|csv|table|extract|parse|classify|categori[sz]e|schema|fill in|bullet list)\b/i;
 const WRITING = /\b(write|draft|rewrite|rephrase|proofread|essay|e-?mail|letter|story|poem|blog|tweet|summar(y|i[sz]e)|translate|tone|cover letter)\b/i;
 const REASONING = /\b(why|explain|reason(ing)?|compare|trade-?offs?|pros and cons|step by step|analy[sz]e|plan|design|puzzle|riddle|logic)\b/i;
@@ -265,7 +266,8 @@ export interface RoutedRun {
   messages: RunMessage[];
   tools: ToolName[];
   documents: WorkspaceDocument[];
-  search?: { apiKey: string };
+  /** auto: search the web once before the first attempt when the message needs it. */
+  search?: { apiKey: string; auto?: boolean };
 }
 
 export interface RouterDeps {
@@ -310,7 +312,9 @@ function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderE
 export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
   const { health, bench, fetchImpl = fetch, enqueue = enqueueLocal } = deps;
   return async ({ signal, emit }: RunContext) => {
-    const task = profileTask(run.messages, run.tools, run.request.maxTokens);
+    // One search serves every attempt; its results count toward each model's context.
+    const messages = run.search?.auto ? await withWebResults(run.messages, run.search.apiKey, signal, emit, fetchImpl) : run.messages;
+    const task = profileTask(messages, run.tools, run.request.maxTokens);
     const ranking = rankCandidates(run.candidates, task, health, run.owner, bench);
     const blockedAccounts = new Set<string>();
     let attempts = 0;
@@ -325,7 +329,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       const lead = attempts === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;
       emit({ type: 'route', attempt: attempts, connectionId: candidate.connectionId, model: candidate.model, status: 'trying', reason: why.length ? `${lead}: ${why.join(', ')}.` : `${lead}.` });
 
-      const request: ModelRequest = { ...run.request, target: candidate.target, model: candidate.model, messages: run.messages as ModelMessage[], waitOnRateLimit: false };
+      const request: ModelRequest = { ...run.request, target: candidate.target, model: candidate.model, messages: messages as ModelMessage[], waitOnRateLimit: false };
       const sentAt = Date.now();
       let answeredAt: number | undefined;
       const attempt = async () => {
