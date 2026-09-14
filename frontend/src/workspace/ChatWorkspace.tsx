@@ -27,6 +27,7 @@ import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
 import { isRouter, ROUTER_NAME } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
+import { RouterMark } from './RouterMark';
 import useConnections, {
   currentRouterPool,
   isLocal,
@@ -260,7 +261,7 @@ export function ChatWorkspace({
           disabled={run.running}
           onClick={() => setShowPicker(true)}
         >
-          <span className="np-model-dot" />
+          {routed ? <RouterMark size={16} /> : <span className="np-model-dot" />}
           <span>{routed ? ROUTER_NAME : model || 'Choose a model'}</span>
           <span className="np-model-source">
             {routed

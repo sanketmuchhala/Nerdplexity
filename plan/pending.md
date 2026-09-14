@@ -13,6 +13,7 @@ Last reviewed: 2026-09-14 (P11, Free Router).
   - **The same model on several providers** (e.g. Llama 3.3 70B on Groq and Cerebras) is treated as separate models; grouping them would share Bench results and give more fallbacks (idea from the research).
   - **Reusing answers to repeated prompts** to save free quota (the research's semantic caching) is not built.
   - **Bench covers five categories.** Long-context, image input, and multi-turn tool use are not measured.
+- **Default model** (2026-09-14, owner direction): the Free Router, not `openrouter/free`, whenever no model is chosen and it has a free model; shown with the Nerdplexity logo. Existing choices, including an earlier automatic `openrouter/free` default, are kept.
 - **P12, memory.** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Moved after the Free Router on 2026-09-14 at the owner's direction.
 
 ## Owner decisions

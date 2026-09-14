@@ -38,7 +38,7 @@ Nerdplexity deals with two different things that are both called a "free router"
 | Chooses among | Every free model on **all** your connections: OpenRouter, Groq, Gemini, Cerebras, Mistral, SambaNova, Hugging Face, Ollama, LM Studio, custom endpoints | OpenRouter's free models only |
 | How it chooses | Task type, model capabilities, context size, your Bench results, recent failures (sections 5–10) | OpenRouter's own logic, not visible to Nerdplexity |
 | When a model is busy | Tries the next model, up to 4, and shows each attempt | OpenRouter's behavior; Nerdplexity sees one request |
-| Picked in the app as | **Free Router**, first row of the model picker | An ordinary model in the OpenRouter catalog |
+| Picked in the app as | **Free Router**, first row of the model picker, marked with the Nerdplexity logo; the default model | An ordinary model in the OpenRouter catalog |
 | Model ID | Connection `nerdplexity-router`, model `free` (not a real connection) | `openrouter/free` on your OpenRouter connection |
 
 The Free Router can use `openrouter/free` as one of its candidates, always last (section 7). Section 15 covers how the app treats `openrouter/free` on its own.
@@ -47,7 +47,7 @@ The Free Router can use `openrouter/free` as one of its candidates, always last 
 
 1. Connect at least one provider with free models. The quickest is OpenRouter with a free key: its catalog marks $0 models, which the router can use at once. Models on your computer (Ollama, LM Studio) are always free.
 2. For providers whose free plan is "an account with no payment method" (Groq, Gemini, Cerebras, Mistral, SambaNova, Hugging Face), set **Account billing** to **No billing enabled** when you add the connection. Nerdplexity cannot read billing settings, so it only uses those models after you say the account cannot be charged.
-3. In chat, open the model picker and choose **Free Router**. Its row says how many free models on how many connections it can use.
+3. The Free Router is the **default model**: as soon as a connection has a free model and no model has been chosen, the app selects it (for the settings and for an empty new thread). Otherwise, open the model picker and choose **Free Router**, the first row, marked with the Nerdplexity logo. Its row says how many free models on how many connections it can use. Choosing any other model keeps that choice; the default never replaces it.
 4. Optional but recommended: run [Bench](bench.md) on a few models. The router then ranks by measured results instead of guesses from model names.
 
 Each answer then shows which model wrote it ("… · via Free Router") and a **Free Router** panel listing every model it tried, why, and what happened.
@@ -405,7 +405,7 @@ Validation (`validateRoute`): `strategy` must be `"free"`; 1–12 connections wi
 `openrouter/free` is a model on your OpenRouter connection that asks OpenRouter to pick one of its free models. Nerdplexity:
 
 - **Lists it as free.** Discovery (`discoverOpenRouter`) always includes it and classifies it `zero-price`, even when the catalog omits it or reports request-time prices, because OpenRouter documents it as $0.
-- **Makes it the default model** when you add an OpenRouter connection and no model is chosen yet, and on startup if an OpenRouter connection lists it and nothing is chosen (`frontend/src/workspace/Models.tsx`, `Workspace.tsx`).
+- **Does not make it the default.** Main briefly defaulted to `openrouter/free` (`0cb9249`); the default is now the Free Router (section 2). Someone who already had `openrouter/free` chosen keeps it until they pick another model.
 - **Shows the model it picked.** OpenRouter's stream reports the concrete model; the adapter emits it once per request as a `model` event, the web app shows that model's name and logo while it streams, and saves it as the answer's model (`routedModel` on the run record).
 - **Suggests it first** among free alternatives when a single free model runs out of quota. It is never switched to on its own.
 - **Puts it last in the Free Router.** Its choice cannot be ranked or measured, so the Free Router uses it only after its own picks.
@@ -442,5 +442,7 @@ When changing a rule:
 | `frontend/src/workspace/useRun.ts` | Sending routed runs, recording attempts and provenance |
 | `frontend/src/workspace/RouteActivity.tsx` | The attempt panel |
 | `frontend/src/workspace/ModelPicker.tsx` | The Free Router row |
+| `frontend/src/workspace/RouterMark.tsx` | The Nerdplexity logo shown with the Free Router (picker, chat toolbar, sidebar, attempt panel) |
+| `frontend/src/workspace/Workspace.tsx`, `Models.tsx` | Making the Free Router the default when no model is chosen (`chooseRouterByDefault`) |
 | `backend/src/runtime/router.test.ts` | Classification, sizes, ranking, cooldowns, fallback, commit point, account limits, refusals, attempt limit, messages, validation |
 | `tests/browser/router.spec.ts` | Real backend: fallback, cooldown, attribution, Run history; mocked: paid and unpriced models never sent |

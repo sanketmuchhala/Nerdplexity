@@ -604,3 +604,5 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-bench-live { margin: 0; padding: 12px 12px 12px 30px; font-size: 10px; line-height: 1.7; max-height: 300px; overflow: auto; }
 .np-bench-live li { overflow-wrap: anywhere; }
 .np-bench-live .np-bench-passed strong { color: var(--np-accent); }
+.np-router-mark { display: inline-block; flex-shrink: 0; border-radius: 30%; vertical-align: -3px; }
+.np-runtime-summary strong .np-router-mark { margin-right: 2px; }
