@@ -75,29 +75,30 @@ export function Message({ message, animate = true, model, streaming = false }: P
             role="region"
             aria-label={streaming ? 'Thinking live' : 'Thought process'}
           >
-            {streaming ? (
-              <div className="np-reasoning-heading" role="status">
-                <Brain size={13} />
-                <span className="np-reasoning-pulse" aria-hidden="true" />
-                <strong>Thinking live</strong>
-                <span className="np-reasoning-state">Streaming</span>
-                <ChevronDown size={12} className="ml-auto" />
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="np-reasoning-heading"
-                aria-expanded={showReasoning}
-                aria-controls={`reasoning-${message.id}`}
-                onClick={() => setShowReasoning(value => !value)}
-              >
-                <Brain size={13} />
-                <strong>Thought process</strong>
-                <span className="np-reasoning-state">Complete</span>
-                {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
-              </button>
-            )}
-            {(streaming || showReasoning) && (
+            <button
+              type="button"
+              className="np-reasoning-heading"
+              aria-expanded={showReasoning}
+              aria-controls={`reasoning-${message.id}`}
+              onClick={() => setShowReasoning(value => !value)}
+            >
+              <Brain size={13} />
+              {streaming ? (
+                <>
+                  <span className="np-reasoning-pulse" aria-hidden="true" />
+                  <strong>Thinking live</strong>
+                  <span className="np-reasoning-state">Streaming</span>
+                </>
+              ) : (
+                <>
+                  <strong>Thought process</strong>
+                  <span className="np-reasoning-state">Complete</span>
+                </>
+              )}
+              {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
+            </button>
+            
+            {showReasoning && (
               <div id={`reasoning-${message.id}`} className="np-reasoning-body">
                 {formatContent(reasoning)}
                 {streaming && <span className="np-reasoning-caret" aria-hidden="true" />}

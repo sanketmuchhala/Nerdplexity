@@ -9,11 +9,14 @@ export function AILoadingState({ phase }: Props) {
     <div className="ai-loading-container" role="status">
       {/* 1. AI Glow Orb */}
       <div className="ai-glow-orb">
-        <div className="orb-node color-magenta"></div>
-        <div className="orb-node color-blue"></div>
-        <div className="orb-node color-green"></div>
-        <div className="orb-node color-yellow"></div>
-        <div className="orb-node color-purple"></div>
+        <div className="ai-glow-orb-inner">
+          <div className="orb-node color-magenta"></div>
+          <div className="orb-node color-blue"></div>
+          <div className="orb-node color-green"></div>
+          <div className="orb-node color-yellow"></div>
+          <div className="orb-node color-purple"></div>
+        </div>
+        <div className="ai-glow-orb-glass"></div>
       </div>
       
       {/* 2. Dynamic Status Text */}
