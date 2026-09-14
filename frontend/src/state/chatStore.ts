@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { ModelRef } from '@app/types';
-import { db, Conversation, Message, AppSettings, Provider, legacyProvider, type ThreadAttachment } from '../lib/db';
+import { Conversation, Message, AppSettings, Provider, defaultSettings, legacyProvider, type ThreadAttachment } from '../lib/db';
+import * as store from '../lib/store';
 import useConnections from './connections';
 import { parseConversation, settingsErrors, workbenchSettings, type Preset, type WorkbenchSettings } from '../lib/workbench';
 
@@ -44,7 +45,6 @@ interface ChatStore {
   saveSettings: (partial: Partial<AppSettings>) => Promise<void>;
 
   // Helper methods
-  persistActiveIfDirty: () => Promise<void>;
   getCurrentProvider: () => Provider;
   getDefaultSettings: () => Pick<AppSettings, 'temperature' | 'max_tokens' | 'web_enabled'>;
 }
@@ -62,33 +62,20 @@ const useChat = create<ChatStore>((set, get) => ({
     return state.conversations.find(c => c.id === state.activeConversationId) || null;
   },
 
-  // Load conversations from IndexedDB
+  // Saved data comes from the server. Failures reach the caller, which offers a retry.
   loadConversations: async () => {
-    try {
-      const conversations = await db.conversations.orderBy('updatedAt').reverse().toArray();
-      set({ conversations });
-    } catch (error) {
-      console.error('Failed to load conversations:', error);
-    }
+    set({ conversations: await store.conversations.list() });
   },
 
-  // Load settings from IndexedDB
   loadSettings: async () => {
-    try {
-      const settings = await db.settings.get(1);
-      if (settings) {
-        set({ settings });
-      }
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-    }
+    const saved = await store.settings.get();
+    if (saved) { set({ settings: saved }); return; }
+    const { apiKeys: _keys, ...defaults } = defaultSettings();
+    set({ settings: await store.settings.patch(defaults) });
   },
 
   // Create new conversation
   newConversation: async (defaults = {}) => {
-    // Persist current conversation if it has changes
-    await get().persistActiveIfDirty();
-
     const id = uuidv4();
     // New threads use the chosen model; with none chosen, the thread waits for a selection.
     const active = get().settings?.activeModel;
@@ -107,14 +94,14 @@ const useChat = create<ChatStore>((set, get) => ({
     };
 
     try {
-      await db.conversations.put(conversation);
-      set(state => ({
-        conversations: [conversation, ...state.conversations],
-        activeConversationId: id
-      }));
+      await store.conversations.create(conversation);
     } catch (error) {
-      throw new Error('Unable to save the new thread. Check browser storage.');
+      throw new Error(`Unable to save the new thread. ${(error as Error).message}`);
     }
+    set(state => ({
+      conversations: [conversation, ...state.conversations],
+      activeConversationId: id
+    }));
   },
 
   // Select conversation by ID
@@ -152,15 +139,19 @@ const useChat = create<ChatStore>((set, get) => ({
     };
 
     try {
-      await db.conversations.put(updatedConversation);
-      set(state => ({
-        conversations: state.conversations.map(c =>
-          c.id === activeConv.id ? updatedConversation : c
-        )
-      }));
+      await store.conversations.appendMessage(activeConv.id, message, {
+        ...(updatedConversation.title !== activeConv.title ? { title: updatedConversation.title } : {}),
+        updatedAt: updatedConversation.updatedAt,
+      });
     } catch (error) {
-      throw new Error('Unable to save the message. Check browser storage.');
+      throw new Error(`Unable to save the message. ${(error as Error).message}`);
     }
+    // Merge into the latest state: another message may have been added while this one saved.
+    set(state => ({
+      conversations: state.conversations.map(c =>
+        c.id === activeConv.id ? { ...c, title: updatedConversation.title, updatedAt: updatedConversation.updatedAt, messages: [...c.messages, message] } : c
+      )
+    }));
   },
 
   // Update conversation title
@@ -173,13 +164,13 @@ const useChat = create<ChatStore>((set, get) => ({
     const updated = { ...conversation, title, updatedAt: Date.now() };
 
     try {
-      await db.conversations.put(updated);
-      set(state => ({
-        conversations: state.conversations.map(c => c.id === id ? updated : c)
-      }));
+      await store.conversations.update(id, { title, updatedAt: updated.updatedAt });
     } catch (error) {
-      throw new Error('Unable to save the thread title. Check browser storage.');
+      throw new Error(`Unable to save the thread title. ${(error as Error).message}`);
     }
+    set(state => ({
+      conversations: state.conversations.map(c => c.id === id ? { ...c, title, updatedAt: updated.updatedAt } : c)
+    }));
   },
 
   // Point a thread at a connection and model for its next run. History keeps its provenance.
@@ -193,7 +184,7 @@ const useChat = create<ChatStore>((set, get) => ({
       provider: providerFor(ref.connectionId, conversation.provider),
       updatedAt: Date.now()
     };
-    await db.conversations.put(updated);
+    await store.conversations.update(id, { connectionId: ref.connectionId, model: ref.modelId, provider: updated.provider, updatedAt: updated.updatedAt });
     set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
   },
 
@@ -201,7 +192,7 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().conversations.find(c => c.id === id);
     if (!conversation) return;
     const updated: Conversation = { ...conversation, allowCharges: allow, updatedAt: Date.now() };
-    await db.conversations.put(updated);
+    await store.conversations.update(id, { allowCharges: allow, updatedAt: updated.updatedAt });
     set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
   },
 
@@ -210,7 +201,7 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().conversations.find(c => c.id === id);
     if (!conversation) throw new Error('This thread is no longer available.');
     const updated = { ...conversation, workbench: structuredClone(settings), updatedAt: Date.now() };
-    await db.conversations.put(updated);
+    await store.conversations.update(id, { workbench: updated.workbench, updatedAt: updated.updatedAt });
     set(state => ({ conversations: state.conversations.map(c => c.id === id ? updated : c) }));
   },
 
@@ -222,7 +213,7 @@ const useChat = create<ChatStore>((set, get) => ({
     if (!conversation) throw new Error('Unable to create a thread.');
     const updated: Conversation = { ...conversation, connectionId: preset.model.connectionId, model: preset.model.modelId,
       provider: providerFor(preset.model.connectionId, conversation.provider), workbench: structuredClone(preset.settings), updatedAt: Date.now() };
-    await db.conversations.put(updated);
+    await store.conversations.update(updated.id, { connectionId: updated.connectionId, model: updated.model, provider: updated.provider, workbench: updated.workbench, updatedAt: updated.updatedAt });
     set(state => ({ conversations: state.conversations.map(c => c.id === updated.id ? updated : c) }));
   },
 
@@ -230,15 +221,13 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().conversations.find(c => c.id === id);
     const index = conversation?.messages.findIndex(m => m.id === beforeMessageId) ?? -1;
     if (!conversation || index < 0) throw new Error('The source message is no longer available.');
-    await get().newConversation({
-      title: `${conversation.title.slice(0, 170)} (branch)`, model: conversation.model, connectionId: conversation.connectionId,
-      provider: conversation.provider, settings: structuredClone(conversation.settings),
-      workbench: structuredClone(workbenchSettings(conversation, get().settings)),
-      messages: structuredClone(conversation.messages.slice(0, index)), branchOf: { conversationId: id, messageId: beforeMessageId },
-      attachments: structuredClone(conversation.attachments ?? []),
-      // A new branch does not inherit permission to charge an account.
-      allowCharges: false,
+    // The server copies the earlier messages and attachments, so nothing is uploaded again.
+    // A new branch does not inherit permission to charge an account.
+    const branch = await store.conversations.fork(id, {
+      id: uuidv4(), beforeMessageId, title: `${conversation.title.slice(0, 170)} (branch)`,
+      workbench: structuredClone(workbenchSettings(conversation, get().settings)), createdAt: Date.now(),
     });
+    set(state => ({ conversations: [branch, ...state.conversations], activeConversationId: branch.id }));
   },
 
   importThread: async text => {
@@ -251,7 +240,7 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().conversations.find(c => c.id === conversationId);
     if (!conversation) throw new Error('Create a thread before attaching a file.');
     const updated = { ...conversation, attachments: [...(conversation.attachments ?? []), attachment], updatedAt: Date.now() };
-    await db.conversations.put(updated);
+    await store.conversations.addAttachment(conversationId, attachment);
     set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
   },
 
@@ -259,7 +248,7 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().conversations.find(c => c.id === conversationId);
     if (!conversation) return;
     const updated = { ...conversation, attachments: (conversation.attachments ?? []).filter(file => file.id !== attachmentId), updatedAt: Date.now() };
-    await db.conversations.put(updated);
+    await store.conversations.removeAttachment(conversationId, attachmentId);
     set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
   },
 
@@ -271,7 +260,7 @@ const useChat = create<ChatStore>((set, get) => ({
       messages: conversation.messages.map(message => message.id === messageId ? { ...message, feedback } : message),
       updatedAt: Date.now(),
     };
-    await db.conversations.put(updated);
+    await store.conversations.setFeedback(conversationId, messageId, feedback);
     set(state => ({ conversations: state.conversations.map(item => item.id === conversationId ? updated : item) }));
   },
 
@@ -296,25 +285,25 @@ const useChat = create<ChatStore>((set, get) => ({
     };
 
     try {
-      await db.conversations.put(updated);
+      await store.conversations.update(id, { provider: updated.provider, model: updated.model, settings: updated.settings, updatedAt: updated.updatedAt });
       set(state => ({
         conversations: state.conversations.map(c => c.id === id ? updated : c)
       }));
     } catch (error) {
-      console.error('Failed to update conversation settings:', error);
+      console.error('Failed to update conversation settings:', (error as Error).message);
     }
   },
 
   // Delete conversation
   deleteConversation: async (id: string) => {
     try {
-      await db.conversations.delete(id);
+      await store.conversations.remove(id);
       set(state => ({
         conversations: state.conversations.filter(c => c.id !== id),
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId
       }));
     } catch (error) {
-      console.error('Failed to delete conversation:', error);
+      console.error('Failed to delete conversation:', (error as Error).message);
     }
   },
 
@@ -326,30 +315,10 @@ const useChat = create<ChatStore>((set, get) => ({
     if (!currentSettings) return;
 
     try {
-      // Publish the value only after it is durable. Merge against storage so independent saves do not overwrite each other.
-      const updatedSettings = await db.transaction('rw', db.settings, async () => {
-        const stored = await db.settings.get(currentSettings.id!);
-        const updated = { ...(stored ?? currentSettings), ...partial };
-        await db.settings.put(updated);
-        return updated;
-      });
-      set({ settings: updatedSettings });
+      // Publish the value only after it is durable. The server merges, so independent saves do not overwrite each other.
+      set({ settings: await store.settings.patch(partial) });
     } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
-  },
-
-  // Helper: persist active conversation if it has unsaved changes
-  persistActiveIfDirty: async () => {
-    const state = get();
-    const activeConv = state.activeConversation();
-
-    if (activeConv && activeConv.messages.length > 0) {
-      try {
-        await db.conversations.put(activeConv);
-      } catch (error) {
-        console.error('Failed to persist active conversation:', error);
-      }
+      console.error('Failed to save settings:', (error as Error).message);
     }
   },
 

@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test } from './fixtures';
 
 // These tests use the real backend and run engine against tests/fixtures/fake-provider.mjs.
 const fake = `http://127.0.0.1:${Number(process.env.FAKE_PROVIDER_PORT) || 5299}`;
@@ -30,6 +30,10 @@ const upstream = async (page: Page, prompt: string) =>
     await page.request.get(`${fake}/_log?prompt=${encodeURIComponent(prompt)}`)
   ).json();
 const answers = (page: Page) => page.locator('.np-provenance');
+/** The run history record the app saved on the server for this prompt. */
+const savedRun = async (page: Page, text: string) =>
+  ((await (await page.request.get('/v1/run-records')).json()) as { prompt: string; output: string; runId?: string }[])
+    .find((run) => run.prompt === text);
 const prompt = (name: string) =>
   `${name} ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -121,12 +125,7 @@ test('a run the server no longer has is marked interrupted, keeping the saved pa
   // Wait for the periodic save itself, rather than tying the test to stream speed.
   await expect
     .poll(() =>
-      page.evaluate(async (prompt) => {
-        const { db } = await import('/src/lib/db.ts');
-        return (await db.runs.toArray())
-          .find((run) => run.prompt === prompt)
-          ?.output.includes('token-0');
-      }, text),
+      savedRun(page, text).then((run) => run?.output.includes('token-0')),
     )
     .toBe(true);
   // Simulate a backend restart: the run is unknown after the reload.
@@ -152,11 +151,7 @@ test('a run the server no longer has is marked interrupted, keeping the saved pa
   // Nothing was resent automatically.
   expect(await upstream(page, text)).toHaveLength(1);
   // The browser route simulated a lost backend; stop the real fixture run left behind it.
-  const serverRunId = await page.evaluate(async (prompt) => {
-    const { db } = await import('/src/lib/db.ts');
-    return (await db.runs.toArray()).find((run) => run.prompt === prompt)
-      ?.runId;
-  }, text);
+  const serverRunId = (await savedRun(page, text))?.runId;
   if (serverRunId) await page.request.post(`/v1/runs/${serverRunId}/cancel`);
 });
 

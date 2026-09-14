@@ -18,4 +18,12 @@ describe('allowed origins', () => {
     expect(originAllowed('http://nerdplexity.vercel.app', extra)).toBe(false);
     expect(originAllowed('null', extra)).toBe(false);
   });
+
+  it('allows a page served by the server itself, at the address the browser used', () => {
+    const none = allowedOrigins('');
+    expect(originAllowed('https://nerdplexity.up.railway.app', none, 'nerdplexity.up.railway.app')).toBe(true);
+    expect(originAllowed('https://evil.example', none, 'nerdplexity.up.railway.app')).toBe(false);
+    expect(originAllowed('https://nerdplexity.up.railway.app.evil.example', none, 'nerdplexity.up.railway.app')).toBe(false);
+    expect(originAllowed('https://nerdplexity.up.railway.app', none)).toBe(false);
+  });
 });

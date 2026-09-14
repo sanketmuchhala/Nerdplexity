@@ -3,8 +3,8 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "node20",
+    "moduleResolution": "node16",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "noEmit": false,

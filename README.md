@@ -54,7 +54,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 
 ## Quick start
 
-You need Node.js 18 or newer and pnpm 9.0.0. Ollama is optional.
+You need Node.js 22.12 or newer and pnpm 9.0.0. Ollama is optional. No database to install: the server keeps your data in `backend/data` with PGlite, a Postgres that runs inside it.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -68,7 +68,7 @@ Open **http://127.0.0.1:5173/app**, go to **Models**, and pick a model:
 
 No pnpm? Run it through npm: `npm exec --yes --package=pnpm@9.0.0 -- pnpm install --frozen-lockfile`, then the same prefix before `pnpm dev`.
 
-The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both services listen only on this machine. Use `pnpm dev:ollama` to start an installed Ollama, and `WEB_PORT=5273 PORT=5274 pnpm dev` to run a second copy beside another.
+The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both services listen only on this machine. The first time you open the app after upgrading, threads saved in this browser by earlier versions are copied to the server automatically; the browser's copy is left as it was. Use `pnpm dev:ollama` to start an installed Ollama, and `WEB_PORT=5273 PORT=5274 pnpm dev` to run a second copy beside another.
 
 ## Connecting models
 
@@ -109,35 +109,51 @@ Run history records queue time, time to first text, total and model time, report
 
 ## Data and privacy
 
-- **Stored in your browser (IndexedDB):** threads, attachments, comparisons, settings, connections, runs, and feedback. Nothing is sent to a telemetry service.
-- **API keys:** kept for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the local backend in request bodies, never in URLs, and are left out of every export.
-- **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the local backend to that provider; web search sends search queries to Exa; documents never leave.
+- **Saved by the Nerdplexity server:** threads, messages, attachments, documents, run history, comparisons, presets, connections (without keys), and settings. On your computer the server keeps them in `backend/data` (PGlite; change it with `NERDPLEXITY_DATA_DIR`). A hosted server keeps them in Postgres, under each person's account. Nothing is sent to a telemetry service.
+- **API keys never reach the database.** They stay in your browser: for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the backend in request bodies for each request, never in URLs, and are left out of every export and every saved record.
+- **Accounts (hosted only):** email and password. The session token is kept in the browser and sent as a bearer header. A server on your own computer needs no sign-in.
+- **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the backend to that provider; web search sends search queries to Exa; documents are only ever read by models on this machine.
 
-Do not commit keys or personal conversation exports.
+Do not commit keys, `backend/data`, or personal conversation exports.
 
 ## Deploying
 
-Nerdplexity is built to run on your own computer. You can also put it online, for example the web app on **Vercel** and the server on **Render** or **Railway**.
+Nerdplexity is built to run on your own computer. You can also put it online: the server and its database on **Railway**, and optionally the web app on **Vercel**.
 
-**Web app on Vercel.** In the Vercel project, set **Root Directory** to `frontend`. [`frontend/vercel.json`](frontend/vercel.json) then builds only the web app as a static site. Set `VITE_API_URL` to your server's address (for example `https://nerdplexity-api.onrender.com`) and redeploy. Until then, the site shows a notice that no server is connected; if the server is up but does not list your site in `ALLOWED_ORIGINS`, the notice says so.
+**Server and database on Railway.** [`railway.json`](railway.json) holds the build and start commands and the health check.
 
-**Server on Render or Railway.** Create a web service (a long-running process, not serverless: runs stream from memory) with:
+1. Create a Railway project and add **Postgres** from the **pgvector** template (ready for the memory features planned next).
+2. Add a service from this GitHub repository. Leave the Root Directory at `/`.
+3. In the service's **Variables**, set:
 
-| Setting | Value |
+| Variable | Value |
 | --- | --- |
-| Build command | `pnpm install --frozen-lockfile && pnpm build` |
-| Start command | `pnpm start` |
-| `NERDPLEXITY_HOSTED` | `1`: listen on all interfaces, refuse local and private-network model addresses, and turn off Ollama model management |
-| `ALLOWED_ORIGINS` | Your web app's address, for example `https://nerdplexity.vercel.app` (comma-separated, exact) |
-| `PORT` | Set by the platform |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Railway fills it in from the Postgres service) |
+| `NERDPLEXITY_HOSTED` | `1`: accounts required; local and private-network model addresses refused; Ollama model management off |
+| `BETTER_AUTH_SECRET` | A random value of at least 32 characters: `openssl rand -base64 32`. The server will not start without it. |
+| `BETTER_AUTH_URL` | The service's public address, for example `https://nerdplexity-production.up.railway.app` |
+| `ALLOWED_ORIGINS` | Your web app's address if it runs elsewhere, for example `https://nerdplexity.vercel.app` (comma-separated, exact) |
+| `NERDPLEXITY_SIGNUPS` | Leave unset: only the first account can be created (yours). `open` lets anyone sign up; `closed` allows none. |
 
-The server also serves the web app itself, so a Render or Railway service alone is a complete deployment.
+4. Under **Settings → Networking**, generate a domain, then open it and create your account. The server also serves the web app, so this address alone is a complete deployment. Tables are created automatically on start.
+
+**Copy your local data to Railway (optional).** Stop the local server, copy the Postgres service's `DATABASE_PUBLIC_URL`, then run:
+
+```sh
+COPY_TO_DATABASE_URL='postgresql://...' pnpm --filter @app/server db:copy -- --as you@example.com
+```
+
+It copies everything from `backend/data` into your hosted account and skips anything already there, so it is safe to run twice. Without an email provider, the owner resets a password with `DATABASE_URL='postgresql://...' NEW_PASSWORD='...' pnpm --filter @app/server user:password -- --email you@example.com`.
+
+**Web app on Vercel (optional).** Set **Root Directory** to `frontend`; [`frontend/vercel.json`](frontend/vercel.json) builds only the web app as a static site. Set `VITE_API_URL` to your Railway address, add the Vercel address to `ALLOWED_ORIGINS` on Railway, and redeploy both. If the server is unreachable, or does not list the site in `ALLOWED_ORIGINS`, the site says so.
+
+Render and other hosts work the same way: a long-running Node service (not serverless: runs stream from memory), `pnpm install --frozen-lockfile && pnpm build`, `pnpm start`, and the variables above.
 
 Before you deploy, know that:
 
 - **Keys and messages pass through your server.** They still go only to the providers you choose, and are never logged or stored on the server.
-- **Models on your computer are unavailable from a hosted server.** Ollama and LM Studio need the local setup.
-- **Anyone who knows the server's address can send it requests with their own keys.** `ALLOWED_ORIGINS` stops other websites from using it in a browser, not direct requests.
+- **Models on your computer are unavailable from a hosted server.** Ollama and LM Studio need the local setup, and document tools need a model on this machine.
+- **Only signed-in accounts can use a hosted server.** Chat, model lists, and saved data all require a session; sign-in attempts are rate-limited.
 
 ## Development
 
@@ -149,18 +165,20 @@ Before you deploy, know that:
 | `pnpm build` then `pnpm start` | Build, then serve the production build on port 5174 |
 | `pnpm -r test` | Unit tests (Vitest) for the server and web app |
 | `pnpm test` | Browser tests (Playwright) |
-| `pnpm test:split` | End-to-end test of the deployed shape: the web app on its own origin calling a separate backend |
+| `pnpm test:split` | End-to-end tests of the deployed shape: the web app on its own origin calling a separate backend, locally and hosted with accounts |
+| `pnpm --filter @app/server db:generate` | Generate a database migration after changing `backend/src/db/schema.ts` |
 | `pnpm lint` | Source policy check |
 
-Browser tests start their own backend, web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.
+Browser tests start their own backend (with an in-memory database, and a separate user per test), web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Backend tests use in-memory PGlite; set `TEST_DATABASE_URL` to run them against a Postgres server, as CI does. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.
 
 To refresh the README screenshots, run `pnpm dev` and then `node scripts/capture-readme.mjs`.
 
 New to the server or planning harness work? Start with the [beginner-friendly backend guide](backend/docs/README.md). It documents the architecture, run lifecycle and replay protocol, provider adapters, model discovery, tools, complete HTTP API, security boundaries, and development workflow with editable Mermaid diagrams.
 
 ```text
-frontend/         React + Vite web app (Zustand, Dexie)  -> @app/web
-backend/          Express server: run engine, provider adapters, tools  -> @app/server
+frontend/         React + Vite web app (Zustand)  -> @app/web
+backend/          Express server: run engine, provider adapters, tools, accounts, data API  -> @app/server
+backend/drizzle   Database migrations (Drizzle), applied on start
 shared/           TypeScript contracts used by both  -> @app/types
 tests/browser     Playwright tests
 logo/             Logo kit: SVG and PNG marks, favicon, brand tokens

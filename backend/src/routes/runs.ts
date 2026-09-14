@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
@@ -86,12 +86,17 @@ export function runsRouter(registry: RunRegistry, fetchImpl: FetchFn = fetch): R
     let run: ValidRun;
     try { run = validateRunRequest(req.body); }
     catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
-    const started = registry.start(run.key, run.request.target.execution === 'local', executorFor(run, fetchImpl));
+    const started = registry.start(run.key, run.request.target.execution === 'local', executorFor(run, fetchImpl), req.userId ?? '');
     res.status(started.existing ? 200 : 201).json(started);
   });
 
+  // Another user's run answers exactly like a run the server does not have.
+  const mine = (req: Request) => registry.ownerOf(req.params.id) === (req.userId ?? '');
+  const unknown = (res: Response) => { res.status(404).json({ error: 'This run is no longer available on the server.', code: 'unknown-run' }); };
+
   // NDJSON stream of run envelopes. `after` resumes following the last sequence the client saw.
   router.get('/:id/events', (req, res) => {
+    if (!mine(req)) { unknown(res); return; }
     const after = Number(req.query.after ?? 0);
     if (!Number.isInteger(after) || after < 0) { res.status(400).json({ error: 'after must be a non-negative integer.' }); return; }
     const write = (envelope: RunEnvelope) => {
@@ -112,6 +117,7 @@ export function runsRouter(registry: RunRegistry, fetchImpl: FetchFn = fetch): R
   });
 
   router.post('/:id/cancel', (req, res) => {
+    if (!mine(req)) { unknown(res); return; }
     const state = registry.cancel(req.params.id, 'user');
     if (!state) { res.status(404).json({ error: 'This run is no longer available on the server.', code: 'unknown-run' }); return; }
     res.json({ state });

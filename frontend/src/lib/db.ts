@@ -422,9 +422,26 @@ export async function migrateLegacyData(database: ChatDatabase = db) {
   });
 }
 
+/** Settings for an account with none saved yet. */
+export const defaultSettings = (): AppSettings => ({
+  id: 1,
+  selectedProvider: 'local-ollama',
+  apiKeys: { openai: '', anthropic: '', gemini: '', deepseek: '', 'local-ollama': '' },
+  temperature: 0.7,
+  max_tokens: 2048,
+  web_enabled: false,
+  mode: 'direct',
+  baseURL: DEFAULT_OLLAMA_URL,
+  num_ctx: 8192,
+  localRuntime: 'ollama',
+});
+
 const hasLegacyKeys = (settings?: AppSettings) => Object.values(settings?.apiKeys || {}).some(k => typeof k === 'string' && k.trim());
 
-// Initialize database and run migration
+/**
+ * Open this browser's IndexedDB. Since P10 it holds only remembered API keys and the data from
+ * before the server kept it, which is imported once (importBrowserData.ts).
+ */
 export const initializeDatabase = async () => {
   try {
     await db.open();
@@ -432,27 +449,7 @@ export const initializeDatabase = async () => {
     
     // Ensure we have default settings
     const existingSettings = await db.settings.get(1);
-    if (!existingSettings) {
-      const defaultSettings: AppSettings = {
-        id: 1,
-        selectedProvider: 'local-ollama',
-        apiKeys: {
-          openai: '',
-          anthropic: '',
-          gemini: '',
-          deepseek: '',
-          'local-ollama': ''
-        },
-        temperature: 0.7,
-        max_tokens: 2048,
-        web_enabled: false,
-        mode: 'direct',
-        baseURL: DEFAULT_OLLAMA_URL,
-        num_ctx: 8192,
-        localRuntime: 'ollama'
-      };
-      await db.settings.put(defaultSettings);
-    }
+    if (!existingSettings) await db.settings.put(defaultSettings());
     const settings = await db.settings.get(1);
     if (!settings?.connectionsVersion || hasLegacyKeys(settings)) await migrateLegacyData();
   } catch (error) {

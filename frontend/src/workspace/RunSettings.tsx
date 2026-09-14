@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { liveQuery } from 'dexie';
+import { useCallback, useEffect, useState } from 'react';
 import type { Connection, ModelDescriptor, ModelRef } from '@app/types';
-import { db, type Conversation } from '../lib/db';
+import type { Conversation } from '../lib/db';
+import * as store from '../lib/store';
 import {
   buildContext,
   settingsErrors,
@@ -44,15 +44,11 @@ export function RunSettings({
     connection,
     conversation?.attachments,
   );
-  useEffect(() => {
-    const sub = liveQuery(() => db.presets.orderBy('name').toArray()).subscribe(
-      {
-        next: setPresets,
-        error: () => setError('Could not read saved presets.'),
-      },
-    );
-    return () => sub.unsubscribe();
-  }, []);
+  const refreshPresets = useCallback(
+    () => store.presets.list().then(setPresets, (err: Error) => setError(`Could not read saved presets. ${err.message}`)),
+    [],
+  );
+  useEffect(() => { void refreshPresets(); }, [refreshPresets]);
   const update = <K extends keyof WorkbenchSettings>(
     key: K,
     value: WorkbenchSettings[K],
@@ -77,13 +73,14 @@ export function RunSettings({
         throw new Error('Give this preset a name of 1–80 characters.');
       if (presets.length >= 50)
         throw new Error('Remove a preset before saving another (50 maximum).');
-      await db.presets.add({
+      await store.presets.put({
         id: crypto.randomUUID(),
         name: name.trim(),
         model: selected,
         settings: draft,
         updatedAt: Date.now(),
       });
+      await refreshPresets();
       setName('');
       setNotice(
         'Preset saved. Apply settings below to use these values in this thread.',
@@ -156,8 +153,9 @@ export function RunSettings({
                 className="np-button ghost"
                 onClick={async () => {
                   try {
-                    await db.presets.delete(presetId);
+                    await store.presets.remove(presetId);
                     setPresetId('');
+                    await refreshPresets();
                   } catch {
                     setError('Could not remove the preset.');
                   }

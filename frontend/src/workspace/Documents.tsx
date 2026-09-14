@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { FileText, Plus, Save, Trash2, Upload } from 'lucide-react';
-import { db, WorkspaceDocument } from '../lib/db';
+import type { WorkspaceDocument } from '../lib/db';
+import * as store from '../lib/store';
 
 export function Documents({ documents, refresh }: { documents: WorkspaceDocument[]; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<WorkspaceDocument | null>(null);
@@ -23,18 +24,18 @@ export function Documents({ documents, refresh }: { documents: WorkspaceDocument
     if (!editing.title.trim() || !editing.content.trim()) { setError('Add a title and some content.'); return; }
     if (editing.content.length > 100_000 || others.length >= 20 || others.reduce((sum, doc) => sum + doc.content.length, 0) + editing.content.length > 400_000) { setError('Workspace limit: 20 documents, 100,000 characters per document, 400,000 total.'); return; }
     setSaving(true);
-    try { await db.documents.put({ ...editing, title: editing.title.trim(), updatedAt: Date.now() }); await refresh(); setEditing(null); setNotice('Document saved. Turn on the Documents tool in a thread that uses a model on this machine.'); }
-    catch { setError('Unable to save. Check browser storage.'); }
+    try { await store.documents.put({ ...editing, title: editing.title.trim(), updatedAt: Date.now() }); await refresh(); setEditing(null); setNotice('Document saved. Turn on the Documents tool in a thread that uses a model on this machine.'); }
+    catch (reason) { setError(`Unable to save. ${(reason as Error).message}`); }
     finally { setSaving(false); }
   };
   const remove = async (doc: WorkspaceDocument) => {
     if (!window.confirm(`Delete “${doc.title}” from your workspace?`)) return;
-    try { await db.documents.delete(doc.id); await refresh(); if (editing?.id === doc.id) setEditing(null); }
+    try { await store.documents.remove(doc.id); await refresh(); if (editing?.id === doc.id) setEditing(null); }
     catch { setError('Unable to delete this document.'); }
   };
   return <div className="np-page">
     <div className="np-page-heading"><div><span className="np-eyebrow">YOUR CONTEXT</span><h1>A workspace with memory.</h1><p>Keep the notes, source material, and project context your local models can search.</p></div><button className="np-button primary" onClick={add}><Plus size={15}/>New document</button></div>
-    <div className="np-context-banner"><FileText size={20}/><div><strong>Documents stay in this browser.</strong><p>With the Documents tool on, a model on this machine can search and read them. They are never sent to online models. Each search and read appears with the answer and in Run history.</p></div><span className="np-label">{documents.length} / 20 documents</span></div>
+    <div className="np-context-banner"><FileText size={20}/><div><strong>Documents are saved with your threads on your Nerdplexity server.</strong><p>With the Documents tool on, a model on this machine can search and read them. They are never sent to online models. Each search and read appears with the answer and in Run history.</p></div><span className="np-label">{documents.length} / 20 documents</span></div>
     {error && <p className="np-error" role="alert">{error}</p>}{notice && <p className="np-success" role="status">{notice}</p>}
     {editing ? <section className="np-panel np-editor">
       <label className="np-field"><span>Document title</span><input maxLength={200} value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} placeholder="Project brief"/></label>

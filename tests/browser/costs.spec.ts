@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Page, test } from './fixtures';
 
 type Target = { kind: string; baseURL?: string; apiKey?: string };
 const model = (id: string, extra = {}) => ({ id, displayName: id, capabilities: { tools: null, vision: null }, pricing: 'unknown', source: 'discovered', ...extra });

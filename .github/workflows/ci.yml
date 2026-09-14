@@ -18,7 +18,7 @@ jobs:
           version: 9.0.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -28,3 +28,31 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm test:split
+
+  # The same backend tests against a real Postgres server, as on Railway (the rest use PGlite).
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nerdplexity
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.0.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # One file at a time: every file migrates the same database on start.
+      - run: pnpm --filter @app/server exec vitest run --no-file-parallelism
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nerdplexity

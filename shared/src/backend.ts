@@ -7,6 +7,10 @@ export interface BackendHealth {
   hosted: boolean;
   /** Whether the page that asked may use the API; false means its origin is not in ALLOWED_ORIGINS. */
   originAllowed: boolean;
+  /** Accounts are on: data requests need a signed-in user (hosted servers). */
+  authRequired: boolean;
+  /** New accounts can be created (NERDPLEXITY_SIGNUPS, or no account exists yet). */
+  signupsOpen: boolean;
   features: {
     /** Install and remove Ollama models (local servers only). */
     ollamaManagement: boolean;
