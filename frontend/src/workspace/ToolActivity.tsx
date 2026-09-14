@@ -69,7 +69,7 @@ const SOURCE_NOTE: Record<Status, (tool: ToolTrace) => string> = {
 export function ToolActivity({ tools }: { tools: ToolTrace[] }) {
   if (!tools.length) return null;
   return (
-    <div className="np-inline-tools" aria-label="Tool activity">
+    <div aria-label="Tool activity">
       {tools.map((tool, index) => {
         const status: Status = tool.status ?? 'completed';
         const Icon = icon(tool.name, status);

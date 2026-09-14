@@ -6,18 +6,16 @@ import ModelLogo, { formatModelName } from '../workspace/ModelLogo';
 
 interface Props {
   message: Omit<StoredMessage, 'createdAt'> & { timestamp: number; metadata?: { webSearchResults?: WebSearchResult[]; reasoning?: string } };
-  /** Skip the entrance animation when the message replaces text already on screen. */
   animate?: boolean;
-  /** The model that wrote an assistant answer, when known; its logo and name head the answer. */
   model?: { id: string; displayName?: string; provider: string };
-  /** The answer is still arriving: show a caret after the text. */
   streaming?: boolean;
+  children?: React.ReactNode;
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
 const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 
-export function Message({ message, animate = true, model, streaming = false }: Props) {
+export function Message({ message, animate = true, model, streaming = false, children }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -68,8 +66,8 @@ export function Message({ message, animate = true, model, streaming = false }: P
           </span>
         </div>
 
-        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning is present. */}
-        {(streaming || reasoning) && (
+        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning or children are present. */}
+        {(streaming || reasoning || children) && (
           <section
             className={`np-reasoning ${streaming ? 'live' : 'complete'}`}
             role="region"
@@ -81,8 +79,8 @@ export function Message({ message, animate = true, model, streaming = false }: P
               aria-expanded={showReasoning}
               aria-controls={`reasoning-${message.id}`}
               onClick={() => setShowReasoning(value => !value)}
-              disabled={!reasoning}
-              style={{ cursor: reasoning ? 'pointer' : 'default' }}
+              disabled={!reasoning && !children}
+              style={{ cursor: (reasoning || children) ? 'pointer' : 'default' }}
             >
               {streaming ? (
                 <div className="np-inline-orb">
@@ -111,9 +109,10 @@ export function Message({ message, animate = true, model, streaming = false }: P
               {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
             </button>
             
-            {showReasoning && reasoning && (
+            {showReasoning && (reasoning || children) && (
               <div id={`reasoning-${message.id}`} className="np-reasoning-body">
-                {formatContent(reasoning)}
+                {children}
+                {reasoning && formatContent(reasoning)}
               </div>
             )}
           </section>

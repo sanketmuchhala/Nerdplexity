@@ -256,14 +256,14 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-tool-detail pre, .np-inline-tools pre { background: var(--np-sidebar); padding: 15px; font-size: 10px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; color: var(--np-text); }
 .np-inline-tools { max-width: 680px; margin: 10px auto; padding: 0 16px; }
 .np-tool summary > strong { font-weight: 600; white-space: nowrap; }
-.np-inline-tools .np-tool summary .np-tool-summary { margin-left: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.np-inline-tools .np-tool summary .np-tool-meta { margin-left: auto; white-space: nowrap; }
+.np-tool summary .np-tool-summary { margin-left: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.np-tool summary .np-tool-meta { margin-left: auto; white-space: nowrap; }
 .np-tool-error summary, .np-tool-denied summary { color: #e5a299; }
 .np-app[data-theme="light"] .np-tool-error summary, .np-app[data-theme="light"] .np-tool-denied summary { color: #963c29; }
 .np-tool-body { padding: 10px 12px 0; border-top: 1px solid var(--np-line); }
 .np-tool-body > p { font-size: 10px; color: var(--np-muted); margin-bottom: 8px; }
 .np-tool-body > span { display: block; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--np-muted); margin-bottom: 4px; }
-.np-inline-tools .np-tool-body pre { margin: 0 -12px 10px; }
+.np-tool-body pre { margin: 0 -12px 10px; }
 .np-run-detail .np-inline-tools { max-width: none; margin: 10px 0 0; padding: 0; }
 .np-route-steps { margin: 0 0 10px; padding-left: 18px; font-size: 11px; line-height: 1.5; }
 .np-route-steps li { margin-bottom: 8px; overflow-wrap: anywhere; }
@@ -649,9 +649,9 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-orb-node {
   position: absolute;
   border-radius: 50%;
-  opacity: 0.9;
+  opacity: 0.6;
   mix-blend-mode: screen;
-  animation: orbOrbit 6s infinite cubic-bezier(0.4, 0, 0.2, 1) alternate;
+  animation: orbOrbit 3s infinite cubic-bezier(0.4, 0, 0.2, 1) alternate;
 }
 
 .np-orb-node.color-magenta {
