@@ -10,12 +10,14 @@ interface Props {
   animate?: boolean;
   /** The model that wrote an assistant answer, when known; its logo and name head the answer. */
   model?: { id: string; displayName?: string; provider: string };
+  /** The answer is still arriving: show a caret after the text. */
+  streaming?: boolean;
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
 const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 
-export function Message({ message, animate = true, model }: Props) {
+export function Message({ message, animate = true, model, streaming = false }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -85,7 +87,7 @@ export function Message({ message, animate = true, model }: Props) {
         )}
 
         {/* Content */}
-        <div className="text-[15px] leading-[1.75]" style={{ color: 'var(--t1)' }}>
+        <div className={`text-[15px] leading-[1.75] ${streaming ? 'np-streaming' : ''}`} style={{ color: 'var(--t1)' }}>
           {/* Show model output exactly as received. */}
           {formatContent(message.content)}
         </div>
