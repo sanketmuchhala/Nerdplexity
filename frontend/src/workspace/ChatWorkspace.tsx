@@ -40,6 +40,7 @@ import {
   type WorkbenchTool,
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
+import { DocumentsPanel } from './DocumentsPanel';
 import { hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
@@ -94,6 +95,7 @@ export function ChatWorkspace({
   const [input, setInput] = useState('');
   const [showControls, setShowControls] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
   const [edit, setEdit] = useState<{
     messageId: string;
     content: string;
@@ -184,26 +186,24 @@ export function ChatWorkspace({
     void run.send(prompt, documents);
   };
   /** Tools are a per-thread setting, so presets save them and they stay visible until turned off. */
-  const toggleTool = async (tool: WorkbenchTool) => {
-    const turningOn = !enabledTools.includes(tool);
-    if (turningOn && tool === 'documents') {
-      if (!local) {
-        setActionError('Document tools run only on models on this machine, so documents are never sent online. Choose a local model to use them.');
-        return;
-      }
-      if (!documents.length) { onDocuments(); return; }
-    }
-    if (turningOn && tool === 'web' && !hasSearchKey()) { onConnections(); return; }
+  const setTool = async (tool: WorkbenchTool, on: boolean) => {
     try {
       if (!conversation) await newConversation();
       const current = useChat.getState().activeConversation();
       if (!current) throw new Error('Unable to create a thread.');
       const now = workbenchSettings(current, settings);
-      await setWorkbench(current.id, { ...now, tools: turningOn ? [...now.tools, tool] : now.tools.filter((t) => t !== tool) });
+      await setWorkbench(current.id, { ...now, tools: on ? [...new Set([...now.tools, tool])] : now.tools.filter((t) => t !== tool) });
       setActionError('');
     } catch (error) {
       setActionError((error as Error).message);
     }
+  };
+  const toggleTool = async (tool: WorkbenchTool) => {
+    // Documents open their panel: the documents are shown even when this model cannot use them.
+    if (tool === 'documents') { setShowDocs(true); return; }
+    const turningOn = !enabledTools.includes(tool);
+    if (turningOn && tool === 'web' && !hasSearchKey()) { onConnections(); return; }
+    await setTool(tool, turningOn);
   };
   const branch = async (
     messageId: string,
@@ -319,6 +319,19 @@ export function ChatWorkspace({
             </span>
           )}
         </div>
+      )}
+      {showDocs && (
+        <DocumentsPanel
+          documents={documents}
+          enabled={documentsOn}
+          modelChosen={!!model && !!connection}
+          local={local}
+          toolsSupported={descriptor?.capabilities.tools !== false}
+          onToggle={(on) => void setTool('documents', on)}
+          onManage={() => { setShowDocs(false); onDocuments(); }}
+          onChooseModel={() => { setShowDocs(false); setShowPicker(true); }}
+          onClose={() => setShowDocs(false)}
+        />
       )}
       {showPicker && (
         <ModelPicker
@@ -454,15 +467,13 @@ export function ChatWorkspace({
                 <button
                   key={title}
                   onClick={() => {
-                    if (
-                      title === 'Work with my notes' &&
-                      (!documents.length || !local)
-                    ) {
-                      onDocuments();
-                      return;
+                    if (title === 'Work with my notes') {
+                      if (!documents.length || !local || !model) {
+                        setShowDocs(true);
+                        return;
+                      }
+                      if (!documentsOn) void setTool('documents', true);
                     }
-                    if (title === 'Work with my notes' && !documentsOn)
-                      void toggleTool('documents');
                     setInput(text);
                     textarea.current?.focus();
                   }}
@@ -606,6 +617,7 @@ export function ChatWorkspace({
                     : undefined,
                 }}
                 model={ref && model ? answerModel({ connectionId: ref.connectionId, modelId: model }) : undefined}
+                streaming={run.running}
               />
             )}
             {ownRun && run.running && (
@@ -826,7 +838,7 @@ export function ChatWorkspace({
               />
               {([
                 ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
-                ['documents', Workflow, 'Documents', 'Lets a model on this machine search and read your Workspace documents'],
+                ['documents', Workflow, 'Documents', 'Open your Workspace documents and choose whether this thread may search them'],
                 ['web', Globe, 'Web', 'Lets the model search the web with Exa using your key; queries are sent to Exa'],
               ] as const).map(([tool, Icon, name, hint]) => (
                 <button
@@ -835,8 +847,8 @@ export function ChatWorkspace({
                   className={`np-mode ${enabledTools.includes(tool) ? 'selected' : ''}`}
                   aria-pressed={enabledTools.includes(tool)}
                   aria-label={`${name} tool`}
-                  disabled={run.running || descriptor?.capabilities.tools === false}
-                  title={descriptor?.capabilities.tools === false ? 'This model does not support tools' : hint}
+                  disabled={run.running || (tool !== 'documents' && descriptor?.capabilities.tools === false)}
+                  title={tool !== 'documents' && descriptor?.capabilities.tools === false ? 'This model does not support tools' : hint}
                   onClick={() => void toggleTool(tool)}
                 >
                   <Icon size={13} />

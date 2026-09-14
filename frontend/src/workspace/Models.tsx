@@ -911,7 +911,7 @@ export function Models({
           )}
 
           <div className="np-model-list">
-            {entries.map(({ connection, model, local }) => {
+            {entries.map(({ connection, model, local }, index) => {
               const key = modelKey(connection.id, model.id);
               const isActive =
                 active?.connectionId === connection.id &&
@@ -931,6 +931,7 @@ export function Models({
                 <article
                   className={`np-model-row ${isActive ? 'active' : ''}`}
                   key={key}
+                  style={{ ['--i' as string]: index }}
                 >
                   <ModelLogo
                     modelId={model.id}
@@ -1026,14 +1027,17 @@ export function Models({
               );
             })}
           </div>
-          {totalModels === 0 && (
+          {totalModels === 0 && anyLoading && (
+            <div className="np-model-list" aria-label="Checking your connections" role="status">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div className="np-skeleton-row" key={i} aria-hidden><i /><i /><i /></div>
+              ))}
+            </div>
+          )}
+          {totalModels === 0 && !anyLoading && (
             <div className="np-empty-panel">
               <HardDrive size={26} />
-              <h3>
-                {anyLoading
-                  ? 'Checking your connections…'
-                  : 'Your models will appear here.'}
-              </h3>
+              <h3>Your models will appear here.</h3>
               <p>
                 Start Ollama or LM Studio, or add a provider with your API key.
                 Then refresh.

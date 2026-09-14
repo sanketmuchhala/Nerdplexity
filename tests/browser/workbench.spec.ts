@@ -433,7 +433,13 @@ test('document tools search, then read, local workspace documents in a multi-ste
   await page.getByRole('button', { name: 'Save document' }).click();
   await expect(page.getByRole('status')).toContainText('Document saved');
   await setup(page, 'tool-model');
+  // Documents opens its panel: the documents, and the switch that lets this thread use them.
   await page.getByRole('button', { name: 'Documents tool' }).click();
+  const panel = page.getByRole('dialog', { name: 'Documents' });
+  await expect(panel.getByText('Launch notes')).toBeVisible();
+  await panel.getByRole('switch', { name: 'Use documents in this thread' }).click();
+  await expect(panel.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Documents tool' })).toHaveAttribute('aria-pressed', 'true');
   const text = unique('Check my notes');
   await send(page, text, 1);
@@ -488,4 +494,19 @@ test('web search uses the Exa key from Connections, shows safe sources, and keep
   await page.locator('.np-run-list').getByRole('button', { name: new RegExp(text) }).first().click();
   await page.getByText('Input and settings sent', { exact: true }).click();
   await expect(page.locator('.np-run-detail')).not.toContainText(key);
+});
+
+test('Documents opens the documents, not the model picker, even before a model is chosen', async ({ page }) => {
+  await page.goto('/app');
+  await page.getByRole('button', { name: 'Documents tool' }).click();
+  const panel = page.getByRole('dialog', { name: 'Documents' });
+  await expect(panel).toContainText('Your workspace is empty.');
+  await expect(panel.getByRole('switch', { name: 'Use documents in this thread' })).toBeDisabled();
+  await expect(page.getByRole('dialog', { name: 'Choose model' })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Add a document' }).click();
+  await expect(page).toHaveURL(/\/app\/workspace$/);
+  // The notes card on the welcome screen opens the same panel when documents cannot be used yet.
+  await page.goto('/app');
+  await page.getByRole('button', { name: 'Work with my notes' }).click();
+  await expect(page.getByRole('dialog', { name: 'Documents' })).toBeVisible();
 });

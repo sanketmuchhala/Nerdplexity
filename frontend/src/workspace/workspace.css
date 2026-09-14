@@ -441,3 +441,85 @@
 .np-app[data-theme="light"] .np-backend-notice > svg { color: #8a5a12; }
 @media (max-width: 760px) { .np-backend-notice { margin: 10px 16px 0; flex-wrap: wrap; } }
 .np-hosted-hint { margin-top: 12px; }
+
+/* ── Documents panel ─────────────────────────────────────── */
+.np-docs-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 18px; border: 1px solid var(--np-line); border-radius: 12px; background: var(--np-bg); transition: border-color .2s, background-color .2s; }
+.np-docs-switch.on { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .05); }
+.np-docs-switch strong { display: block; font-size: 13px; font-weight: 600; }
+.np-docs-switch span { display: block; margin-top: 3px; font-size: 11px; color: var(--np-muted); line-height: 1.6; }
+.np-switch { position: relative; flex-shrink: 0; width: 42px; height: 24px; border-radius: 999px; border: 1px solid var(--np-line); background: var(--np-raised); transition: background-color .2s, border-color .2s; }
+.np-switch i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--np-muted); transition: transform .22s cubic-bezier(.3, 1.4, .5, 1), background-color .2s; }
+.np-switch[aria-checked="true"] { background: var(--np-accent); border-color: var(--np-accent); }
+.np-switch[aria-checked="true"] i { transform: translateX(18px); background: var(--np-on-accent); }
+.np-docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.np-docs-list li { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--np-line); border-radius: 10px; animation: np-rise .32s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(min(var(--i, 0), 10) * 35ms); }
+.np-docs-list li > svg { flex-shrink: 0; color: var(--np-accent); }
+.np-docs-list li div { min-width: 0; }
+.np-docs-list strong { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-docs-list span { display: block; font-size: 10px; color: var(--np-muted); margin-top: 2px; }
+.np-docs-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 34px 16px; border: 1px dashed var(--np-line); border-radius: 12px; color: var(--np-muted); text-align: center; font-size: 12px; line-height: 1.7; }
+.np-docs-empty svg { color: var(--np-accent); }
+
+/* ── Motion ──────────────────────────────────────────────────
+   Short, transform/opacity only, and switched off by the reduced-motion rule. */
+@keyframes np-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes np-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes np-dialog-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes np-sheet-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes np-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes np-pop { 0% { transform: scale(1); } 45% { transform: scale(1.28); } 100% { transform: scale(1); } }
+@keyframes np-blink { 50% { opacity: 0; } }
+@keyframes np-ring { 0% { box-shadow: 0 0 0 0 rgba(var(--np-accent-rgb), .45); } 70%, 100% { box-shadow: 0 0 0 9px rgba(var(--np-accent-rgb), 0); } }
+@keyframes np-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+/* Dialogs rise in; the side sheet slides from the right. */
+.np-dialog[open] { animation: np-dialog-in .24s cubic-bezier(.16, 1, .3, 1); }
+.np-dialog.sheet[open] { animation: np-sheet-in .3s cubic-bezier(.16, 1, .3, 1); }
+.np-dialog[open]::backdrop { animation: np-fade .2s ease; }
+
+/* Welcome screen: pieces arrive in sequence. */
+.np-welcome > * { animation: np-rise .5s cubic-bezier(.16, 1, .3, 1) both; }
+.np-welcome > :nth-child(2) { animation-delay: 60ms; }
+.np-welcome > :nth-child(3) { animation-delay: 110ms; }
+.np-welcome > :nth-child(4) { animation-delay: 160ms; }
+.np-welcome > :nth-child(5) { animation-delay: 210ms; }
+.np-welcome > :nth-child(6) { animation-delay: 260ms; }
+.np-suggestions button { transition: transform .18s ease, border-color .18s ease, background-color .18s ease; }
+.np-suggestions button:hover { transform: translateY(-2px); border-color: rgba(var(--np-accent-rgb), .45); }
+.np-suggestions button:hover svg:last-child { transform: translateX(3px); }
+.np-suggestions button svg:last-child { transition: transform .18s ease; }
+
+/* Model catalog: rows fade up in a short stagger; the logo lifts on hover. */
+.np-model-row { animation: np-rise .34s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(min(var(--i, 0), 14) * 22ms); }
+.np-model-row .np-logo-avatar, .np-model-row .np-logo-container { transition: transform .2s ease; }
+.np-model-row:hover .np-logo-avatar, .np-model-row:hover .np-logo-container { transform: scale(1.08); }
+.np-skeleton-row { display: flex; align-items: center; gap: 16px; min-height: 60px; padding: 10px 16px; border-bottom: 1px solid var(--np-line); }
+.np-skeleton-row:last-child { border-bottom: none; }
+.np-skeleton-row i { display: block; border-radius: 6px; background: linear-gradient(90deg, var(--np-raised) 0%, rgba(var(--np-contrast-rgb), .09) 50%, var(--np-raised) 100%); background-size: 200% 100%; animation: np-shimmer 1.4s ease-in-out infinite; }
+.np-skeleton-row i:first-child { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; }
+.np-skeleton-row i:nth-child(2) { height: 12px; width: 38%; }
+.np-skeleton-row i:nth-child(3) { height: 12px; width: 14%; margin-left: auto; }
+
+/* Buttons respond to presses; tool toggles pop when switched on. */
+.np-app .np-button, .np-app .np-mode, .np-app .np-send, .np-app .np-icon-button { transition: transform .12s ease, background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
+.np-app .np-button:active:not(:disabled), .np-app .np-mode:active:not(:disabled), .np-app .np-send:active:not(:disabled), .np-app .np-icon-button:active:not(:disabled) { transform: scale(.96); }
+.np-mode[aria-pressed="true"] svg { animation: np-pop .28s ease; }
+.np-send.stop { animation: np-ring 1.6s ease-out infinite; }
+
+/* Streaming answers show a caret at the end of the text. */
+.np-streaming > div > :last-child::after { content: ''; display: inline-block; width: .5em; height: 1.05em; margin-left: 3px; vertical-align: -.15em; border-radius: 2px; background: var(--np-accent); animation: np-blink 1s steps(1) infinite; }
+
+/* Tool calls, notices, threads, and panels enter smoothly. */
+.np-tool { animation: np-rise .3s cubic-bezier(.16, 1, .3, 1) both; }
+.np-tool[open] .np-tool-body { animation: np-drop .22s ease both; }
+.np-tool-running summary { background: linear-gradient(90deg, transparent 0%, rgba(var(--np-accent-rgb), .08) 50%, transparent 100%); background-size: 200% 100%; animation: np-shimmer 1.6s ease-in-out infinite; }
+.np-backend-notice, .np-action-notice, .np-error { animation: np-drop .28s ease both; }
+.np-history-row { animation: np-rise .28s ease both; }
+.np-attachment, .np-conn-row, .np-panel { animation: np-rise .32s cubic-bezier(.16, 1, .3, 1) both; }
+
+/* Theme changes fade rather than snap on the main surfaces. */
+.np-app, .np-sidebar, .np-main, .np-topbar, .np-model-list, .np-dialog { transition: background-color .3s ease, border-color .3s ease, color .3s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .np-dialog[open], .np-dialog[open]::backdrop { animation: none !important; }
+}
