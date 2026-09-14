@@ -96,14 +96,15 @@ flowchart TB
 
 ### OpenAI-style
 
-OpenAI, DeepSeek, OpenRouter, Groq, and custom compatible servers use `POST {baseURL}/chat/completions` with `stream: true`. The parser:
+OpenAI, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, and custom compatible servers use `POST {baseURL}/chat/completions` with `stream: true`. The parser:
 
 - reads `data:` SSE records and recognizes `[DONE]`;
 - accepts a finish reason as completion when a compatible server omits `[DONE]`;
 - accumulates fragmented tool call names/arguments by call index;
 - reads reasoning from `reasoning_content` or `reasoning` when present;
 - reads standard usage and Groq's observed `x_groq.usage` shape;
-- uses `max_completion_tokens` for OpenAI and Groq, `max_tokens` elsewhere.
+- uses `max_completion_tokens` for OpenAI and Groq, `max_tokens` elsewhere;
+- sends `stream_options: { include_usage: true }` except to Mistral, whose API does not list it; a server that rejects `stream_options` or `temperature` by name before generating gets the request once more without it (at most two such resends).
 
 ### Ollama
 
@@ -203,6 +204,10 @@ flowchart TD
     OAList --> Descriptors
 ```
 
+### Routers
+
+OpenRouter's `openrouter/free` is an ordinary model on the OpenRouter connection that asks OpenRouter to pick a free model; the adapter reports the model it picked as a `model` event. Nerdplexity's own [Free Router](free-router.md) is different: the server picks among free models on every connection. The Free Router page compares the two.
+
 ### Discovery behavior by provider
 
 | Kind | Extra behavior |
@@ -210,7 +215,9 @@ flowchart TD
 | Ollama | Adds size, parameter/quantization details, loaded state, capabilities, context length, and local host info where reported. `/api/ps` and `/api/show` enrichments are best effort. |
 | OpenAI | Filters known embedding, audio, image, moderation, realtime, search, and non-chat model families. |
 | Groq | Filters inactive and known speech-only models. |
-| Generic compatible | Keeps returned IDs and available context/output metadata; capabilities usually remain unknown. |
+| Generic compatible | Keeps returned IDs and available context/output metadata. Reads per-token `pricing.prompt`/`pricing.completion` when a remote catalog reports them (SambaNova, or OpenRouter entered as a custom endpoint); a local server stays `local`. Reads Mistral-style `capabilities` (`function_calling`, `vision`, `completion_chat`), `max_context_length`, and `archived`, and `architecture.input_modalities` for images. Otherwise capabilities remain unknown. |
+| Cerebras, Mistral, SambaNova | Generic compatible discovery at the pinned endpoint. Cerebras lists only IDs; Mistral reports capabilities and context; SambaNova reports context, output limit, and prices. |
+| Hugging Face | One entry per model with its live providers: largest context, tools if any provider supports them, images from input modalities, and the cheapest live provider's price. A provider marked `is_free` becomes its own `model:provider` entry priced $0, because the default route picks the fastest provider, not the free one. |
 | Gemini | Keeps models supporting `generateContent`; maps input/output token limits. |
 | Anthropic | Uses SDK pagination; maps display name, image capability, and token limits when present. |
 | OpenRouter | Maps pricing per million tokens, tools/vision/temperature capability, expiry, and output/context limits; excludes expired/non-text models and ensures `openrouter/free` exists. |

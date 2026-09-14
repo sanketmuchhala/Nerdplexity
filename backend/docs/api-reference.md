@@ -26,6 +26,10 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 | POST | `/v1/runs` | Validate and start one model attempt | Available; private targets refused |
 | GET | `/v1/runs/:id/events` | Replay/follow ordered run events | Available |
 | POST | `/v1/runs/:id/cancel` | Cancel queued/running work | Available |
+| GET | `/v1/bench/suite` | Bench categories, sources, and licenses | Available |
+| POST | `/v1/bench` | Start a Bench job (followed and canceled through `/v1/runs/:id`) | Available; private targets refused |
+| GET | `/v1/bench/results` | Pass counts per model and category, and recent answers | Available |
+| DELETE | `/v1/bench/results` | Delete all results, or one model's (`{ connectionId, model }`) | Available |
 | POST | `/v1/models/ollama/pull` | Pull an Ollama model with progress | Disabled |
 | DELETE | `/v1/models/ollama` | Delete an Ollama model | Disabled |
 
@@ -249,6 +253,37 @@ Starting a run returns before generation finishes. Follow the event endpoint imm
 
 The two keys have different scopes and are not placed in events.
 
+### Free Router example
+
+Instead of `target` and `model`, a run may send `route`: free models across up to 12 connections (200 models), each connection's key sent once. The server chooses the model (`backend/src/runtime/router.ts`).
+
+```json
+{
+  "idempotencyKey": "example_route_12345",
+  "route": {
+    "strategy": "free",
+    "connections": [
+      { "id": "openrouter", "target": { "kind": "openrouter", "apiKey": "<key>" } },
+      { "id": "lmstudio", "target": { "kind": "openai-compatible", "baseURL": "http://127.0.0.1:1234/v1" } }
+    ],
+    "models": [
+      { "connectionId": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free", "capabilities": { "tools": true, "vision": false }, "contextLength": 131072 },
+      { "connectionId": "lmstudio", "model": "qwen2.5-7b-instruct" }
+    ]
+  },
+  "messages": [{ "role": "user", "content": "Explain recursion briefly." }]
+}
+```
+
+Every connection passes the same destination policy as `target`. The web app lists only models it has verified as free (on this machine, catalog $0, or an account marked as having no billing); the server does not re-check prices. With document tools on, only models on this machine are kept. How the router chooses:
+
+1. Classify the latest message (code, math, reasoning, writing, structured output, general) and what it needs (images, tools, estimated tokens).
+2. Leave out models that report no image or tool support, whose context is too small, or that are cooling down after a failure.
+3. Rank by parameter count read from the model ID, task fit (coding or reasoning models), tool support, and this server's recent success rate and latency for the model. `openrouter/free` and `openrouter/auto` go last.
+4. Send to the best model with short rate-limit waits turned off. If it fails with quota, unavailable, transport, timeout, invalid request, context, or auth before any text, reasoning, or tool call, try the next one (at most 4). A refusal is never routed around, and once any output was shown the run stays on that model.
+
+Rate limits put a model (or, for account-wide limits such as OpenRouter's free-model quota and bad keys, every model on that account) on cooldown until the provider's reset. Health is kept in memory per user, provider, address, and key hash.
+
 ## 6. Follow and replay events
 
 ### `GET /v1/runs/:id/events?after=N`
@@ -287,13 +322,38 @@ Errors:
 | `status` | `message` | Visible retry, tool-step, or parameter notice |
 | `delta` | `text` | Answer text to append |
 | `reasoning` | `text` | Provider-exposed reasoning text to append |
-| `quota` | `quota` | Rate-limit snapshot from response headers |
+| `quota` | `quota`, `connectionId` on routed runs | Rate-limit snapshot from response headers |
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
-| `completed` | usage/finishReason/loadMs/timing | Successful terminal event |
+| `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
+| `model` | model, provider | The concrete model answering, reported by OpenRouter's stream (for `openrouter/free`, the model its router picked) |
+| `completed` | usage/finishReason/loadMs/route/timing | Successful terminal event; `route` names the model that answered a routed run |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |
 
 Terminal events are mutually exclusive.
+
+## 6a. Bench
+
+`POST /v1/bench` sends graded questions from `backend/bench/suite.json` (see its README for datasets and licenses) to the chosen models and saves every graded answer for the user.
+
+```json
+{
+  "idempotencyKey": "bench_12345678",
+  "connections": [{ "id": "openrouter", "target": { "kind": "openrouter", "apiKey": "<key>" } }],
+  "models": [{ "connectionId": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free" }],
+  "categories": ["code", "math", "instructions", "tools", "facts"],
+  "perCategory": 3
+}
+```
+
+The response is `{ runId, existing, total }`. The job runs in the same registry as chat runs, so `GET /v1/runs/:id/events` streams it and `POST /v1/runs/:id/cancel` stops it; its time limit is 3 hours instead of 10 minutes. Each graded item arrives as a `bench` event with the saved `result` and `done`/`total`; skipped requests arrive as a `bench` event with `skipped`, plus a `status` explaining why.
+
+- Up to 30 models and 12 connections, 1–20 items per category; only connections a model uses are contacted.
+- Requests to one connection go one at a time, spaced about 10% under the provider's documented free per-minute limit (OpenRouter 20, Groq 30, Gemini 10, Cerebras 5, SambaNova 20, Mistral and Hugging Face 60, others 20; none for models on this machine, which share the local queue). Every item goes to every model before the next item.
+- A rate limit of 60 s or less is waited out once; a longer one skips the model, and an account-wide limit or rejected key skips the connection. Rate limits are never recorded as answers. Other failed requests are saved as `error` (not counted for or against quality), and three in a row skip the model. A refusal is a failed answer.
+- Grading is deterministic: the number on the "Answer:" line (GSM8K), the returned Python literal (CRUXEval; model code is never run), IFEval's strict instruction checks, BFCL's argument matching, and SQuAD's normalized span match.
+
+The Free Router reads `GET /v1/bench/results`' scores for the user at the start of each routed run. For each task kind it pools the matching categories (code; math; math and facts for reasoning; instructions for writing and structured output; facts and instructions for general questions; plus tools when tools are on). With at least 3 graded answers it adds `graded / (graded + 3) × 1.2 × (smoothed pass rate − 0.5)` to the model's score, where the smoothed rate is `(passed + 1) / (graded + 2)`, and explains it in the route reason ("passed 3 of 3 Bench math tests").
 
 ## 7. Cancel a run
 

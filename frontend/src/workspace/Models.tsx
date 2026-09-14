@@ -40,6 +40,7 @@ import { WebSearchSettings } from './WebSearchSettings';
 import ModelLogo, { formatModelName } from './ModelLogo';
 import { WorkbenchDialog } from './WorkbenchDialog';
 import { costStatus } from '../lib/cost';
+import { chooseRouterByDefault } from '../lib/router';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
 import { apiUrl } from '../lib/backend';
@@ -124,6 +125,50 @@ const PRESETS: Preset[] = [
     link: {
       href: 'https://console.groq.com/docs/rate-limits',
       label: 'Groq rate limits',
+    },
+  },
+  {
+    id: 'cerebras',
+    label: 'Cerebras',
+    kind: 'cerebras',
+    name: 'Cerebras',
+    hint: 'Very fast open models. The free tier allows about 5 requests per minute and 1 million tokens per day per model. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://inference-docs.cerebras.ai/support/rate-limits',
+      label: 'Cerebras rate limits',
+    },
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral',
+    kind: 'mistral',
+    name: 'Mistral',
+    hint: "Mistral's own models, with a free plan that needs no card. Rate limits apply; check Mistral's terms for how free-plan prompts may be used. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.",
+    link: {
+      href: 'https://mistral.ai/pricing/',
+      label: 'Mistral plans and terms',
+    },
+  },
+  {
+    id: 'sambanova',
+    label: 'SambaNova',
+    kind: 'sambanova',
+    name: 'SambaNova',
+    hint: 'Fast open models. Without a payment method, the free tier covers a few models at 20 requests per minute and 20 per day. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://docs.sambanova.ai/docs/en/models/rate-limits',
+      label: 'SambaNova rate limits',
+    },
+  },
+  {
+    id: 'huggingface',
+    label: 'Hugging Face',
+    kind: 'huggingface',
+    name: 'Hugging Face',
+    hint: 'One token reaches many hosted providers. Free accounts get small monthly credits ($0.10 at last check); going further requires buying credits. Use a fine-grained token that can call Inference Providers. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    link: {
+      href: 'https://huggingface.co/docs/inference-providers/pricing',
+      label: 'Hugging Face credits',
     },
   },
   {
@@ -303,12 +348,9 @@ function ConnectionForm({
         remember,
         billing,
       });
-      if (kind === 'openrouter' && !initial && checked.models.some(model => model.id === 'openrouter/free') && !useChat.getState().settings?.activeModel) {
-        const defaultModel = { connectionId: connection.id, modelId: 'openrouter/free' };
-        await useChat.getState().saveSettings({ activeModel: defaultModel });
-        const current = useChat.getState().activeConversation();
-        if (current && !current.model && current.messages.length === 0)
-          await useChat.getState().setConversationModel(current.id, defaultModel);
+      // The first connection with a free model makes the Free Router the default, unless a model is already chosen.
+      if (!initial && !useChat.getState().settings?.activeModel && checked.models.some(model => costStatus(connection, model, checked.execution).free)) {
+        await chooseRouterByDefault(useChat.getState());
       }
       onDone();
       void discover(connection.id);

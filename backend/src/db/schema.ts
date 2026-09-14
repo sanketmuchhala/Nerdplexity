@@ -171,4 +171,26 @@ export const settings = pgTable('settings', {
   updatedAt: ms('updated_at').notNull(),
 });
 
+/**
+ * Bench: one graded answer per row. The Free Router ranks each user's models with their own results.
+ * Rows record the connection ID and model, never a key.
+ */
+export const benchResults = pgTable('bench_results', {
+  userId: owner(),
+  id: text('id').notNull(),
+  connectionId: text('connection_id').notNull(),
+  model: text('model').notNull(),
+  itemId: text('item_id').notNull(),
+  category: text('category').notNull(),
+  status: text('status').notNull(),
+  detail: text('detail'),
+  latencyMs: integer('latency_ms'),
+  ttftMs: integer('ttft_ms'),
+  at: ms('at').notNull(),
+}, t => [
+  primaryKey({ columns: [t.userId, t.id] }),
+  index('bench_results_model_idx').on(t.userId, t.connectionId, t.model),
+  index('bench_results_at_idx').on(t.userId, t.at),
+]);
+
 export const authSchema = { user, session, account, verification };

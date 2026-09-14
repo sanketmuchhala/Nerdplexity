@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
-import type { Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, ToolTrace } from '@app/types';
+import type { Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -38,6 +38,9 @@ export interface RunRecord {
   /** Immutable, credential-free request context and configured settings. */
   input?: InputSnapshot;
   notices?: string[];
+  /** Free Router runs: every model the request was sent to, and which one answered. */
+  route?: RouteStep[];
+  routedTo?: RouteOutcome;
   /** Immutable catalog pricing metadata captured before the request. */
   pricing?: {
     execution: ExecutionLocation;
@@ -95,6 +98,8 @@ export interface Message {
     reasoning?: string;
     /** Tool calls made while producing this answer, kept with it in the transcript. */
     tools?: ToolTrace[];
+    /** How the Free Router chose the model; provenance names the model that answered. */
+    route?: { steps: RouteStep[]; task?: TaskKind };
   };
   /** Which model produced an assistant message. Absent on legacy messages: unknown. */
   provenance?: ModelRef;
@@ -350,7 +355,7 @@ export const migrateFromLocalStorage = async () => {
 /** Providers that had per-provider key fields before connections existed. */
 export const LEGACY_HOSTED_PROVIDERS = ['openai', 'anthropic', 'gemini', 'deepseek'] as const;
 /** Connection kinds that always need an API key. */
-export const KEYED_KINDS: readonly ConnectionKind[] = [...LEGACY_HOSTED_PROVIDERS, 'openrouter', 'groq'];
+export const KEYED_KINDS: readonly ConnectionKind[] = [...LEGACY_HOSTED_PROVIDERS, 'openrouter', 'groq', 'cerebras', 'mistral', 'sambanova', 'huggingface'];
 export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   ollama: 'Ollama',
   'openai-compatible': 'OpenAI compatible',
@@ -360,6 +365,10 @@ export const PROVIDER_LABELS: Record<ConnectionKind, string> = {
   deepseek: 'DeepSeek',
   openrouter: 'OpenRouter',
   groq: 'Groq',
+  cerebras: 'Cerebras',
+  mistral: 'Mistral',
+  sambanova: 'SambaNova',
+  huggingface: 'Hugging Face',
 };
 export const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
 export const DEFAULT_COMPATIBLE_URL = 'http://127.0.0.1:1234/v1';
@@ -373,8 +382,8 @@ export const legacyConnectionId = (provider: string, runtime?: RuntimeKind) =>
 export const legacyProvider = (kind: ConnectionKind): Provider =>
   kind === 'ollama' || kind === 'openai-compatible' ? 'local-ollama'
   // Legacy screens predate these providers; the label is informational only.
-  : kind === 'openrouter' || kind === 'groq' ? 'openai'
-  : kind;
+  : (LEGACY_HOSTED_PROVIDERS as readonly string[]).includes(kind) ? kind as Provider
+  : 'openai';
 
 /**
  * Convert per-provider settings into connections. Idempotent: adds only missing

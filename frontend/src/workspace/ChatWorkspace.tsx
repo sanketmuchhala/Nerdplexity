@@ -25,7 +25,11 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
+import { isRouter, ROUTER_NAME } from '../lib/router';
+import { RouteActivity } from './RouteActivity';
+import { RouterMark } from './RouterMark';
 import useConnections, {
+  currentRouterPool,
   isLocal,
   latestResult,
   requiresKey,
@@ -87,6 +91,8 @@ export function ChatWorkspace({
       ? { connectionId: conversation.connectionId, modelId: conversation.model }
       : undefined
     : settings?.activeModel;
+  const routed = isRouter(ref);
+  const pool = routed ? currentRouterPool(connections, catalog) : undefined;
   const connection = connections.find((c) => c.id === ref?.connectionId);
   const model = ref?.modelId;
   const local = !!connection && isLocal(connection);
@@ -121,11 +127,6 @@ export function ChatWorkspace({
       provider: owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '',
     };
   };
-  const liveModel = (() => {
-    if (!ref || !model) return undefined;
-    const listed = answerModel({ connectionId: ref.connectionId, modelId: run.selectedModel || model });
-    return listed ? { ...listed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) } : undefined;
-  })();
   const enabledTools = configured.tools;
   const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
@@ -156,7 +157,7 @@ export function ChatWorkspace({
           conversation?.id,
         )
       : null;
-  const ready = !!model && !!connection && !needsKey && !blockedReason;
+  const ready = !!model && (routed ? !!pool?.route : !!connection && !needsKey) && !blockedReason;
   const allowCharges = async () => {
     if (!conversation) await newConversation();
     const current = useChat.getState().activeConversation();
@@ -165,6 +166,14 @@ export function ChatWorkspace({
   const nameOf = (connectionId: string) =>
     connections.find((c) => c.id === connectionId)?.name ??
     'removed connection';
+  // The live answer shows the model being asked: the Free Router's current attempt, or the chosen
+  // model, replaced by the concrete model when a provider's own router (openrouter/free) reports it.
+  const asking = [...run.route].reverse().find((step) => step.status === 'trying');
+  const liveRef = routed
+    ? asking && { connectionId: asking.connectionId, modelId: asking.model }
+    : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
+  const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
+  const liveModel = liveListed && { ...liveListed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) };
   useEffect(() => {
     setInput(branchDraft.current ?? '');
     branchDraft.current = null;
@@ -252,10 +261,12 @@ export function ChatWorkspace({
           disabled={run.running}
           onClick={() => setShowPicker(true)}
         >
-          <span className="np-model-dot" />
-          <span>{model || 'Choose a model'}</span>
+          {routed ? <RouterMark size={16} /> : <span className="np-model-dot" />}
+          <span>{routed ? ROUTER_NAME : model || 'Choose a model'}</span>
           <span className="np-model-source">
-            {connection?.name ?? (model ? 'Connection removed' : '')}
+            {routed
+              ? `${pool?.models ?? 0} free model${pool?.models === 1 ? '' : 's'}`
+              : connection?.name ?? (model ? 'Connection removed' : '')}
           </span>
           <ArrowRight size={13} />
         </button>
@@ -493,6 +504,8 @@ export function ChatWorkspace({
               <button className="np-connect-prompt" onClick={onModels}>
                 {needsKey
                   ? `Add your ${connection?.name} API key to get started`
+                  : routed
+                    ? 'The Free Router needs a free model: connect OpenRouter or a local runtime'
                   : model && !connection
                     ? 'This thread’s connection was removed. Choose a model'
                     : 'Choose a model to get started'}
@@ -504,6 +517,9 @@ export function ChatWorkspace({
           <div className="np-thread">
             {messages.map((message, index) => (
               <Fragment key={message.id}>
+                {message.role === 'assistant' && message.metadata?.route && (
+                  <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />
+                )}
                 {message.role === 'assistant' && message.metadata?.tools && (
                   <ToolActivity tools={message.metadata.tools} />
                 )}
@@ -523,6 +539,7 @@ export function ChatWorkspace({
                       {[
                         message.provenance &&
                           `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
+                        message.metadata?.route && `via ${ROUTER_NAME}`,
                         message.runStatus &&
                           RUN_STATUS_LABEL[message.runStatus],
                         (message.finishReason === 'length' ||
@@ -609,6 +626,7 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
+            {ownRun && !saved && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
             {ownRun && !saved && <ToolActivity tools={run.tools} />}
             {ownRun && !saved && (run.partial || run.reasoning) && (
               <Message
@@ -905,7 +923,9 @@ export function ChatWorkspace({
                 ]
                   .filter(Boolean)
                   .join(', ')}`,
-              !connection
+              routed
+                ? `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
+                : !connection
                 ? 'Choose a model in Models.'
                 : local
                   ? enabledTools.includes('web') ? 'The model runs on this machine.' : 'Requests stay on this machine.'

@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { Check, Search, Star } from 'lucide-react';
 import type { ModelDescriptor, ModelRef } from '@app/types';
 import useConnections, {
+  currentRouterPool,
   isLocal,
   latestResult,
   modelKey,
 } from '../state/connections';
+import { isRouter, ROUTER_NAME, ROUTER_REF } from '../lib/router';
+import { RouterMark } from './RouterMark';
 import useChat from '../state/chatStore';
 import { WorkbenchDialog } from './WorkbenchDialog';
 
@@ -23,6 +26,9 @@ export function ModelPicker({
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const favorites = settings?.favoriteModels ?? [];
+  const pool = currentRouterPool(connections, catalog);
+  const showRouter = `${ROUTER_NAME} free auto best`.toLowerCase().includes(query.toLowerCase().trim());
+  const routerActive = isRouter(selected);
   const entries = connections
     .filter((c) => c.enabled)
     .flatMap((connection) => {
@@ -86,6 +92,26 @@ export function ModelPicker({
         </p>
       )}
       <div className="np-picker-list">
+        {showRouter && (
+          <div className={`np-picker-row np-picker-router ${routerActive ? 'active' : ''}`}>
+            <button
+              className="np-picker-choice"
+              aria-label={`Use the ${ROUTER_NAME}`}
+              aria-pressed={routerActive}
+              onClick={() => void choose(ROUTER_REF)}
+            >
+              <span>
+                <strong><RouterMark size={18} /> {ROUTER_NAME}</strong>
+                <small>
+                  {pool.models
+                    ? `Picks the best of ${pool.models} free model${pool.models === 1 ? '' : 's'} on ${pool.connections} connection${pool.connections === 1 ? '' : 's'} for each message, and tries the next when one is busy`
+                    : 'No free models yet: connect OpenRouter with a free key, or a model on this machine'}
+                </small>
+              </span>
+              {routerActive && <Check size={17} />}
+            </button>
+          </div>
+        )}
         {entries.map(({ connection, model }) => {
           const key = modelKey(connection.id, model.id);
           const active =
@@ -137,7 +163,7 @@ export function ModelPicker({
             </div>
           );
         })}
-        {!entries.length && (
+        {!entries.length && !showRouter && (
           <div className="np-empty-panel">
             <h3>No matching models</h3>
             <p>

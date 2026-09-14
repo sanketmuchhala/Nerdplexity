@@ -24,7 +24,9 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 ## Why Nerdplexity
 
 - **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
-- **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, or any OpenAI-compatible server, all in one catalog.
+- **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, or any OpenAI-compatible server, all in one catalog.
+- **Free Router.** Choose it like a model: each message goes to the best free model you have, and to the next one when a model is rate limited.
+- **Bench.** Graded questions from published datasets (code, math, instructions, tool calls, reading) run on your free models, paced for free limits. The Free Router ranks models with your results.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
 - **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
 
@@ -79,6 +81,9 @@ The backend runs on `http://127.0.0.1:5174` (health check at `/health`). Both se
 | OpenAI, Anthropic, Gemini, DeepSeek | Your API key | Pinned to each provider's official endpoint. |
 | OpenRouter | Your API key | Lists $0 models as **Free model** and shows per-token prices. Shared free routes can be rate limited even though usage is $0; `openrouter/free` chooses a compatible free model with capacity. |
 | Groq | Your API key | Free plan limits per model; rate limits are shown. |
+| Cerebras, SambaNova | Your API key | Fast open models with small free tiers (Cerebras about 5 requests per minute; SambaNova 20 per day). |
+| Mistral | Your API key | Mistral's models; a free plan needs no card. |
+| Hugging Face | A fine-grained token | Many hosted providers behind one token, paid from small monthly credits. |
 | Custom endpoint | Address, optional key | Any OpenAI-compatible server. Must use https unless it is on this machine. |
 
 Each connection says whether it is offline, rejected the key, has the wrong address, or lists no models. Listing models does not prove one runs: use **Check** on a model to send one short prompt.
@@ -87,9 +92,17 @@ Each connection says whether it is offline, rejected the key, has the wrong addr
 
 Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), **Free plan** (you marked the account as having no billing), a catalog price, or **Price unknown**. Nerdplexity cannot see your billing settings; the billing choice on a connection is your statement.
 
-With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches models or providers on its own.
+With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model you chose hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches a model you chose on its own.
 
 Provider notes: OpenRouter free models have per-minute and per-day limits, and a negative balance blocks them. On Gemini's free tier, Google may use your prompts to improve its products.
+
+## Free Router and Bench
+
+**Free Router** is Nerdplexity's own router and the default model once you connect a provider with free models (it never replaces a model you picked). It sits at the top of the model picker with the Nerdplexity logo. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
+
+**Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
+
+Full details: [Free Router](backend/docs/free-router.md) and [Bench](backend/docs/bench.md).
 
 ## Tools
 
@@ -167,6 +180,7 @@ Before you deploy, know that:
 | `pnpm test` | Browser tests (Playwright) |
 | `pnpm test:split` | End-to-end tests of the deployed shape: the web app on its own origin calling a separate backend, locally and hosted with accounts |
 | `pnpm --filter @app/server db:generate` | Generate a database migration after changing `backend/src/db/schema.ts` |
+| `pnpm --filter @app/server bench:sample` | Rebuild the Bench questions from their datasets (`backend/bench/`) |
 | `pnpm lint` | Source policy check |
 
 Browser tests start their own backend (with an in-memory database, and a separate user per test), web app, and a fake OpenAI-compatible provider (`tests/fixtures/fake-provider.mjs`), so no keys or models are needed. Backend tests use in-memory PGlite; set `TEST_DATABASE_URL` to run them against a Postgres server, as CI does. Install Chromium once with `pnpm exec playwright install chromium`, or use an installed Chrome with `PLAYWRIGHT_CHANNEL=chrome pnpm test`. Tests never reuse servers already running unless you set `PW_REUSE=1`.

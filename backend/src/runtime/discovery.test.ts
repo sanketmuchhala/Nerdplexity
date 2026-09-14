@@ -183,6 +183,53 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
     ]);
   });
 
+  it('reads per-token prices a compatible catalog reports (SambaNova), so paid and $0 models are known', async () => {
+    const { fn, calls } = fakeFetch({ '/v1/models': () => json({ data: [
+      { id: 'Meta-Llama-3.3-70B-Instruct', context_length: 131072, max_completion_tokens: 3072, pricing: { prompt: '0.00000060', completion: '0.00000120' } },
+      { id: 'free-model', pricing: { prompt: '0', completion: '0' } },
+      { id: 'no-price' },
+    ] }) });
+    expect(models(await discover({ kind: 'sambanova', apiKey: 'sn-key' }, fn))).toEqual([
+      expect.objectContaining({ id: 'free-model', pricing: 'zero-price' }),
+      expect.objectContaining({ id: 'Meta-Llama-3.3-70B-Instruct', contextLength: 131072, maxOutputTokens: 3072, pricing: 'paid', price: { input: 0.6, output: 1.2 } }),
+      expect.objectContaining({ id: 'no-price', pricing: 'unknown' }),
+    ]);
+    expect(calls[0].url).toBe('https://api.sambanova.ai/v1/models');
+    // A local server's reported price is ignored: it has no hosted fee.
+    const local = fakeFetch({ '/v1/models': () => json({ data: [{ id: 'm', pricing: { prompt: '0.001', completion: '0.001' } }] }) });
+    expect(models(await discover({ kind: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1' }, local.fn))[0].pricing).toBe('local');
+  });
+
+  it('maps Mistral capabilities and hides archived and non-chat models', async () => {
+    const { fn } = fakeFetch({ '/v1/models': () => json({ data: [
+      { id: 'mistral-small-latest', max_context_length: 131072, capabilities: { completion_chat: true, function_calling: true, vision: true } },
+      { id: 'codestral-latest', max_context_length: 256000, capabilities: { completion_chat: true, completion_fim: true, function_calling: false, vision: false } },
+      { id: 'mistral-embed', capabilities: { completion_chat: false } },
+      { id: 'old-model', archived: true, capabilities: { completion_chat: true } },
+    ] }) });
+    expect(models(await discover({ kind: 'mistral', apiKey: 'ms-key' }, fn))).toEqual([
+      expect.objectContaining({ id: 'codestral-latest', contextLength: 256000, capabilities: { tools: false, vision: false }, pricing: 'unknown' }),
+      expect.objectContaining({ id: 'mistral-small-latest', contextLength: 131072, capabilities: { tools: true, vision: true } }),
+    ]);
+  });
+
+  it('lists Hugging Face models by their live providers, with a separate $0 route for a free provider', async () => {
+    const { fn } = fakeFetch({ '/v1/models': () => json({ data: [
+      { id: 'org/chat-70b', architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] }, providers: [
+        { provider: 'fast', status: 'live', context_length: 131072, pricing: { input: 0.9, output: 0.9 }, supports_tools: true, is_free: false },
+        { provider: 'cheap', status: 'live', context_length: 65536, pricing: { input: 0.2, output: 0.4 }, supports_tools: false, is_free: false },
+        { provider: 'gift', status: 'live', context_length: 32768, supports_tools: false, is_free: true },
+        { provider: 'down', status: 'staging', context_length: 1_000_000, is_free: true },
+      ] },
+      { id: 'org/image-gen', architecture: { output_modalities: ['image'] }, providers: [{ provider: 'fast', status: 'live' }] },
+      { id: 'org/offline', providers: [{ provider: 'fast', status: 'error' }] },
+    ] }) });
+    expect(models(await discover({ kind: 'huggingface', apiKey: 'hf_key' }, fn))).toEqual([
+      expect.objectContaining({ id: 'org/chat-70b', contextLength: 131072, capabilities: { tools: true, vision: true }, pricing: 'paid', price: { input: 0.2, output: 0.4 } }),
+      expect.objectContaining({ id: 'org/chat-70b:gift', contextLength: 32768, capabilities: { tools: false, vision: true }, pricing: 'zero-price', details: 'Served by gift' }),
+    ]);
+  });
+
   it('reports policy violations without making a request', async () => {
     const { fn, calls } = fakeFetch({});
     expect(failure(await discover({ kind: 'openai-compatible', baseURL: 'http://api.example.com/v1' }, fn)).category).toBe('invalid-destination');

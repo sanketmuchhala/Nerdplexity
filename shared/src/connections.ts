@@ -2,7 +2,9 @@
 // Type-only: the server imports these with `import type`.
 
 /** Adapter family used to reach a connection. */
-export type ConnectionKind = 'ollama' | 'openai-compatible' | 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'openrouter' | 'groq';
+export type ConnectionKind =
+  | 'ollama' | 'openai-compatible' | 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'openrouter' | 'groq'
+  | 'cerebras' | 'mistral' | 'sambanova' | 'huggingface';
 
 /** Where inference runs, as classified by the server's destination policy. */
 export type ExecutionLocation = 'local' | 'remote';

@@ -37,11 +37,13 @@ export interface ModelRequest {
   maxTokens?: number;
   numCtx?: number;
   tools?: ToolSpec[];
+  /** false: fail at once on a rate limit instead of waiting it out (the router tries another model). */
+  waitOnRateLimit?: boolean;
 }
 
 export type AdapterEvent =
   | { type: 'delta'; text: string }
-  | { type: 'route'; model: string; provider?: string }
+  | { type: 'model'; model: string; provider?: string }
   | { type: 'reasoning'; text: string }
   | { type: 'status'; message: string }
   | { type: 'quota'; quota: RateLimitState }
@@ -58,10 +60,12 @@ const MAX_AUTO_RETRIES = 2;
 const INCOMPLETE = 'The stream ended before the model finished. The partial answer was kept.';
 const LABEL: Record<ResolvedTarget['kind'], string> = {
   ollama: 'Ollama', 'openai-compatible': 'The endpoint', openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', deepseek: 'DeepSeek',
-  openrouter: 'OpenRouter', groq: 'Groq',
+  openrouter: 'OpenRouter', groq: 'Groq', cerebras: 'Cerebras', mistral: 'Mistral', sambanova: 'SambaNova', huggingface: 'Hugging Face',
 };
 // These providers replaced max_tokens with max_completion_tokens.
 const COMPLETION_TOKENS_PARAM = new Set<ResolvedTarget['kind']>(['openai', 'groq']);
+// Mistral's chat API does not list stream_options; it reports usage in the final chunk on its own.
+const NO_STREAM_OPTIONS = new Set<ResolvedTarget['kind']>(['mistral']);
 
 function retryAfter(header: string | null | undefined): number | undefined {
   if (!header) return undefined;
@@ -109,13 +113,15 @@ export function quotaFrom(headers: Headers): RateLimitState | undefined {
   return Object.keys(present).length ? present : undefined;
 }
 
+const FREE_ACCOUNT_LIMIT = /free-models-per-(?:minute|day)|free[- ]models?.*(?:rate|request).*limit/i;
+
 function openRouterQuotaMessage(detail: string): string {
   if (/temporarily rate-limited upstream/i.test(detail)) {
     const provider = /^(.{1,80}?) — /.exec(detail)?.[1];
     const free = /:free\b/i.test(detail);
     return `OpenRouter's shared${provider ? ` ${provider}` : ' upstream provider'} route is temporarily rate limited. ${free ? 'This model is still $0, but shared free capacity is unavailable right now.' : 'The upstream route has no capacity right now.'} Retry shortly${free ? ', choose another free model, or use openrouter/free' : ' or choose another model'}.`;
   }
-  if (/free-models-per-(?:minute|day)|free[- ]models?.*(?:rate|request).*limit/i.test(detail)) {
+  if (FREE_ACCOUNT_LIMIT.test(detail)) {
     return "OpenRouter's free-model request limit is used up. The model is still $0, but free requests have account limits. Retry after the displayed reset or later.";
   }
   return 'OpenRouter is rate limiting this request. Pricing and request capacity are separate. Retry later or choose another model.';
@@ -126,16 +132,18 @@ export function failureFromStatus(status: number, detail: string, target: Resolv
   const label = LABEL[target.kind];
   const text = redact(detail, target.apiKey).replace(/\s+/g, ' ').trim().slice(0, 300);
   const wait = status === 429 || status >= 500 ? retryAfterFrom(headers) : undefined;
-  const make = (category: ProviderError['category'], message: string, retryable: boolean) =>
-    new ProviderFailure({ category, message, retryable, ...(wait !== undefined ? { retryAfterMs: wait } : {}) });
-  if (status === 401 || status === 403) return make('auth', `${label} rejected the API key.`, false);
-  if (status === 402) return make('quota', `${label} reports insufficient credits or a negative balance. This can block free models too.${text ? ` ${text}` : ''}`, false);
+  const make = (category: ProviderError['category'], message: string, retryable: boolean, account = false) =>
+    new ProviderFailure({ category, message, retryable, ...(wait !== undefined ? { retryAfterMs: wait } : {}), ...(account ? { scope: 'account' as const } : {}) });
+  if (status === 401 || status === 403) return make('auth', `${label} rejected the API key.`, false, true);
+  if (status === 402) return make('quota', `${label} reports insufficient credits or a negative balance. This can block free models too.${text ? ` ${text}` : ''}`, false, true);
   if (status === 429) return make(
     'quota',
     target.kind === 'openrouter' || /temporarily rate-limited upstream|free-models-per-(?:minute|day)/i.test(text)
       ? openRouterQuotaMessage(text)
       : `${label} is rate limiting requests or the quota is used up.${text ? ` ${text}` : ''}`,
     true,
+    // OpenRouter's free-model limit counts every free model on the account.
+    FREE_ACCOUNT_LIMIT.test(text),
   );
   if (status === 404) return make('invalid-request', `${label} could not find this model.${text ? ` ${text}` : ''}`, false);
   if (status === 400 || status === 413 || status === 422) {
@@ -194,7 +202,7 @@ const shortRateLimit = (error: unknown) =>
     && error.error.retryAfterMs !== undefined && error.error.retryAfterMs <= MAX_AUTO_WAIT_MS ? error.error.retryAfterMs : undefined;
 
 /** Send a request, waiting out short rate limits a bounded number of times, visibly. */
-async function* sendWithRetry(target: ResolvedTarget, send: () => Promise<Response>, signal: AbortSignal): AsyncGenerator<AdapterEvent, Response> {
+async function* sendWithRetry(target: ResolvedTarget, send: () => Promise<Response>, signal: AbortSignal, waitOnRateLimit = true): AsyncGenerator<AdapterEvent, Response> {
   for (let attempt = 1; ; attempt++) {
     try {
       const response = await send();
@@ -203,7 +211,7 @@ async function* sendWithRetry(target: ResolvedTarget, send: () => Promise<Respon
       return response;
     } catch (error) {
       const wait = shortRateLimit(error);
-      if (wait === undefined || attempt > MAX_AUTO_RETRIES) throw error;
+      if (!waitOnRateLimit || wait === undefined || attempt > MAX_AUTO_RETRIES) throw error;
       yield { type: 'status', message: `${LABEL[target.kind]} is rate limiting requests. Retrying in ${Math.max(1, Math.ceil(wait / 1000))}s (${attempt} of ${MAX_AUTO_RETRIES}).` };
       await sleep(wait, signal);
     }
@@ -213,6 +221,12 @@ async function* sendWithRetry(target: ResolvedTarget, send: () => Promise<Respon
 const rejectsTemperature = (error: unknown) =>
   error instanceof ProviderFailure && error.error.category === 'invalid-request' && /temperature/i.test(error.message);
 const TEMPERATURE_NOTICE = 'This model does not accept a temperature setting; using its default.';
+
+/** An optional parameter a server rejected by name, so the request can be resent without it. */
+function rejectedParameter(error: unknown, body: Record<string, unknown>): 'temperature' | 'stream_options' | undefined {
+  if (!(error instanceof ProviderFailure) || error.error.category !== 'invalid-request') return undefined;
+  return (['temperature', 'stream_options'] as const).find(name => body[name] !== undefined && error.message.toLowerCase().includes(name));
+}
 
 function parseRecord(payload: string, target: ResolvedTarget): any {
   try { return JSON.parse(payload); }
@@ -334,7 +348,8 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   const body: Record<string, unknown> = {
     model: req.model,
     messages: target.kind === 'openrouter' ? alternatingOpenAIMessages(req.messages) : req.messages.map(openAIMessage),
-    stream: true, stream_options: { include_usage: true },
+    stream: true,
+    ...(NO_STREAM_OPTIONS.has(target.kind) ? {} : { stream_options: { include_usage: true } }),
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -343,13 +358,15 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   const url = `${target.baseURL}/chat/completions`;
   const send = () => post(fetchImpl, url, target, body, signal);
   let response: Response;
-  try { response = yield* sendWithRetry(target, send, signal); }
-  catch (error) {
-    if (!rejectsTemperature(error) || body.temperature === undefined) throw error;
-    // A validation rejection happens before generation, so resending cannot duplicate output or billing.
-    yield { type: 'status', message: TEMPERATURE_NOTICE };
-    delete body.temperature;
-    response = yield* sendWithRetry(target, send, signal);
+  for (let resends = 0; ; resends++) {
+    try { response = yield* sendWithRetry(target, send, signal, req.waitOnRateLimit); break; }
+    catch (error) {
+      // A validation rejection happens before generation, so resending cannot duplicate output or billing.
+      const parameter = resends < 2 ? rejectedParameter(error, body) : undefined;
+      if (!parameter) throw error;
+      if (parameter === 'temperature') yield { type: 'status', message: TEMPERATURE_NOTICE };
+      delete body[parameter];
+    }
   }
   let usage: Usage | undefined;
   let finishReason: string | undefined;
@@ -367,7 +384,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     const routedModel = data.model;
     if (target.kind === 'openrouter' && !routeReported && typeof routedModel === 'string' && routedModel) {
       routeReported = true;
-      yield { type: 'route', model: routedModel, ...(typeof data.provider === 'string' ? { provider: data.provider } : {}) };
+      yield { type: 'model', model: routedModel, ...(typeof data.provider === 'string' ? { provider: data.provider } : {}) };
     }
     // Groq has reported streaming usage under x_groq.
     const reasoning = reasoningText(choice?.delta);
@@ -393,7 +410,7 @@ async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: 
     model: req.model, messages: req.messages.map(ollamaMessage), stream: true,
     options: { num_predict: req.maxTokens ?? DEFAULT_MAX_TOKENS, num_ctx: req.numCtx ?? 8192, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
     ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
-  }, signal), signal);
+  }, signal), signal, req.waitOnRateLimit);
   // Ollama sends each tool call whole, with arguments as an object.
   const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
@@ -469,7 +486,7 @@ async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: 
   };
   // alt=sse selects the event-stream format; the key stays in the x-goog-api-key header.
   const url = `${target.baseURL}/models/${encodeURIComponent(req.model)}:streamGenerateContent?alt=sse`;
-  const response = yield* sendWithRetry(target, () => post(fetchImpl, url, target, body, signal), signal);
+  const response = yield* sendWithRetry(target, () => post(fetchImpl, url, target, body, signal), signal, req.waitOnRateLimit);
   let usage: Usage | undefined;
   let finishReason: string | undefined;
   const calls = toolCallAccumulator();
@@ -588,7 +605,7 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
         delete params.temperature;
         continue;
       }
-      const wait = streamed ? undefined : shortRateLimit(failure);
+      const wait = streamed || req.waitOnRateLimit === false ? undefined : shortRateLimit(failure);
       if (wait !== undefined && rateLimitRetries < MAX_AUTO_RETRIES) {
         rateLimitRetries++;
         yield { type: 'status', message: `Anthropic is rate limiting requests. Retrying in ${Math.max(1, Math.ceil(wait / 1000))}s (${rateLimitRetries} of ${MAX_AUTO_RETRIES}).` };

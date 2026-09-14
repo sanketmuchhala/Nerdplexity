@@ -2,11 +2,19 @@
 
 The single list of work that is not done, deferred, or waiting on a decision. The progress log in [implementation-plan.md](implementation-plan.md) stays the history of each phase; this file is the current to-do list. When an item is finished, move it to **Resolved** with the date and commit.
 
-Last reviewed: 2026-09-14 (after P10, database and accounts).
+Last reviewed: 2026-09-14 (P11, Free Router).
 
 ## In progress
 
-- **P11, memory (next).** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Decided 2026-09-14: database first (P10), memory next.
+- **P11, Free Router and Bench** (2026-09-14, branch `claude/free-router`). Router, providers, and Bench done; see the progress log. Next in this track:
+  - **Feedback and run history in ranking.** Bench results rank models now; explicit helpful/unhelpful feedback and routed-run outcomes are not used yet.
+  - **Router health is in memory** and restarts empty with the server; persist it or derive it from run records.
+  - **Bench jobs stop if the page is closed** for a minute (the run engine's no-client rule), and a reload does not reattach to a running job. Results saved so far are kept.
+  - **The same model on several providers** (e.g. Llama 3.3 70B on Groq and Cerebras) is treated as separate models; grouping them would share Bench results and give more fallbacks (idea from the research).
+  - **Reusing answers to repeated prompts** to save free quota (the research's semantic caching) is not built.
+  - **Bench covers five categories.** Long-context, image input, and multi-turn tool use are not measured.
+- **Default model** (2026-09-14, owner direction): the Free Router, not `openrouter/free`, whenever no model is chosen and it has a free model; shown with the Nerdplexity logo. Existing choices, including an earlier automatic `openrouter/free` default, are kept.
+- **P12, memory.** A profile and remembered facts per user, retrieved into context, with embeddings in pgvector (the Railway Postgres template already includes it). Moved after the Free Router on 2026-09-14 at the owner's direction.
 
 ## Owner decisions
 
@@ -24,7 +32,7 @@ Last reviewed: 2026-09-14 (after P10, database and accounts).
 
 - **Approval flow for tools with external effects.** No current tool changes anything outside the app, so `POST /v1/runs/:id/tool-decisions` and the `waiting_for_tool` state are not built. Required before adding any such tool.
 - **Compare runs without tools.** Tool-enabled comparisons are not supported.
-- **Custom endpoint pointed at OpenRouter.** Found in the live check: a custom compatible connection to `openrouter.ai` works, but loses the OpenRouter preset's $0 pricing (every model shows "Price unknown", Free only blocks them, and free alternatives are not offered). P8.1 recognizes OpenRouter's nested upstream/account 429 shapes on this route, but the app should still suggest the preset when a custom URL matches a hosted provider.
+- **Custom endpoint pointed at OpenRouter.** Prices now come through (any remote catalog reporting `pricing.prompt`/`completion` is read, 2026-09-14), but `openrouter/free` is still only special-cased on the preset. The app should suggest the preset when a custom URL matches a hosted provider.
 - **Citation style varies by model.** The live Nemotron answer cited with its own markers (`【1†L1-L4】`) instead of URLs despite the instruction; the tool activity still lists the real links. Consider numbering results and rendering citations.
 - **Live tool-calling checks per provider.** Checked live only through OpenRouter's OpenAI-style route (Nemotron 3 Super free: calculator and web search). Native Anthropic, Gemini, Ollama, and other OpenAI-compatible servers are verified with fixtures only. Ollama streams tool calls only in versions that support it; models whose catalog reports tool support as unknown fail with a provider error if they reject tools.
 
@@ -49,6 +57,10 @@ Last reviewed: 2026-09-14 (after P10, database and accounts).
 - **OpenRouter credit status** (`/api/v1/key`) is not shown.
 - **Anthropic rate-limit headers** (`anthropic-ratelimit-*`) are not parsed.
 - **Runs are lost if the backend restarts.** This is by design; the client reports them as interrupted.
+
+- **Providers not added** (2026-09-14): GitHub Models retired on 2026-07-30; Cloudflare Workers AI needs an account ID in its URL, so it works as a custom endpoint (`https://api.cloudflare.com/client/v4/accounts/<id>/ai/v1`) rather than a preset; NVIDIA NIM and Cohere's trial are finite or non-commercial. Together, DeepInfra, and Fireworks are credit trials only.
+- **Day-level rate-limit headers** (SambaNova's `x-ratelimit-*-requests-day`) are not parsed; only per-minute headers are.
+- **New providers checked with fixtures only.** Cerebras, Mistral, SambaNova, and Hugging Face follow their current API docs but have not been run with live keys; whether Cerebras accepts `stream_options` is unconfirmed (the adapter resends without it if rejected).
 
 ### Deployment
 
