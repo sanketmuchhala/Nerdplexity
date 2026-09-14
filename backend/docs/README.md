@@ -10,11 +10,13 @@ Read these pages in order if the backend is new to you:
 
 1. [Architecture](architecture.md) — processes, modules, dependencies, and deployment shapes.
 2. [Run harness](run-harness.md) — the core execution lifecycle, streaming, replay, queueing, and cancellation.
-3. [Providers and model discovery](providers-and-models.md) — how one internal request becomes Ollama, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, or Groq traffic.
-4. [Tools](tools.md) — the bounded agent loop, calculator, document retrieval, and Exa web search.
-5. [API reference](api-reference.md) — every active HTTP endpoint and event payload.
-6. [Security and data](security-and-data.md) — keys, documents, origin checks, destination restrictions, and known limits.
-7. [Development and testing](development.md) — setup, debugging paths, tests, and safe extension points.
+3. [Providers and model discovery](providers-and-models.md) — how one internal request becomes Ollama, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, or Hugging Face traffic.
+4. [Free Router](free-router.md) — how Nerdplexity picks the best free model for each message, falls back when one is busy, and how it differs from OpenRouter's `openrouter/free`.
+5. [Bench](bench.md) — graded questions from published datasets, how answers are checked, how jobs are paced, and how results rank models.
+6. [Tools](tools.md) — the bounded agent loop, calculator, document retrieval, and Exa web search.
+7. [API reference](api-reference.md) — every active HTTP endpoint and event payload.
+8. [Security and data](security-and-data.md) — keys, documents, origin checks, destination restrictions, and known limits.
+9. [Development and testing](development.md) — setup, debugging paths, tests, and safe extension points.
 
 ## The 30-second mental model
 
@@ -32,7 +34,7 @@ flowchart LR
     ToolLoop -. results .-> Adapter
 ```
 
-The browser sends a model choice explicitly. The backend does not guess a provider from the model name. A run receives a UUID, emits numbered events, and ends exactly once as completed, failed, or canceled.
+The browser sends a model choice explicitly, or chooses the [Free Router](free-router.md), which lets the server pick among free models the browser lists. The backend never guesses a provider from a model name. A run receives a UUID, emits numbered events, and ends exactly once as completed, failed, or canceled.
 
 ## Beginner glossary
 
@@ -52,6 +54,9 @@ The browser sends a model choice explicitly. The backend does not guess a provid
 | **Tool loop** | A bounded conversation in which a model asks the application to run an allowed function and receives the result. |
 | **Idempotency key** | A client-generated key that makes a retried start request return the existing run instead of starting a duplicate. |
 | **Replay** | Sending events the browser missed, beginning after its last sequence number. |
+| **Free Router** | Nerdplexity's own router: one routed run tries up to four free models in ranked order, falling back only before any output. |
+| **Bench** | Graded questions run on your free models; the results rank models for the Free Router. |
+| **Cooldown** | A period after a rate limit or failure during which the router leaves a model (or a whole account) out. |
 
 ## Source map
 
@@ -65,13 +70,21 @@ backend/
     ├── middleware/
     │   ├── origins.ts          # Browser-origin policy
     │   └── errors.ts           # Last-resort safe error responses
+    ├── auth.ts                 # Accounts on a hosted server (Better Auth)
+    ├── db/                     # Drizzle schema and client (PGlite locally, Postgres when DATABASE_URL is set)
+    ├── store/                  # Per-user data access: threads, records, Bench results
+    ├── bench/                  # Bench: suite loading, graders, IFEval checks, job runner
+    ├── scripts/                # db:copy, user:password, bench:sample
     ├── routes/
-    │   ├── runs.ts             # Start, follow, and cancel runs
+    │   ├── runs.ts             # Start (one model or a route), follow, and cancel runs
+    │   ├── bench.ts            # Bench suite, jobs, and results
+    │   ├── data.ts             # Saved threads, documents, run history, settings
     │   └── models.ts           # Ollama pull and delete routes
     ├── queue/
     │   └── localQueue.ts       # One-at-a-time execution for local models
     └── runtime/
         ├── runs.ts             # Run state machine, event buffer, replay
+        ├── router.ts           # Free Router: task profile, ranking, health, fallback
         ├── adapters.ts         # All live streaming provider adapters
         ├── discovery.ts        # Provider-specific model catalog discovery
         ├── destinations.ts     # URL, key, and local/remote policy
@@ -81,10 +94,15 @@ backend/
         ├── streams.ts          # Chunk-safe line decoder
         └── local.ts            # Older non-streaming local compatibility helper
 
+backend/bench/                  # Bench questions (suite.json) and their sources and licenses
+backend/drizzle/                # Database migrations, applied on start
+
 shared/src/
 ├── backend.ts                  # Health response contract
 ├── connections.ts              # Connection and model catalog contracts
-└── runs.ts                     # Run requests, events, errors, tools, timing
+├── data.ts                     # Saved-data contracts
+├── bench.ts                    # Bench requests, results, scores
+└── runs.ts                     # Run requests, routes, events, errors, tools, timing
 ```
 
 Every production backend module has a focused test beside it except `server.ts`, `queue/localQueue.ts`, and the retained `runtime/local.ts` compatibility helper. Higher-level run tests exercise queue integration.
@@ -103,9 +121,9 @@ Use the following order when documentation and code appear to disagree:
 
 The current backend deliberately stays small:
 
-- It does not store conversations, files, presets, or run history in a database. Those live in browser IndexedDB.
-- It keeps active and recently finished run events only in process memory. A backend restart loses them.
-- It has no server accounts, authentication, multi-user ownership, or distributed workers.
+- It stores each user's threads, documents, presets, run history, settings, and Bench results in a database (PGlite on your computer, Postgres when hosted). API keys are never stored on the server; they stay in the browser.
+- It keeps active and recently finished run events, and Free Router health, only in process memory. A backend restart loses them.
+- On a hosted server it requires accounts; on your computer every request belongs to one built-in owner. It has no distributed workers.
 - It can run four read-only tools: calculator, document search, document read, and Exa web search.
 - It cannot execute shell commands, write files, open arbitrary URLs, or use MCP.
 - It serializes local model runs to reduce memory contention. Remote runs execute concurrently.

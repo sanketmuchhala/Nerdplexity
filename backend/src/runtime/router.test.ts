@@ -45,6 +45,7 @@ describe('task profile', () => {
   it('classifies the latest request and what a model must support', () => {
     expect(profileTask(ask('Fix this bug in my Python function'), []).kind).toBe('code');
     expect(profileTask(ask('Solve 3x + 4 = 19'), []).kind).toBe('math');
+    expect(profileTask(ask('What is 15% of 80?'), []).kind).toBe('math');
     expect(profileTask(ask('Extract the names as JSON'), []).kind).toBe('extraction');
     expect(profileTask(ask('Write a short email to my landlord'), []).kind).toBe('writing');
     expect(profileTask(ask('Why is the sky blue?'), []).kind).toBe('reasoning');

@@ -45,9 +45,9 @@ flowchart TB
     Shared -. compile-time .-> Routes
 ```
 
-### Why browser persistence and server execution are separate
+### Where data lives
 
-The browser is the user's workspace: it saves threads, documents, credentials according to the selected storage mode, input snapshots, partial output, and finished run history. The server receives only what a request needs. This avoids creating a server-side user database, but it also means a new browser profile does not share data and the server cannot restore a run after restarting.
+Since P10 the server saves each user's threads, documents, run history, presets, settings, and [Bench](bench.md) results in a database: PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set (Railway). The browser keeps only API keys (session memory, or this device when remembered) and sends them with each request. The diagram above shows the earlier browser-only storage; the execution path is unchanged.
 
 ## 2. Startup and middleware order
 
@@ -100,6 +100,15 @@ flowchart TD
 
     RunRoutes --> Destinations[runtime/destinations.ts]
     RunRoutes --> Registry[runtime/runs.ts]
+    RunRoutes --> Router[runtime/router.ts]
+    Router --> Adapters
+    Router --> ToolLoop
+    App --> BenchRoutes[routes/bench.ts]
+    BenchRoutes --> Registry
+    BenchRoutes --> BenchRunner[bench/runner.ts]
+    BenchRunner --> Adapters
+    BenchRunner --> Graders[bench/grade.ts]
+    Router -. Bench scores .-> Store[store/bench.ts]
     RunRoutes --> Adapters[runtime/adapters.ts]
     RunRoutes --> ToolLoop[runtime/toolLoop.ts]
 
@@ -176,17 +185,19 @@ Hosted mode is a network safety policy, not user authentication. See [Security a
 
 | Data | Owner | Lifetime |
 | --- | --- | --- |
-| Threads and messages | Browser IndexedDB | Durable in that browser profile |
-| Connections | Browser IndexedDB | Durable in that browser profile |
+| Threads and messages | Server database, per user | Durable |
+| Connections (never keys) | Server database, per user | Durable |
 | API keys | Browser session memory or optional device storage | Depends on user choice |
-| Documents and attachments | Browser IndexedDB | Durable in that browser profile |
-| Run input/output/history | Browser IndexedDB | Durable in that browser profile |
-| Active run controller | Backend `RunRegistry` | Until terminal state or process restart |
+| Documents and attachments | Server database, per user | Durable |
+| Run input/output/history | Server database, per user | Durable |
+| Bench results | Server database (`bench_results`), per user | Durable until cleared |
+| Active run controller (chat runs, routed runs, Bench jobs) | Backend `RunRegistry` | Until terminal state or process restart |
 | Ordered event replay buffer | Backend `RunRegistry` | In memory; bounded and temporary |
+| Free Router health (cooldowns, success rates) | Backend `RouterHealth` | In memory; process lifetime |
 | Provider request/key | Active backend call closure | One discovery or run request |
 | Local queue | Backend singleton | Process lifetime |
 
-There is no backend database and no worker process. Horizontal scaling would break reconnect semantics unless run ownership and event storage were externalized or requests were pinned to one process.
+There is no worker process. Horizontal scaling would break reconnect semantics and split router health unless run ownership, event storage, and health were externalized or requests were pinned to one process.
 
 ## 6. Shared contracts
 
