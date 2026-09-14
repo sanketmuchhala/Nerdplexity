@@ -216,7 +216,23 @@ test('reasoning reported by the model is shown separately from the answer', asyn
 }) => {
   await useFakeModel(page, 'reasoning-model');
   await send(page, prompt('reasoning'));
+  const live = page.getByRole('region', { name: 'Thinking live' });
+  await expect(live).toBeVisible();
+  await expect(live).toContainText('Analysis');
+  await expect(page.getByText('Reasoned answer.')).toHaveCount(0);
   await expect(page.getByText('Reasoned answer.')).toBeVisible();
-  await page.getByRole('button', { name: 'Thought process' }).click();
-  await expect(page.getByText('Considering the question.')).toBeVisible();
+  const complete = page.getByRole('region', { name: 'Thought process' });
+  await expect(complete.getByRole('button', { name: /Thought process/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(complete).toContainText('Considering the question.');
+  await expect(complete).toContainText('Checking the conclusion.');
+  await expect(complete.locator('.np-reasoning-body')).toHaveCSS('max-height', 'none');
+  expect(await complete.evaluate(node => {
+    const answer = node.parentElement?.querySelector('.np-answer-content');
+    return !!answer && Boolean(node.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })).toBe(true);
+
+  await complete.getByRole('button', { name: /Thought process/ }).click();
+  await expect(complete.locator('.np-reasoning-body')).toHaveCount(0);
+  await complete.getByRole('button', { name: /Thought process/ }).click();
+  await expect(complete).toContainText('Checking the conclusion.');
 });

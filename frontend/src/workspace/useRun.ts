@@ -93,7 +93,7 @@ export function useRun() {
     try {
       ({ claimed } = await store.runs.finish(final));
       const chat = useChat.getState();
-      if (claimed && record.output) {
+      if (claimed && (record.output || record.reasoning)) {
         const metadata = { ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}) };
         await chat.addMessage('assistant', record.output, Object.keys(metadata).length ? metadata : undefined, record.conversationId, {
           ...(record.connectionId ? { provenance: { connectionId: record.connectionId, modelId: record.model } } : {}),

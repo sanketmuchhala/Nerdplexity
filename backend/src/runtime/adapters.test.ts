@@ -70,6 +70,22 @@ describe('OpenAI-style streaming', () => {
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer sk-compat-secret');
   });
 
+  it('streams OpenRouter structured reasoning text and summaries without exposing encrypted blocks', async () => {
+    const { fn } = fakeFetch(() => stream(sse([
+      { choices: [{ delta: { reasoning_details: [
+        { type: 'reasoning.summary', summary: 'Plan the response' },
+        { type: 'reasoning.text', text: 'Check the facts.' },
+        { type: 'reasoning.encrypted', data: 'opaque-secret' },
+      ] } }] },
+      { choices: [{ delta: { content: 'Done.' }, finish_reason: 'stop' }] },
+    ])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }), fn);
+    expect(result.events.filter(event => event.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: 'Plan the response\n\nCheck the facts.' },
+    ]);
+    expect(result.text).toBe('Done.');
+  });
+
   it('uses max_completion_tokens for OpenAI', async () => {
     const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])));
     await run(request({ kind: 'openai', apiKey: 'sk-openai' }), fn);

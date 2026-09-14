@@ -218,6 +218,19 @@ function parseRecord(payload: string, target: ResolvedTarget): any {
   catch { throw new ProviderFailure({ category: 'transport', message: `${LABEL[target.kind]} sent a malformed stream record.`, retryable: true }); }
 }
 
+/** Plaintext and summarized reasoning returned in OpenRouter's structured reasoning_details stream. */
+function reasoningText(delta: any): string | undefined {
+  const direct = delta?.reasoning_content ?? delta?.reasoning;
+  if (typeof direct === 'string' && direct) return direct;
+  if (!Array.isArray(delta?.reasoning_details)) return undefined;
+  const text = delta.reasoning_details.map((detail: any) => {
+    if (detail?.type === 'reasoning.text' && typeof detail.text === 'string') return detail.text;
+    if (detail?.type === 'reasoning.summary' && typeof detail.summary === 'string') return `${detail.summary}\n\n`;
+    return '';
+  }).join('');
+  return text || undefined;
+}
+
 const normalizeUsage = (prompt: unknown, completion: unknown): Usage | undefined =>
   Number.isFinite(prompt) && Number.isFinite(completion)
     ? { prompt_tokens: prompt as number, completion_tokens: completion as number, total_tokens: (prompt as number) + (completion as number) }
@@ -350,7 +363,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     if (data.error) throw failureFromStatus(Number(data.error.code) || 500, providerMessage(JSON.stringify(data)), target);
     const choice = data.choices?.[0];
     // Groq has reported streaming usage under x_groq.
-    const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning;
+    const reasoning = reasoningText(choice?.delta);
     if (typeof reasoning === 'string' && reasoning) yield { type: 'reasoning', text: reasoning };
     const text = choice?.delta?.content;
     if (typeof text === 'string' && text) yield { type: 'delta', text };

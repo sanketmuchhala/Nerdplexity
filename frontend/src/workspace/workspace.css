@@ -144,6 +144,19 @@
 .np-thread .t-caps { color: var(--np-muted)!important; }
 .np-thread .text-sm { color: var(--np-text); }
 .np-thread pre { max-width: 100%; overflow: auto; }
+.np-reasoning { margin: 0 0 18px; border: 1px solid var(--np-line); border-radius: 12px; background: var(--np-raised); }
+.np-reasoning.live { border-color: rgba(var(--np-accent-rgb), .3); box-shadow: inset 3px 0 0 rgba(var(--np-accent-rgb), .6); }
+.np-reasoning-heading { width: 100%; min-height: 41px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; color: var(--np-muted); font-size: 11px; text-align: left; }
+button.np-reasoning-heading { cursor: pointer; transition: color .15s, background .15s; }
+button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(--np-contrast-rgb), .025); }
+.np-reasoning-heading strong { color: var(--np-text); font-size: 11px; font-weight: 600; }
+.np-reasoning-state { margin-left: 2px; color: var(--np-faint); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; }
+.np-reasoning-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--np-accent); box-shadow: 0 0 0 4px var(--np-accent-dim); animation: np-pulse 1.2s ease infinite; }
+.np-reasoning-body { width: 100%; padding: 13px 15px 15px; border-top: 1px solid var(--np-line); color: var(--np-muted); font-size: 12px; line-height: 1.65; overflow: visible; overflow-wrap: anywhere; white-space: normal; }
+.np-reasoning-body > div { width: 100%; }
+.np-reasoning-body pre { max-width: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-reasoning-caret { display: inline-block; width: 6px; height: 13px; margin: 2px 0 -2px 3px; background: var(--np-accent); animation: thinking .8s ease-in-out infinite; }
+.np-answer-heading { margin: 2px 0 8px; color: var(--np-faint); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 .np-live-status { max-width: 680px; margin: 18px auto; padding: 0 16px; display: flex; align-items: center; gap: 10px; color: var(--np-muted); font-size: 11px; }
 .np-live-dots { display: inline-flex; gap: 3px; }
 .np-live-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--np-accent); animation: np-pulse 1.2s ease infinite; }
@@ -422,6 +435,8 @@
   .np-thread-heading .np-label { font-size: 8px; }
   .np-context-trigger { flex-wrap: wrap; font-size: 9px!important; }
   .np-message-actions { margin-top: 0; }
+  .np-reasoning { margin-bottom: 14px; border-radius: 10px; }
+  .np-reasoning-body { padding: 12px; }
   .np-app .np-composer-area { padding-top: 8px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 }
 
