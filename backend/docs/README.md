@@ -1,5 +1,7 @@
 # Nerdplexity backend documentation
 
+Status: **implemented** · verified against `9d0b33e` plus the everyday-chat v1 changes on 2026-09-14. Files under `docs/plans/` are proposals and are not implemented behavior.
+
 This documentation explains the current Nerdplexity backend from first principles. It is written for someone who can read basic TypeScript but has not worked on a model harness before.
 
 The most important idea is that Nerdplexity is **not an AI model**. It is a harness around models. The harness validates a request, chooses the correct provider protocol, streams model output, optionally runs a small set of tools, records ordered events, and lets the browser reconnect or cancel.
@@ -119,11 +121,12 @@ Use the following order when documentation and code appear to disagree:
 
 ## Current boundaries
 
-The current backend deliberately stays small:
+The current backend deliberately separates durable data from live execution:
 
-- It stores each user's threads, documents, presets, run history, settings, and Bench results in a database (PGlite on your computer, Postgres when hosted). API keys are never stored on the server; they stay in the browser.
-- It keeps active and recently finished run events, and Free Router health, only in process memory. A backend restart loses them.
-- On a hosted server it requires accounts; on your computer every request belongs to one built-in owner. It has no distributed workers.
+- It stores conversations, messages, attachments, documents, run history, connections without keys, presets, comparisons, Bench results, and settings in PGlite locally or Postgres when `DATABASE_URL` is set. API keys are never stored on the server; they stay in the browser.
+- It keeps active and recently finished run events, and Free Router health, only in process memory. A backend restart loses in-flight generation, replay, and router health, but not saved user records.
+- Local mode assigns requests to the built-in local owner. Hosted mode requires Better Auth accounts and scopes every data record and run to the authenticated user.
+- It has no distributed run workers; use one executor process unless shared run ownership/replay is added.
 - It can run four read-only tools: calculator, document search, document read, and Exa web search.
 - It cannot execute shell commands, write files, open arbitrary URLs, or use MCP.
 - It serializes local model runs to reduce memory contention. Remote runs execute concurrently.

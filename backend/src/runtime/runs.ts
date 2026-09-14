@@ -4,7 +4,7 @@ import { enqueueLocal, getLocalQueueStatus } from '../queue/localQueue.js';
 import { ProviderFailure } from './adapters.js';
 
 /** Events an executor may emit. Lifecycle events are emitted by the registry. */
-export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'model' | 'delta' | 'reasoning' | 'quota' | 'tool' | 'route' | 'bench' }>;
+export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'model' | 'delta' | 'reasoning' | 'activity' | 'quota' | 'tool' | 'route' | 'bench' }>;
 
 export interface RunContext {
   signal: AbortSignal;

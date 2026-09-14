@@ -1,5 +1,5 @@
 import { AlertTriangle, Ban, Calculator, FileSearch, FileText, Globe, Loader2, Wrench } from 'lucide-react';
-import type { ToolTrace } from '@app/types';
+import type { ActivityTrace, ToolTrace } from '@app/types';
 
 type Status = NonNullable<ToolTrace['status']>;
 
@@ -66,19 +66,28 @@ const SOURCE_NOTE: Record<Status, (tool: ToolTrace) => string> = {
 };
 
 /** Exact tool calls and results, kept visually separate from model text. */
-export function ToolActivity({ tools }: { tools: ToolTrace[] }) {
-  if (!tools.length) return null;
+export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; activities?: ActivityTrace[] }) {
+  if (!tools.length && !activities.length) return null;
   return (
-    <div className="np-meta-chips" aria-label="Tool activity">
+    <>
+      {activities.map(activity => (
+        <details key={activity.id} className="np-meta-chip np-tool-completed">
+          <summary>
+            <Wrench size={13} aria-hidden />
+            <strong>Prepared tool step</strong>
+            <span className="np-tool-meta">Step {activity.step}</span>
+          </summary>
+          <div className="np-tool-body"><p>{activity.text}</p></div>
+        </details>
+      ))}
       {tools.map((tool, index) => {
         const status: Status = tool.status ?? 'completed';
         const Icon = icon(tool.name, status);
         return (
-          <details key={index} className={`np-meta-chip np-tool-${status}`}>
+          <details key={`${tool.step}-${tool.id ?? index}`} className={`np-meta-chip np-tool-${status}`}>
             <summary>
               <Icon size={13} className={status === 'running' ? 'np-spin' : undefined} aria-hidden />
               <strong>{label(tool.name)}</strong>
-              <span className="np-tool-summary">{summary(tool, status)}</span>
               <span className="np-tool-meta">{tool.step === 0 ? 'Automatic' : `Step ${tool.step}`}{tool.durationMs !== undefined ? ` · ${tool.durationMs} ms` : ''}</span>
             </summary>
             <div className="np-tool-body">
@@ -101,6 +110,6 @@ export function ToolActivity({ tools }: { tools: ToolTrace[] }) {
           </details>
         );
       })}
-    </div>
+    </>
   );
 }

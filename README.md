@@ -189,6 +189,8 @@ To refresh the README screenshots, run `pnpm dev` and then `node scripts/capture
 
 New to the server or planning harness work? Start with the [beginner-friendly backend guide](backend/docs/README.md). It documents the architecture, run lifecycle and replay protocol, provider adapters, model discovery, tools, complete HTTP API, security boundaries, and development workflow with editable Mermaid diagrams.
 
+For the current product-level prompt, context fitting, tool-step activity, and Markdown behavior, see [Assistant behavior](docs/assistant-behavior.md).
+
 ```text
 frontend/         React + Vite web app (Zustand)  -> @app/web
 backend/          Express server: run engine, provider adapters, tools, accounts, data API  -> @app/server

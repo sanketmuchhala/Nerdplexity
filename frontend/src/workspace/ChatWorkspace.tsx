@@ -182,7 +182,7 @@ export function ChatWorkspace({
   useEffect(() => {
     if (sticky.current && scroll.current)
       scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [messages.length, run.partial, run.reasoning, run.tools.length]);
+  }, [messages.length, run.partial, run.reasoning, run.activities.length, run.tools.length]);
   useEffect(() => {
     if (textarea.current) {
       textarea.current.style.height = 'auto';
@@ -517,8 +517,8 @@ export function ChatWorkspace({
                 {message.role === 'assistant' && message.metadata?.route && (
                   <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />
                 )}
-                {message.role === 'assistant' && message.metadata?.tools && (
-                  <ToolActivity tools={message.metadata.tools} />
+                {message.role === 'assistant' && (message.metadata?.tools || message.metadata?.activities) && (
+                  <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />
                 )}
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
@@ -623,9 +623,7 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
-            {ownRun && !saved && run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-            {ownRun && !saved && run.tools?.length > 0 && <ToolActivity tools={run.tools} />}
-            {ownRun && !saved && (run.running || run.partial || run.reasoning) && (
+            {ownRun && !saved && (run.running || run.partial || run.reasoning || run.route?.length > 0 || run.tools?.length > 0 || run.activities?.length > 0) && (
               <Message
                 message={{
                   id: 'stream',
@@ -638,7 +636,11 @@ export function ChatWorkspace({
                 }}
                 model={liveModel}
                 streaming={run.running}
-              />
+                status={run.running ? run.phase : undefined}
+              >
+                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
+                {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
+              </Message>
             )}
             {ownRun && !run.running && run.phase && (
               <div className="np-live-status">{run.phase}</div>

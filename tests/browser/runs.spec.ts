@@ -219,9 +219,11 @@ test('reasoning reported by the model is shown separately from the answer', asyn
   // Reasoning stays folded while it streams; opening it shows the live text.
   const live = page.getByRole('region', { name: 'Thinking live' });
   await expect(live).toBeVisible();
-  await expect(live.getByRole('button', { name: /Thinking live/ })).toHaveAttribute('aria-expanded', 'false');
+  // The drawer heading reads "Thinking..." plus the current status, so it has no fixed name.
+  const liveToggle = live.getByRole('button', { name: /Thinking/ });
+  await expect(liveToggle).toHaveAttribute('aria-expanded', 'false');
   // The streaming bubble animates, so the toggle never holds still long enough for a normal click.
-  await live.getByRole('button', { name: /Thinking live/ }).click({ force: true });
+  await liveToggle.click({ force: true });
   await expect(live).toContainText('Analysis');
   await expect(page.getByText('Reasoned answer.')).toHaveCount(0);
   await expect(page.getByText('Reasoned answer.')).toBeVisible();

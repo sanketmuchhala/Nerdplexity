@@ -115,7 +115,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
     const now = Date.now();
     const comparison: ComparisonRecord = {
       id: uuidv4(), prompt: prompt.trim(), createdAt: now, updatedAt: now, sourceConversationId: activeConversation?.id,
-      input: { messages: context.messages, settings: context.effective, configured, context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown }, documents: [], attachments: (activeConversation?.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })) },
+      input: { messages: context.messages, settings: context.effective, configured, context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown, notices: context.notices }, documents: [], attachments: (activeConversation?.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })) },
       sides: selected.map(choice => ({ connectionId: choice.ref.connectionId, modelId: choice.ref.modelId, status: 'running', output: '' })) as [ComparisonSide, ComparisonSide],
     };
     await persist(comparison); show(comparison); setRecords(items => [structuredClone(comparison), ...items]);

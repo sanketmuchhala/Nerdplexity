@@ -46,7 +46,8 @@ describe('tool loop', () => {
     );
     const result = await collect(fn, ['calculator', 'search_documents']);
     expect(result.error).toBeUndefined();
-    expect(result.text).toBe('Let me compute.\n\nIt is 42, and the notes say ship on Friday.');
+    expect(result.text).toBe('It is 42, and the notes say ship on Friday.');
+    expect(result.events).toContainEqual({ type: 'activity', id: 'preparation_1', step: 1, kind: 'preparation', status: 'completed', text: 'Let me compute.' });
     expect(result.tools.map(t => t.type === 'tool' && [t.id, t.status, t.source, t.step])).toEqual([
       ['call_a', 'running', 'computed', 1], ['call_a', 'completed', 'computed', 1],
       ['call_b', 'running', 'retrieved', 2], ['call_b', 'completed', 'retrieved', 2],

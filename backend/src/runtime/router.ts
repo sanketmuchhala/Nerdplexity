@@ -339,7 +339,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
         for await (const event of events) {
           if (event.type === 'done') return event;
           if (event.type === 'quota') { emit({ ...event, connectionId: candidate.connectionId }); continue; }
-          if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool') answeredAt ??= Date.now();
+          if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'activity' || event.type === 'tool') answeredAt ??= Date.now();
           emit(event);
         }
         throw new Error('The model stream ended without a result.');

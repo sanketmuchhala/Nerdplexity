@@ -13,7 +13,7 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 - API keys belong in JSON bodies, never query strings.
 - Unknown `/v1/*` routes return `404 { "error": "API route not found." }`.
 - Browser requests need an allowed `Origin`; command-line requests without `Origin` are allowed.
-- There is no server authentication or user account boundary.
+- Local mode uses the built-in local owner. Hosted mode requires a Better Auth bearer session and scopes saved data, Bench results, and runs to that user.
 - Examples use placeholders. Never paste real keys into committed files or shell history you plan to share.
 
 ## 2. Endpoint summary
@@ -22,6 +22,11 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 | --- | --- | --- | --- |
 | GET | `/health` | Backend status | Available |
 | GET | `/v1/health` | Same status under the API prefix | Available |
+| Any | `/v1/auth/*` | Better Auth sign-up, sign-in, sign-out, and session routes | Hosted only |
+| GET | `/v1/account` | Current owner/account | Available; auth required when hosted |
+| Various | `/v1/conversations/*`, `/v1/documents/*` | Owner-scoped threads, messages, attachments, and workspace documents | Available |
+| Various | `/v1/run-records/*` | Durable run history and completion claims | Available; owner-scoped |
+| Various | `/v1/connections/*`, `/v1/presets/*`, `/v1/comparisons/*`, `/v1/settings` | Saved workspace records without keys | Available; owner-scoped |
 | POST | `/v1/models/discover` | Validate a target and list models | Available; private targets refused |
 | POST | `/v1/runs` | Validate and start one model attempt | Available; private targets refused |
 | GET | `/v1/runs/:id/events` | Replay/follow ordered run events | Available |
