@@ -145,7 +145,7 @@ COPY_TO_DATABASE_URL='postgresql://...' pnpm --filter @app/server db:copy -- --a
 
 It copies everything from `backend/data` into your hosted account and skips anything already there, so it is safe to run twice. Without an email provider, the owner resets a password with `DATABASE_URL='postgresql://...' NEW_PASSWORD='...' pnpm --filter @app/server user:password -- --email you@example.com`.
 
-**Web app on Vercel (optional).** Set **Root Directory** to `frontend`; [`frontend/vercel.json`](frontend/vercel.json) builds only the web app as a static site. Set `VITE_API_URL` to your Railway address, add the Vercel address to `ALLOWED_ORIGINS` on Railway, and redeploy both. If the server is unreachable, or does not list the site in `ALLOWED_ORIGINS`, the site says so.
+**Web app on Vercel (optional).** Set **Root Directory** to `frontend`; [`frontend/vercel.json`](frontend/vercel.json) builds only the web app as a static site and sets the public `VITE_API_URL` used by this deployment. If you use a different Railway service, update that URL. Add the Vercel address to `ALLOWED_ORIGINS` on Railway, then redeploy both. If the server is unreachable, or does not list the site in `ALLOWED_ORIGINS`, the site says so.
 
 Render and other hosts work the same way: a long-running Node service (not serverless: runs stream from memory), `pnpm install --frozen-lockfile && pnpm build`, `pnpm start`, and the variables above.
 

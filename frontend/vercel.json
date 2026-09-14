@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://nerdplexity-production.up.railway.app"
+    }
+  },
   "installCommand": "cd .. && pnpm install --frozen-lockfile",
   "buildCommand": "cd .. && pnpm --filter @app/web build",
   "outputDirectory": "dist",
