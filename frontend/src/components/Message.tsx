@@ -1,5 +1,5 @@
 import { isValidElement, useState, type ReactNode } from 'react';
-import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
+import { ExternalLink, Brain } from 'lucide-react';
 import Markdown, { type Components, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -149,11 +149,11 @@ export function Message({ message, animate = true, model, streaming = false, sta
  * provider text that reaches dangerouslySetInnerHTML is code-block content after Prism, which
  * escapes it; Message.test.tsx checks that. */
 const markdownComponents: Components = {
-  a: ({ href, children, ...props }) => <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
-  img: ({ alt }) => <span className="np-markdown-image">[Image: {alt || 'unnamed'}]</span>,
+  a: ({ href, children, ...props }: any) => <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+  img: ({ alt }: any) => <span className="np-markdown-image">[Image: {alt || 'unnamed'}]</span>,
   // Wide tables scroll inside their own box instead of widening the page.
-  table: ({ children }) => <div className="np-markdown-table"><table>{children}</table></div>,
-  pre: ({ children }) => {
+  table: ({ children }: any) => <div className="np-markdown-table"><table>{children}</table></div>,
+  pre: ({ children }: any) => {
     if (isValidElement<{ children?: ReactNode; className?: string }>(children)) {
       const language = /language-([^\s]+)/.exec(children.props.className ?? '')?.[1];
       const code = String(children.props.children ?? '').replace(/\n$/, '');

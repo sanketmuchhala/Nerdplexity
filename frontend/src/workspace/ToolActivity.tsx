@@ -23,21 +23,6 @@ function icon(name: string, status: Status) {
 const field = (value: unknown, key: string) => value && typeof value === 'object' && key in value ? (value as Record<string, unknown>)[key] : undefined;
 
 /** One-line summary of what the call did. */
-function summary(tool: ToolTrace, status: Status) {
-  if (status === 'running') return 'Running…';
-  if (status !== 'completed') return tool.error ?? 'Failed';
-  if (tool.name === 'calculator') return `${String(field(tool.input, 'expression'))} = ${String(field(tool.output, 'result'))}`;
-  if (tool.name === 'search_documents') {
-    const count = Array.isArray(tool.output) ? tool.output.length : 0;
-    return `“${String(field(tool.input, 'query'))}” · ${count} ${count === 1 ? 'match' : 'matches'}`;
-  }
-  if (tool.name === 'read_document') return String(field(tool.output, 'title') ?? '');
-  if (tool.name === 'web_search') {
-    const count = webResults(tool).length;
-    return `“${String(field(tool.input, 'query'))}” · ${count} ${count === 1 ? 'result' : 'results'}`;
-  }
-  return '';
-}
 
 const hostname = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
 
