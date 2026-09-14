@@ -643,7 +643,7 @@ export function ChatWorkspace({
                 streaming={run.running}
               />
             )}
-            {ownRun && run.running && (
+            {ownRun && run.running && !run.partial && !run.reasoning && (
               <AILoadingState phase={run.phase} />
             )}
             {ownRun && !run.running && run.phase && (
