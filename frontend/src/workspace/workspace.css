@@ -606,86 +606,88 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-bench-live .np-bench-passed strong { color: var(--np-accent); }
 .np-router-mark { display: inline-block; flex-shrink: 0; border-radius: 30%; vertical-align: -3px; }
 .np-runtime-summary strong .np-router-mark { margin-right: 2px; }
+
+/* Minimal Gemini-style AI Loading Indicator */
 .np-inline-orb {
-  position: relative;
-  width: 24px;
-  height: 24px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #ff2a85, #0066ff, #00e676, #ffab00, #651fff, #ff2a85);
+  animation: np-orb-spin 2s linear infinite, np-orb-pulse 2.5s ease-in-out infinite;
+  filter: blur(1.5px);
+  margin-right: 6px;
+  opacity: 0.8;
+}
+@keyframes np-orb-spin { 
+  100% { transform: rotate(360deg); } 
+}
+@keyframes np-orb-pulse { 
+  0%, 100% { opacity: 0.7; transform: scale(0.85) rotate(0deg); } 
+  50% { opacity: 1; transform: scale(1.15) rotate(180deg); } 
+}
+
+/* Magical Text Streaming Fade-In */
+.np-streaming .np-answer-content {
+  mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+}
+
+/* Minimal Meta Chips / Accordions */
+.np-meta-chips {
+  max-width: 680px;
+  margin: 0 auto 10px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-right: 4px;
+  flex-direction: column;
+  gap: 6px;
 }
-
-.np-inline-orb-inner {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
+.np-meta-chip {
+  background: transparent;
+  border-radius: 8px;
   overflow: hidden;
-  filter: blur(4px);
-  z-index: 1;
 }
-
-.np-inline-orb-glass {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  z-index: 2;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.np-meta-chip summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--np-muted);
+  cursor: pointer;
+  background: rgba(var(--np-accent-rgb), 0.04);
+  border: 1px solid rgba(var(--np-accent-rgb), 0.1);
+  border-radius: 99px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  width: fit-content;
 }
-
-[data-theme='dark'] .np-inline-orb-glass,
-.np-app .np-inline-orb-glass {
-  background: rgba(0, 0, 0, 0.1);
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.np-meta-chip summary:hover {
+  background: rgba(var(--np-accent-rgb), 0.08);
+  color: var(--np-text);
 }
-
-.np-orb-node {
-  position: absolute;
-  border-radius: 50%;
-  opacity: 0.6;
-  mix-blend-mode: screen;
-  animation: orbOrbit 3s infinite cubic-bezier(0.4, 0, 0.2, 1) alternate;
+.np-meta-chip summary > strong {
+  font-weight: 500;
 }
-
-.np-orb-node.color-magenta {
-  width: 14px; height: 14px;
-  background: #ff2a85;
-  top: 5%; left: 10%;
-  animation-delay: 0s;
+.np-meta-chip summary > span.np-tool-meta, 
+.np-meta-chip summary > span.np-reasoning-state {
+  margin-left: 6px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
 }
-
-.np-orb-node.color-blue {
-  width: 16px; height: 16px;
-  background: #0066ff;
-  bottom: -5%; right: 5%;
-  animation-delay: -1.5s;
+.np-meta-chip[open] summary {
+  margin-bottom: 8px;
 }
-
-.np-orb-node.color-green {
-  width: 12px; height: 12px;
-  background: #00e676;
-  top: 15%; right: 10%;
-  animation-delay: -3s;
+.np-meta-chip .np-tool-body {
+  padding: 12px 14px;
+  background: var(--np-raised);
+  border: 1px solid var(--np-line);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--np-text);
 }
-
-.np-orb-node.color-yellow {
-  width: 14px; height: 14px;
-  background: #ffab00;
-  bottom: 10%; left: -5%;
-  animation-delay: -4.5s;
-}
-
-.np-orb-node.color-purple {
-  width: 10px; height: 10px;
-  background: #651fff;
-  top: 40%; left: 40%;
-  transform: translate(-50%, -50%);
-  animation-delay: -6s;
+.np-meta-chip summary::marker,
+.np-meta-chip summary::-webkit-details-marker {
+  display: none;
 }

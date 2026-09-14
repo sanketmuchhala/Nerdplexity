@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink, ChevronDown, ChevronRight, Brain } from 'lucide-react';
+import { ExternalLink, Brain } from 'lucide-react';
 import { CodeBlock } from './ui/CodeBlock';
 import type { Message as StoredMessage, WebSearchResult } from '../lib/db';
 import ModelLogo, { formatModelName } from '../workspace/ModelLogo';
@@ -9,13 +9,12 @@ interface Props {
   animate?: boolean;
   model?: { id: string; displayName?: string; provider: string };
   streaming?: boolean;
-  children?: React.ReactNode;
 }
 
 const COL = 'w-full max-w-[680px] mx-auto';
 const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 
-export function Message({ message, animate = true, model, streaming = false, children }: Props) {
+export function Message({ message, animate = true, model, streaming = false }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
   const [showReasoning, setShowReasoning] = useState(false);
@@ -66,56 +65,37 @@ export function Message({ message, animate = true, model, streaming = false, chi
           </span>
         </div>
 
-        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning or children are present. */}
-        {(streaming || reasoning || children) && (
-          <section
-            className={`np-reasoning ${streaming ? 'live' : 'complete'}`}
-            role="region"
-            aria-label={streaming ? 'Thinking live' : 'Thought process'}
-          >
-            <button
-              type="button"
-              className="np-reasoning-heading"
-              aria-expanded={showReasoning}
-              aria-controls={`reasoning-${message.id}`}
-              onClick={() => setShowReasoning(value => !value)}
-              disabled={!reasoning && !children}
-              style={{ cursor: (reasoning || children) ? 'pointer' : 'default' }}
+        {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning is present. */}
+        {(streaming || reasoning) && (
+          <div className="np-meta-chips" aria-label="Thinking process">
+            <details
+              className={`np-meta-chip np-reasoning-chip ${streaming ? 'live' : 'complete'}`}
+              open={showReasoning}
+              onToggle={(e) => setShowReasoning((e.target as HTMLDetailsElement).open)}
             >
-              {streaming ? (
-                <div className="np-inline-orb">
-                  <div className="np-inline-orb-inner">
-                    <div className="np-orb-node color-magenta"></div>
-                    <div className="np-orb-node color-blue"></div>
-                    <div className="np-orb-node color-green"></div>
-                    <div className="np-orb-node color-yellow"></div>
-                    <div className="np-orb-node color-purple"></div>
-                  </div>
-                  <div className="np-inline-orb-glass"></div>
-                </div>
-              ) : (
-                <Brain size={13} />
-              )}
-              {streaming ? (
-                <>
+              <summary style={{ cursor: reasoning ? 'pointer' : 'default', pointerEvents: reasoning ? 'auto' : 'none' }}>
+                {streaming ? (
+                  <div className="np-inline-orb"></div>
+                ) : (
+                  <Brain size={13} />
+                )}
+                {streaming ? (
                   <strong>Thinking...</strong>
-                </>
-              ) : (
-                <>
-                  <strong>Thought process</strong>
-                  <span className="np-reasoning-state">Complete</span>
-                </>
+                ) : (
+                  <>
+                    <strong>Thought process</strong>
+                    <span className="np-reasoning-state">Complete</span>
+                  </>
+                )}
+              </summary>
+              
+              {reasoning && (
+                <div id={`reasoning-${message.id}`} className="np-tool-body">
+                  {formatContent(reasoning)}
+                </div>
               )}
-              {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
-            </button>
-            
-            {showReasoning && (reasoning || children) && (
-              <div id={`reasoning-${message.id}`} className="np-reasoning-body">
-                {children}
-                {reasoning && formatContent(reasoning)}
-              </div>
-            )}
-          </section>
+            </details>
+          </div>
         )}
 
         {/* Source chips */}

@@ -69,12 +69,12 @@ const SOURCE_NOTE: Record<Status, (tool: ToolTrace) => string> = {
 export function ToolActivity({ tools }: { tools: ToolTrace[] }) {
   if (!tools.length) return null;
   return (
-    <div aria-label="Tool activity">
+    <div className="np-meta-chips" aria-label="Tool activity">
       {tools.map((tool, index) => {
         const status: Status = tool.status ?? 'completed';
         const Icon = icon(tool.name, status);
         return (
-          <details key={`${tool.step}-${tool.id ?? index}`} className={`np-tool np-tool-${status}`}>
+          <details key={index} className={`np-meta-chip np-tool-${status}`}>
             <summary>
               <Icon size={13} className={status === 'running' ? 'np-spin' : undefined} aria-hidden />
               <strong>{label(tool.name)}</strong>

@@ -623,7 +623,9 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
-            {ownRun && !saved && (run.running || run.partial || run.reasoning || run.route?.length > 0 || run.tools?.length > 0) && (
+            {ownRun && !saved && run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
+            {ownRun && !saved && run.tools?.length > 0 && <ToolActivity tools={run.tools} />}
+            {ownRun && !saved && (run.running || run.partial || run.reasoning) && (
               <Message
                 message={{
                   id: 'stream',
@@ -636,10 +638,7 @@ export function ChatWorkspace({
                 }}
                 model={liveModel}
                 streaming={run.running}
-              >
-                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-                {run.tools?.length > 0 && <ToolActivity tools={run.tools} />}
-              </Message>
+              />
             )}
             {ownRun && !run.running && run.phase && (
               <div className="np-live-status">{run.phase}</div>

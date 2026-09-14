@@ -15,16 +15,15 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
   const last = attempts[attempts.length - 1];
   const fallbacks = attempts.filter(attempt => attempt.failure).length;
   return (
-    <div aria-label="Free Router decision">
-      <details className="np-tool np-route">
+    <div className="np-meta-chips" aria-label="Free Router decision">
+      <details className="np-meta-chip np-route">
         <summary>
           <RouterMark size={14} />
           <strong>Free Router</strong>
-          <span className="np-tool-summary">{last.step.model}{task ? ` for ${TASK[task]}` : ''}</span>
           <span className="np-tool-meta">{fallbacks ? `${fallbacks} fallback${fallbacks === 1 ? '' : 's'}` : 'First choice'}</span>
         </summary>
         <div className="np-tool-body">
-          <p>The router sends each message to the best free model that can take it, and tries the next one only when a model fails before answering.</p>
+          <p>The router {task ? `classified this as ${TASK[task]} and ` : ''}sends the message to the best free model that can take it, trying the next one only when a model fails before answering.</p>
           <ol className="np-route-steps">
             {attempts.map(({ step, failure }) => (
               <li key={step.attempt} className={failure ? 'np-route-failed' : undefined}>
