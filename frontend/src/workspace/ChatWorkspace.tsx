@@ -48,7 +48,7 @@ import { autoWebSearch } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
-
+import { AILoadingState } from '../components/ui/AILoadingState';
 const RUN_STATUS_LABEL = {
   canceled: 'Stopped · partial answer',
   failed: 'Failed · partial answer',
@@ -641,14 +641,7 @@ export function ChatWorkspace({
               />
             )}
             {ownRun && run.running && (
-              <div className="np-live-status" role="status">
-                <span className="np-live-dots">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                {run.phase}
-              </div>
+              <AILoadingState phase={run.phase} />
             )}
             {ownRun && !run.running && run.phase && (
               <div className="np-live-status">{run.phase}</div>

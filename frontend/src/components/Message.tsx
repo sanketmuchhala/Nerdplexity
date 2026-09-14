@@ -20,7 +20,7 @@ const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 export function Message({ message, animate = true, model, streaming = false }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
-  const [showReasoning, setShowReasoning] = useState(true);
+  const [showReasoning, setShowReasoning] = useState(false);
 
   if (isSystem) return null;
 
