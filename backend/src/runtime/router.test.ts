@@ -174,6 +174,15 @@ describe('routed execution', () => {
     expect(result?.route).toMatchObject({ connectionId: 'groq', model: 'groq-8b', attempts: 2 });
   });
 
+  it("passes on the concrete model when OpenRouter's own free router answers", async () => {
+    const { fn } = fakeProviders({
+      'openrouter/free': () => stream(sse([{ model: 'vendor/picked-9b:free', provider: 'Vendor', choices: [{ delta: { content: 'Picked.' }, finish_reason: 'stop' }] }])),
+    });
+    const { result, events } = await execute({ candidates: [candidate('openrouter/free')] }, fn);
+    expect(events).toContainEqual({ type: 'model', model: 'vendor/picked-9b:free', provider: 'Vendor' });
+    expect(result?.route?.model).toBe('openrouter/free');
+  });
+
   it('does not route around a refusal', async () => {
     const gemini = resolveTarget({ kind: 'gemini', apiKey: 'gm-test-key' });
     const fn = (async (url: RequestInfo | URL) => String(url).includes('generativelanguage')

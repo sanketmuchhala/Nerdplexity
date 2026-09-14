@@ -70,6 +70,22 @@ describe('OpenAI-style streaming', () => {
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer sk-compat-secret');
   });
 
+  it('streams OpenRouter structured reasoning text and summaries without exposing encrypted blocks', async () => {
+    const { fn } = fakeFetch(() => stream(sse([
+      { choices: [{ delta: { reasoning_details: [
+        { type: 'reasoning.summary', summary: 'Plan the response' },
+        { type: 'reasoning.text', text: 'Check the facts.' },
+        { type: 'reasoning.encrypted', data: 'opaque-secret' },
+      ] } }] },
+      { choices: [{ delta: { content: 'Done.' }, finish_reason: 'stop' }] },
+    ])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }), fn);
+    expect(result.events.filter(event => event.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: 'Plan the response\n\nCheck the facts.' },
+    ]);
+    expect(result.text).toBe('Done.');
+  });
+
   it('uses max_completion_tokens for OpenAI', async () => {
     const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])));
     await run(request({ kind: 'openai', apiKey: 'sk-openai' }), fn);
@@ -113,6 +129,34 @@ describe('OpenAI-style streaming', () => {
     expect(strict.calls[1].body.stream_options).toBeUndefined();
     expect(strict.calls[1].body.temperature).toBe(0.7);
     expect(second.text).toBe('fine');
+  });
+
+  it('combines adjacent OpenRouter roles for strict NVIDIA-compatible histories', async () => {
+    const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'works' }, finish_reason: 'stop' }] }])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }, { messages: [
+      { role: 'system', content: 'Saved instruction' },
+      { role: 'system', content: 'Workbench instruction' },
+      { role: 'user', content: 'First question' },
+      { role: 'user', content: 'Attached context' },
+      { role: 'assistant', content: 'First answer' },
+      { role: 'assistant', content: 'Additional answer' },
+      { role: 'user', content: 'Next question' },
+    ] }), fn);
+    expect(calls[0].body.messages).toEqual([
+      { role: 'system', content: 'Saved instruction\n\nWorkbench instruction' },
+      { role: 'user', content: 'First question\n\nAttached context' },
+      { role: 'assistant', content: 'First answer\n\nAdditional answer' },
+      { role: 'user', content: 'Next question' },
+    ]);
+    expect(result.text).toBe('works');
+  });
+
+  it('reports the concrete model selected by the OpenRouter free router', async () => {
+    const { fn } = fakeFetch(() => stream(sse([
+      { model: 'nvidia/nemotron-3-nano-v1:free', provider: 'Nvidia', choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] },
+    ])));
+    const result = await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }, { model: 'openrouter/free' }), fn);
+    expect(result.events).toContainEqual({ type: 'model', model: 'nvidia/nemotron-3-nano-v1:free', provider: 'Nvidia' });
   });
 
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {

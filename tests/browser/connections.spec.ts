@@ -91,3 +91,37 @@ test('a hosted provider without a key shows a key prompt instead of calling the 
   await expect(form.getByRole('alert')).toHaveText('Enter an API key for this provider.');
   expect(targets.some(t => t.kind === 'anthropic')).toBe(false);
 });
+
+test('a provider connection is only saved after its API key passes validation', async ({ page }) => {
+  const targets = await mockDiscovery(page, target => target.apiKey === 'valid-key'
+    ? { ok: true, execution: 'remote', models: [model('nvidia/nemotron')] }
+    : { ok: false, error: { category: 'auth', message: 'The provider rejected this API key.' } });
+  await page.goto('/app/models');
+  await page.getByRole('button', { name: 'Add Provider' }).click();
+  const form = page.getByRole('form', { name: 'Add connection' });
+  await form.getByLabel('Connection type').selectOption('openrouter');
+  await form.getByLabel('API key').fill('bad-key');
+  await form.getByRole('button', { name: 'Save Connection' }).click();
+  await expect(form.getByRole('alert')).toHaveText('The provider rejected this API key.');
+  await expect(form).toBeVisible();
+
+  await form.getByLabel('API key').fill('valid-key');
+  await form.getByRole('button', { name: 'Save Connection' }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: 'OpenRouter' }).getByRole('status')).toHaveText('1 model');
+  expect(targets.filter(target => target.kind === 'openrouter').map(target => target.apiKey)).toEqual(['bad-key', 'valid-key', 'valid-key']);
+});
+
+test('OpenRouter free router becomes the default for a new thread', async ({ page }) => {
+  await mockDiscovery(page, target => target.kind === 'openrouter'
+    ? { ok: true, execution: 'remote', models: [model('openrouter/free', { displayName: 'Free Models Router', pricing: 'zero-price' })] }
+    : offline);
+  await page.goto('/app/models');
+  await page.getByRole('button', { name: 'Add Provider' }).click();
+  const form = page.getByRole('form', { name: 'Add connection' });
+  await form.getByLabel('Connection type').selectOption('openrouter');
+  await form.getByLabel('API key').fill('sk-or-test');
+  await form.getByRole('button', { name: 'Save Connection' }).click();
+  await expect(page.getByRole('listitem').filter({ hasText: 'OpenRouter' }).getByRole('status')).toHaveText('1 model');
+  await page.goto('/app');
+  await expect(page.getByRole('button', { name: 'Choose model', exact: true })).toContainText('openrouter/free');
+});

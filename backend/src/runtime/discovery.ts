@@ -150,6 +150,9 @@ async function discoverHuggingFace(target: ResolvedTarget, fetchImpl: FetchFn): 
 
 /** OpenRouter's catalog reports per-token prices, so zero-price models can be verified. */
 async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
+  // The model catalog is public, so it cannot prove that the supplied key is valid.
+  // OpenRouter's current-key endpoint is authenticated and does not create usage.
+  await getJSON(fetchImpl, `${target.baseURL}/key`, target);
   const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
   if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'OpenRouter did not return a model list.');
   const now = Date.now();

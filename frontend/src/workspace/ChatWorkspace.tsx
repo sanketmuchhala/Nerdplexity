@@ -165,11 +165,14 @@ export function ChatWorkspace({
   const nameOf = (connectionId: string) =>
     connections.find((c) => c.id === connectionId)?.name ??
     'removed connection';
-  // The live answer shows the model the router is currently asking.
+  // The live answer shows the model being asked: the Free Router's current attempt, or the chosen
+  // model, replaced by the concrete model when a provider's own router (openrouter/free) reports it.
   const asking = [...run.route].reverse().find((step) => step.status === 'trying');
-  const liveModel = routed
+  const liveRef = routed
     ? asking && { connectionId: asking.connectionId, modelId: asking.model }
     : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
+  const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
+  const liveModel = liveListed && { ...liveListed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) };
   useEffect(() => {
     setInput(branchDraft.current ?? '');
     branchDraft.current = null;
@@ -635,7 +638,7 @@ export function ChatWorkspace({
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
-                model={answerModel(liveModel)}
+                model={liveModel}
                 streaming={run.running}
               />
             )}

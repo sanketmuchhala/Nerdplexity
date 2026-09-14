@@ -69,6 +69,8 @@ export function useRun() {
   const [running, setRunning] = useState(false);
   const [partial, setPartial] = useState('');
   const [reasoning, setReasoning] = useState('');
+  const [selectedModel, setSelectedModel] = useState<string | undefined>();
+  const [selectedProvider, setSelectedProvider] = useState<string | undefined>();
   const [phase, setPhase] = useState('');
   const [error, setError] = useState<RunError | null>(null);
   const [tools, setTools] = useState<ToolTrace[]>([]);
@@ -82,6 +84,7 @@ export function useRun() {
 
   const showRunning = (record: RunRecord, phaseText: string) => {
     setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools); setRoute(record.route ?? []);
+    setSelectedModel(record.routedModel); setSelectedProvider(record.routedProvider);
     setError(null); setCanRetry(false); setPhase(phaseText); setRunConversationId(record.conversationId);
   };
 
@@ -104,15 +107,16 @@ export function useRun() {
     try {
       ({ claimed } = await store.runs.finish(final));
       const chat = useChat.getState();
-      if (claimed && record.output) {
-        // A routed answer is attributed to the model that wrote it, not to the router.
+      if (claimed && (record.output || record.reasoning)) {
+        // A routed answer is attributed to the model that wrote it, not to a router: the Free Router's
+        // choice, and within it the concrete model OpenRouter's own router picked, when reported.
         const answered = routedTo ?? lastTried(record.route);
         const metadata = {
           ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
           ...(record.route?.length ? { route: { steps: record.route, ...(routedTo ? { task: routedTo.task } : {}) } } : {}),
         };
-        const provenance = answered ? { connectionId: answered.connectionId, modelId: answered.model }
-          : record.connectionId && !isRouter(record) ? { connectionId: record.connectionId, modelId: record.model } : undefined;
+        const provenance = answered ? { connectionId: answered.connectionId, modelId: record.routedModel || answered.model }
+          : record.connectionId && !isRouter(record) ? { connectionId: record.connectionId, modelId: record.routedModel || record.model } : undefined;
         await chat.addMessage('assistant', record.output, Object.keys(metadata).length ? metadata : undefined, record.conversationId, {
           ...(provenance ? { provenance } : {}),
           ...(record.runId ? { runId: record.runId } : {}),
@@ -126,7 +130,7 @@ export function useRun() {
       setError({ message: 'The answer could not be saved to the server. Copy the visible answer before leaving.', retryable: false });
     }
     if (active.current?.record.id === record.id) active.current = null;
-    setRunning(false); setPartial(''); setReasoning('');
+    setRunning(false); setPartial(''); setReasoning(''); setSelectedModel(undefined); setSelectedProvider(undefined);
     setPhase(status === 'canceled' ? 'Stopped' : '');
     if (outcome.type === 'failed') {
       const ref = { connectionId: record.connectionId || '', modelId: record.model };
@@ -155,7 +159,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
+      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -165,6 +169,7 @@ export function useRun() {
           case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
           case 'started': setPhase('Waiting for the model'); break;
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
+          case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); setPhase(`Using ${event.model}`); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'delta': record.output += event.text; setPhase('Generating'); break;
           case 'tool': {
@@ -185,6 +190,8 @@ export function useRun() {
             const { type: _type, ...step } = event;
             record.route = [...(record.route ?? []), step];
             setRoute(record.route);
+            // A new attempt forgets the concrete model a failed attempt reported.
+            if (step.status === 'trying') { record.routedModel = undefined; record.routedProvider = undefined; setSelectedModel(undefined); setSelectedProvider(undefined); }
             setPhase(step.status === 'trying' ? `Asking ${step.model}` : `${step.model} failed; choosing another free model`);
             break;
           }
@@ -371,7 +378,7 @@ export function useRun() {
   useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
 
   return {
-    send, retry, stop, running, partial, reasoning, phase, error, tools, route, runConversationId, streamRunId,
+    send, retry, stop, running, partial, reasoning, selectedModel, selectedProvider, phase, error, tools, route, runConversationId, streamRunId,
     canRetry: canRetry && !!lastAttempt.current && !running,
     clearError: () => setError(null),
   };

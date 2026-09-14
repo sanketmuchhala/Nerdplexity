@@ -325,6 +325,7 @@ Errors:
 | `quota` | `quota`, `connectionId` on routed runs | Rate-limit snapshot from response headers |
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
 | `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
+| `model` | model, provider | The concrete model answering, reported by OpenRouter's stream (for `openrouter/free`, the model its router picked) |
 | `completed` | usage/finishReason/loadMs/route/timing | Successful terminal event; `route` names the model that answered a routed run |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |

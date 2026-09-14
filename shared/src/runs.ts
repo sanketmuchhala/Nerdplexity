@@ -113,6 +113,8 @@ export type RunEventPayload =
   | { type: 'queued'; position: number }
   | { type: 'started' }
   | { type: 'status'; message: string }
+  /** The concrete model answering, when a provider's own router chose it (OpenRouter's openrouter/free). */
+  | { type: 'model'; model: string; provider?: string }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
   /** connectionId: set on routed runs, whose quota may come from several connections. */

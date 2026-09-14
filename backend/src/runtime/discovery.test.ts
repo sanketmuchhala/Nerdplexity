@@ -126,17 +126,24 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
   it('classifies OpenRouter prices, capabilities, and retirements from its catalog', async () => {
     const past = new Date(Date.now() - 86_400_000).toISOString();
     const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
-    const { fn, calls } = fakeFetch({ '/api/v1/models': () => json({ data: [
+    const { fn, calls } = fakeFetch({
+      '/api/v1/key': () => json({ data: { label: 'test key' } }),
+      '/api/v1/models': () => json({ data: [
       { id: 'meta/llama:free', name: 'Llama (free)', context_length: 131072, pricing: { prompt: '0', completion: '0', request: '0' }, supported_parameters: ['tools', 'max_tokens'], architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'vendor/big', name: 'Big', pricing: { prompt: '0.000003', completion: '0.000015' }, architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] }, top_provider: { max_completion_tokens: 64000 }, expiration_date: future },
       { id: 'openrouter/auto', pricing: { prompt: '-1', completion: '-1' } },
       { id: 'openrouter/free', name: 'Free Models Router', pricing: { prompt: '-1', completion: '-1' } },
       { id: 'vendor/retired', pricing: { prompt: '0', completion: '0' }, expiration_date: past },
       { id: 'vendor/image-gen', pricing: { prompt: '0', completion: '0' }, architecture: { output_modalities: ['image'] } },
-    ] }) });
+      ] }),
+    });
     const discovered = models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn));
     const byId = (id: string) => discovered.find(model => model.id === id)!;
-    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/models');
+    expect(calls.map(call => call.url)).toEqual([
+      'https://openrouter.ai/api/v1/key',
+      'https://openrouter.ai/api/v1/models',
+    ]);
+    expect(new Headers(calls[0].init.headers).get('authorization')).toBe('Bearer or-key');
     expect(discovered).toHaveLength(4);
     const llama = byId('meta/llama:free');
     expect(llama).toMatchObject({ id: 'meta/llama:free', pricing: 'zero-price', contextLength: 131072, capabilities: { tools: true, vision: false } });
@@ -150,10 +157,19 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
   });
 
   it('adds the documented free router when the catalog omits it', async () => {
-    const { fn } = fakeFetch({ '/api/v1/models': () => json({ data: [] }) });
+    const { fn } = fakeFetch({ '/api/v1/key': () => json({ data: {} }), '/api/v1/models': () => json({ data: [] }) });
     expect(models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn))).toEqual([
       expect.objectContaining({ id: 'openrouter/free', pricing: 'zero-price' }),
     ]);
+  });
+
+  it('validates an OpenRouter key before reading its public model catalog', async () => {
+    const { fn, calls } = fakeFetch({
+      '/api/v1/key': () => json({ error: { message: 'invalid key' } }, 401),
+      '/api/v1/models': () => json({ data: [] }),
+    });
+    expect(failure(await discover({ kind: 'openrouter', apiKey: 'bad-key' }, fn))).toMatchObject({ category: 'auth', message: 'The provider rejected this API key.' });
+    expect(calls.map(call => call.url)).toEqual(['https://openrouter.ai/api/v1/key']);
   });
 
   it('hides inactive and speech-only Groq models and keeps limits', async () => {

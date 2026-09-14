@@ -43,6 +43,7 @@ export interface ModelRequest {
 
 export type AdapterEvent =
   | { type: 'delta'; text: string }
+  | { type: 'model'; model: string; provider?: string }
   | { type: 'reasoning'; text: string }
   | { type: 'status'; message: string }
   | { type: 'quota'; quota: RateLimitState }
@@ -232,6 +233,19 @@ function parseRecord(payload: string, target: ResolvedTarget): any {
   catch { throw new ProviderFailure({ category: 'transport', message: `${LABEL[target.kind]} sent a malformed stream record.`, retryable: true }); }
 }
 
+/** Plaintext and summarized reasoning returned in OpenRouter's structured reasoning_details stream. */
+function reasoningText(delta: any): string | undefined {
+  const direct = delta?.reasoning_content ?? delta?.reasoning;
+  if (typeof direct === 'string' && direct) return direct;
+  if (!Array.isArray(delta?.reasoning_details)) return undefined;
+  const text = delta.reasoning_details.map((detail: any) => {
+    if (detail?.type === 'reasoning.text' && typeof detail.text === 'string') return detail.text;
+    if (detail?.type === 'reasoning.summary' && typeof detail.summary === 'string') return `${detail.summary}\n\n`;
+    return '';
+  }).join('');
+  return text || undefined;
+}
+
 const normalizeUsage = (prompt: unknown, completion: unknown): Usage | undefined =>
   Number.isFinite(prompt) && Number.isFinite(completion)
     ? { prompt_tokens: prompt as number, completion_tokens: completion as number, total_tokens: (prompt as number) + (completion as number) }
@@ -272,6 +286,33 @@ function openAIMessage(message: ModelMessage) {
   };
 }
 
+/**
+ * Some OpenRouter routes (notably NVIDIA NIM) require strict role alternation.
+ * Consecutive turns from the same role are semantically one turn, so combine
+ * them while leaving assistant tool calls and their tool results untouched.
+ */
+function alternatingOpenAIMessages(messages: ModelMessage[]) {
+  const out: any[] = [];
+  const appendContent = (left: any, right: any) => {
+    if (typeof left === 'string' && typeof right === 'string') return `${left}\n\n${right}`;
+    const parts = (content: any) => typeof content === 'string' ? [{ type: 'text', text: content }] : Array.isArray(content) ? content : [];
+    const a = parts(left);
+    const b = parts(right);
+    return [...a, ...(a.length && b.length ? [{ type: 'text', text: '\n\n' }] : []), ...b];
+  };
+  for (const message of messages.map(openAIMessage) as any[]) {
+    const last = out[out.length - 1];
+    const mergeable = message.role === 'system' || message.role === 'user'
+      || (message.role === 'assistant' && !message.tool_calls && !last?.tool_calls);
+    if (mergeable && last?.role === message.role) {
+      last.content = appendContent(last.content, message.content);
+    } else {
+      out.push(message);
+    }
+  }
+  return out;
+}
+
 function ollamaMessage(message: ModelMessage) {
   if (message.role === 'tool') return { role: 'tool', content: message.content, tool_name: message.name };
   if (hasToolCalls(message)) return { role: 'assistant', content: message.content, tool_calls: message.toolCalls.map(call => ({ function: { name: call.name, arguments: argumentsObject(call.arguments) } })) };
@@ -305,7 +346,9 @@ function toolCallAccumulator() {
 async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn): AsyncGenerator<AdapterEvent> {
   const { target } = req;
   const body: Record<string, unknown> = {
-    model: req.model, messages: req.messages.map(openAIMessage), stream: true,
+    model: req.model,
+    messages: target.kind === 'openrouter' ? alternatingOpenAIMessages(req.messages) : req.messages.map(openAIMessage),
+    stream: true,
     ...(NO_STREAM_OPTIONS.has(target.kind) ? {} : { stream_options: { include_usage: true } }),
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -328,6 +371,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   let usage: Usage | undefined;
   let finishReason: string | undefined;
   let done = false;
+  let routeReported = false;
   const calls = toolCallAccumulator();
   for await (const line of bodyLines(response, signal)) {
     if (!line.startsWith('data:')) continue;
@@ -337,8 +381,13 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     const data = parseRecord(payload, target);
     if (data.error) throw failureFromStatus(Number(data.error.code) || 500, providerMessage(JSON.stringify(data)), target);
     const choice = data.choices?.[0];
+    const routedModel = data.model;
+    if (target.kind === 'openrouter' && !routeReported && typeof routedModel === 'string' && routedModel) {
+      routeReported = true;
+      yield { type: 'model', model: routedModel, ...(typeof data.provider === 'string' ? { provider: data.provider } : {}) };
+    }
     // Groq has reported streaming usage under x_groq.
-    const reasoning = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning;
+    const reasoning = reasoningText(choice?.delta);
     if (typeof reasoning === 'string' && reasoning) yield { type: 'reasoning', text: reasoning };
     const text = choice?.delta?.content;
     if (typeof text === 'string' && text) yield { type: 'delta', text };

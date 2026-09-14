@@ -194,11 +194,13 @@ http
       await send(
         frame({
           choices: [
-            { delta: { reasoning_content: 'Considering the question. ' } },
+            { delta: { reasoning_content: '## Analysis\n\n' } },
           ],
         }),
-        20,
+        250,
       );
+      await send(frame({ choices: [{ delta: { reasoning_content: '1. Considering the question.\n' } }] }), 250);
+      await send(frame({ choices: [{ delta: { reasoning_content: '2. Checking the conclusion.' } }] }), 250);
       await send(delta('Reasoned answer.'));
     } else if (model === 'busy-model') {
       await send(delta('Answered after waiting.'));

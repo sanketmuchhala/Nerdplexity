@@ -20,7 +20,7 @@ const ACCENT = (alpha: number) => `rgba(var(--np-accent-rgb), ${alpha})`;
 export function Message({ message, animate = true, model, streaming = false }: Props) {
   const isUser   = message.role === 'user';
   const isSystem = message.role === 'system';
-  const [showReasoning, setShowReasoning] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(true);
 
   if (isSystem) return null;
 
@@ -68,6 +68,44 @@ export function Message({ message, animate = true, model, streaming = false }: P
           </span>
         </div>
 
+        {/* Reasoning is a separate, complete stream and always precedes the answer. */}
+        {reasoning && (
+          <section
+            className={`np-reasoning ${streaming ? 'live' : 'complete'}`}
+            role="region"
+            aria-label={streaming ? 'Thinking live' : 'Thought process'}
+          >
+            {streaming ? (
+              <div className="np-reasoning-heading" role="status">
+                <Brain size={13} />
+                <span className="np-reasoning-pulse" aria-hidden="true" />
+                <strong>Thinking live</strong>
+                <span className="np-reasoning-state">Streaming</span>
+                <ChevronDown size={12} className="ml-auto" />
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="np-reasoning-heading"
+                aria-expanded={showReasoning}
+                aria-controls={`reasoning-${message.id}`}
+                onClick={() => setShowReasoning(value => !value)}
+              >
+                <Brain size={13} />
+                <strong>Thought process</strong>
+                <span className="np-reasoning-state">Complete</span>
+                {showReasoning ? <ChevronDown size={12} className="ml-auto" /> : <ChevronRight size={12} className="ml-auto" />}
+              </button>
+            )}
+            {(streaming || showReasoning) && (
+              <div id={`reasoning-${message.id}`} className="np-reasoning-body">
+                {formatContent(reasoning)}
+                {streaming && <span className="np-reasoning-caret" aria-hidden="true" />}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Source chips */}
         {sources.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-1.5 scrollbar-none">
@@ -92,32 +130,13 @@ export function Message({ message, animate = true, model, streaming = false }: P
           </div>
         )}
 
+        {reasoning && message.content && <div className="np-answer-heading">Answer</div>}
+
         {/* Content */}
-        <div className={`text-[15px] leading-[1.75] ${streaming ? 'np-streaming' : ''}`} style={{ color: 'var(--t1)' }}>
+        <div className={`np-answer-content text-[15px] leading-[1.75] ${streaming ? 'np-streaming' : ''}`} style={{ color: 'var(--t1)' }}>
           {/* Show model output exactly as received. */}
           {formatContent(message.content)}
         </div>
-
-        {/* Reasoning */}
-        {reasoning && (
-          <div className="mt-4 rounded-xl overflow-hidden" style={{ border: '1px solid var(--b)' }}>
-            <button onClick={() => setShowReasoning(s => !s)}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors"
-              style={{ background: 'var(--s1)', color: 'var(--t3)' }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = 'var(--t2)'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--t3)'}
-            >
-              <Brain size={12} />
-              <span>Thought process</span>
-              {showReasoning ? <ChevronDown size={11} className="ml-auto" /> : <ChevronRight size={11} className="ml-auto" />}
-            </button>
-            {showReasoning && (
-              <div className="px-4 py-3 animate-slideDown" style={{ background: 'var(--s0)', borderTop: '1px solid var(--b)' }}>
-                <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t3)' }}>{reasoning}</p>
-              </div>
-            )}
-          </div>
-        )}
 
         <p className="text-[10px] mt-3.5" style={{ color: 'var(--t4)' }}>{ts}</p>
       </div>

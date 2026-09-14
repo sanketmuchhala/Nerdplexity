@@ -18,6 +18,7 @@ import type {
   BillingStatus,
   Connection,
   ConnectionKind,
+  ConnectionTarget,
   ModelDescriptor,
   ModelRef,
   RateLimitState,
@@ -32,6 +33,7 @@ import useConnections, {
   requiresKey,
   targetFor,
   usesBaseURL,
+  verifyConnection,
 } from '../state/connections';
 import { hasKey } from '../lib/credentials';
 import { WebSearchSettings } from './WebSearchSettings';
@@ -324,6 +326,18 @@ function ConnectionForm({
     setSaving(true);
     setError('');
     try {
+      const enteredKey = key.trim();
+      const apiKey = enteredKey || (initial ? targetFor(initial).apiKey : undefined);
+      const target: ConnectionTarget = {
+        kind,
+        ...(usesBaseURL(kind) ? { baseURL: baseURL.trim() } : {}),
+        ...(apiKey ? { apiKey } : {}),
+      };
+      const checked = await verifyConnection(target);
+      if (!checked.ok) {
+        setError(checked.error.message);
+        return;
+      }
       const connection = await save({
         id: initial?.id,
         kind,
@@ -333,6 +347,13 @@ function ConnectionForm({
         remember,
         billing,
       });
+      if (kind === 'openrouter' && !initial && checked.models.some(model => model.id === 'openrouter/free') && !useChat.getState().settings?.activeModel) {
+        const defaultModel = { connectionId: connection.id, modelId: 'openrouter/free' };
+        await useChat.getState().saveSettings({ activeModel: defaultModel });
+        const current = useChat.getState().activeConversation();
+        if (current && !current.model && current.messages.length === 0)
+          await useChat.getState().setConversationModel(current.id, defaultModel);
+      }
       onDone();
       void discover(connection.id);
     } catch (err) {
@@ -498,7 +519,7 @@ function ConnectionForm({
           Cancel
         </button>
         <button className="np-button primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Save Connection'}
+          {saving ? 'Checking…' : 'Save Connection'}
         </button>
       </div>
     </form>
