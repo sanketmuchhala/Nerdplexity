@@ -92,7 +92,7 @@
 .np-model-source { padding: 2px 6px; border: 1px solid var(--np-line); border-radius: 4px; color: var(--np-faint); font-size: 9px; }
 .np-model-switch > svg { color: var(--np-faint); }
 .np-toolbar-actions { display: flex; gap: 5px; }
-.np-chat-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.np-chat-scroll { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; overflow-anchor: auto; scroll-behavior: smooth; }
 .np-chat-scroll.empty { display: flex; flex-direction: column; justify-content: safe center; }
 .np-welcome { width: 100%; max-width: 710px; margin: 0 auto; text-align: center; padding: 0 24px 26px; animation: np-appear .4s ease both; }
 .np-orbit { width: 218px; height: 161px; position: relative; margin: 0 auto 20px; background: radial-gradient(ellipse at center, rgba(var(--np-accent-rgb), 0.043) 0%, transparent 67%); }
@@ -119,33 +119,35 @@
 .np-suggestions button > svg:last-child { color: var(--np-muted); margin-left: auto; }
 .np-suggestions button:hover { border-color: rgba(var(--np-accent-rgb), 0.200); background: rgba(var(--np-accent-rgb), 0.027); transform: translateY(-2px); }
 .np-connect-prompt { display: inline-flex; gap: 7px; align-items: center; color: var(--np-text); margin-top: 21px; font-size: 10px!important; }
-.np-composer-area { flex-shrink: 0; padding: 17px 30px 20px; width: 100%; max-width: 838px; margin: 0 auto; }
-.np-composer { background: var(--np-bg); border: 1px solid rgba(var(--np-accent-rgb), 0.133); border-radius: 13px; box-shadow: 0 8px 35px #00000014; transition: .2s; }
-.np-composer:focus-within { border-color: rgba(var(--np-accent-rgb), 0.439); box-shadow: 0 0 0 3px rgba(var(--np-accent-rgb), 0.020), 0 8px 35px #00000014; }
-.np-composer textarea { display: block; width: 100%; padding: 19px 19px 6px; border: none; resize: none; line-height: 1.7; font-size: 13px; outline: none!important; min-height: 77px; }
-.np-composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 11px; gap: 8px; }
+.np-composer-area { flex-shrink: 0; padding: 10px 20px 24px; width: 100%; max-width: 840px; margin: 0 auto; position: sticky; bottom: 0; z-index: 20; }
+.np-composer { background: color-mix(in srgb, var(--np-panel) 80%, transparent); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(var(--np-contrast-rgb), 0.08); border-radius: 24px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03); transition: .2s; }
+.np-composer:focus-within { border-color: rgba(var(--np-accent-rgb), 0.3); box-shadow: 0 0 0 3px rgba(var(--np-accent-rgb), 0.1), 0 8px 35px rgba(0, 0, 0, 0.08); }
+.np-composer textarea { display: block; width: 100%; padding: 22px 24px 6px; border: none; resize: none; line-height: 1.6; font-size: 15px; outline: none!important; min-height: 80px; }
+.np-composer-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 14px; gap: 8px; }
 .np-composer-modes { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
-.np-mode { display: flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; color: var(--np-muted); font-size: 10px!important; }
-.np-mode.selected { color: var(--np-text); background: rgba(var(--np-accent-rgb), 0.055); border-color: rgba(var(--np-accent-rgb), 0.110); }
+.np-mode { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid transparent; border-radius: 12px; color: var(--np-muted); font-size: 12px!important; transition: all 0.15s ease; }
+.np-mode:hover { color: var(--np-text); background: rgba(var(--np-contrast-rgb), 0.03); }
+.np-mode.selected { color: var(--np-text); background: rgba(var(--np-accent-rgb), 0.08); border-color: rgba(var(--np-accent-rgb), 0.15); }
 .np-composer-send { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
 /* Phones: tool buttons show icons only; the label stays available to screen readers. */
 @media (max-width: 480px) {
   .np-composer-modes .np-mode-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  .np-composer-modes .np-mode { padding: 6px 8px; }
+  .np-composer-modes .np-mode { padding: 8px 10px; }
   .np-composer-send { gap: 10px; }
 }
-.np-local-label { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--np-muted); }
-.np-local-label i { width: 4px; height: 4px; border-radius: 50%; background: var(--np-accent); }
-.np-send { height: 30px; width: 30px; display: grid; place-items: center; border-radius: 7px; background: var(--np-accent); color: var(--np-raised); }
-.np-send:hover { background: var(--np-accent); }
-.np-send.stop { background: var(--np-text); }
-.np-composer-footnote { display: flex; justify-content: space-between; gap: 10px; margin: 9px 2px 0; color: var(--np-muted); font-size: 8px; }
+.np-local-label { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--np-muted); }
+.np-local-label i { width: 6px; height: 6px; border-radius: 50%; background: var(--np-accent); }
+.np-send { height: 36px; width: 36px; display: grid; place-items: center; border-radius: 18px; background: var(--np-text); color: var(--np-bg); transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1); }
+.np-send:hover { transform: scale(1.05); }
+.np-send:active { transform: scale(0.95); }
+.np-send.stop { background: var(--np-text); border-radius: 10px; }
+.np-composer-footnote { display: flex; justify-content: space-between; gap: 10px; margin: 12px 14px 0; color: var(--np-faint); font-size: 10px; }
 .np-thread { max-width: 850px; margin: 0 auto; padding-bottom: 15px; }
 .np-thread .t-caps { color: var(--np-muted)!important; }
 .np-thread .text-sm { color: var(--np-text); }
 .np-thread pre { max-width: 100%; overflow: auto; }
-.np-reasoning { margin: 0 0 18px; border: 1px solid var(--np-line); border-radius: 12px; background: var(--np-raised); }
-.np-reasoning.live { border-color: rgba(var(--np-accent-rgb), .3); box-shadow: inset 3px 0 0 rgba(var(--np-accent-rgb), .6); }
+.np-reasoning { margin: 0 0 18px; border: 1px solid rgba(var(--np-contrast-rgb), 0.06); border-radius: 16px; background: color-mix(in srgb, var(--np-raised) 60%, transparent); box-shadow: 0 2px 12px rgba(0,0,0,0.03); transition: all 0.3s ease; }
+.np-reasoning.live { border-color: rgba(var(--np-accent-rgb), 0.2); background: linear-gradient(180deg, rgba(var(--np-accent-rgb), 0.04) 0%, transparent 100%); box-shadow: 0 4px 16px rgba(var(--np-accent-rgb), 0.06); }
 .np-reasoning-heading { width: 100%; min-height: 41px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; color: var(--np-muted); font-size: 11px; text-align: left; }
 button.np-reasoning-heading { cursor: pointer; transition: color .15s, background .15s; }
 button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(--np-contrast-rgb), .025); }
@@ -378,8 +380,10 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-thread-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 0 30px 8px; flex-shrink: 0; }
 .np-thread-heading > button { display: flex; gap: 8px; align-items: center; min-width: 0; color: var(--np-muted); font-size: 12px; }
 .np-thread-heading > button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-message-actions { display: flex; flex-wrap: wrap; max-width: 712px; margin: -8px auto 12px; padding-inline: 16px; gap: 6px; }
-.np-message-actions button { gap: 6px; font-size: 11px!important; }
+.np-message-actions { display: flex; flex-wrap: wrap; max-width: 680px; margin: -10px auto 20px; padding-inline: 16px; gap: 6px; opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease; transform: translateY(-4px); }
+.np-thread > *:hover + .np-message-actions, .np-message-actions:hover { opacity: 1; transform: translateY(0); }
+.np-message-actions button { gap: 6px; font-size: 11px!important; padding: 6px 10px; border-radius: 8px; transition: background 0.15s; }
+.np-message-actions button:hover { background: rgba(var(--np-contrast-rgb), 0.05); }
 .np-message-actions button.active { color: var(--np-accent); background: var(--np-accent-dim); }
 .np-context-trigger { display: flex; justify-content: space-between; gap: 12px; color: var(--np-muted); font-size: 10px!important; padding: 0 4px 8px; text-align: left; width: 100%; }
 .np-context-trigger > span:last-child { display: flex; align-items: center; gap: 7px; }

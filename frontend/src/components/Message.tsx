@@ -31,12 +31,12 @@ export function Message({ message, animate = true, model, streaming = false }: P
   /* ── User ── */
   if (isUser) {
     return (
-      <div className="w-full px-4 py-4 animate-message-in">
+      <div className={`w-full px-4 py-4 ${animate ? 'animate-message-in' : ''}`}>
         <div className={COL}>
           <div className="flex justify-end">
-            <div className="max-w-[78%] px-5 py-3.5 rounded-[22px]"
+            <div className="max-w-[85%] px-5 py-3.5 rounded-[24px]"
               style={{ background: 'var(--s2)' }}>
-              <p className="text-[15px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--t1)' }}>
+              <p className="text-[15px] leading-[1.65] whitespace-pre-wrap" style={{ color: 'var(--t1)', overflowWrap: 'break-word' }}>
                 {message.content}
               </p>
             </div>
@@ -183,17 +183,17 @@ function formatContent(content: string) {
       }
       if (rows.length) {
         out.push(
-          <div key={`t${i}`} className="my-5 overflow-x-auto rounded-xl" style={{ border: '1px solid var(--b-hi)' }}>
-            <table className="w-full text-sm" style={{ borderCollapse:'collapse' }}>
-              <thead>
-                <tr style={{ background: 'var(--s2)' }}>
-                  {rows[0].map((h,j) => <th key={j} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide" style={{ borderBottom:'1px solid var(--b-hi)', color:'var(--t2)' }}>{fmtLine(h)}</th>)}
+          <div key={i} className="my-6 overflow-x-auto rounded-[16px] shadow-sm" style={{ border:'1px solid rgba(var(--np-contrast-rgb), 0.12)' }}>
+            <table className="w-full text-left border-collapse" style={{ minWidth:'500px' }}>
+              <thead style={{ background:'color-mix(in srgb, var(--np-raised) 50%, transparent)' }}>
+                <tr>
+                  {rows[0].map((h,j) => <th key={j} className="px-5 py-3.5 text-left text-[11px] font-bold uppercase tracking-wider" style={{ borderBottom:'1px solid rgba(var(--np-contrast-rgb), 0.12)', color:'var(--np-muted)' }}>{fmtLine(h)}</th>)}
                 </tr>
               </thead>
-              <tbody>
+              <tbody style={{ background:'var(--np-panel)' }}>
                 {rows.slice(1).filter(r => !r.every(x=>x.match(/^-+$/)) && r.length).map((r,ri) => (
-                  <tr key={ri} style={{ borderBottom:'1px solid var(--b)' }}>
-                    {r.map((cell,ci) => <td key={ci} className="px-4 py-2.5 text-sm" style={{ color:'var(--t1)' }}>{fmtLine(cell)}</td>)}
+                  <tr key={ri} className="transition-colors hover:bg-[rgba(var(--np-contrast-rgb),0.02)]" style={{ borderBottom:'1px solid rgba(var(--np-contrast-rgb), 0.06)' }}>
+                    {r.map((cell,ci) => <td key={ci} className="px-5 py-3.5 text-[14px]" style={{ color:'var(--t1)' }}>{fmtLine(cell)}</td>)}
                   </tr>
                 ))}
               </tbody>
@@ -207,9 +207,9 @@ function formatContent(content: string) {
     if (line.includes('`') && !line.includes('```')) {
       const parts = line.split('`');
       out.push(
-        <div key={i} className="my-0.5 leading-[1.8]">
+        <div key={i} className="my-0.5 leading-[1.75]">
           {parts.map((p,j) => j%2===1
-            ? <code key={j} className="text-sm px-1.5 py-0.5 rounded t-mono" style={{ background: ACCENT(.1), border:`1px solid ${ACCENT(.2)}`, color:'var(--blue-bright)' }}>{p}</code>
+            ? <code key={j} className="text-[13px] px-1.5 py-0.5 mx-0.5 rounded-md t-mono font-medium" style={{ background: 'rgba(var(--np-contrast-rgb), 0.08)', border:`1px solid rgba(var(--np-contrast-rgb), 0.05)`, color:'var(--t1)' }}>{p}</code>
             : fmtLine(p))}
         </div>
       );
