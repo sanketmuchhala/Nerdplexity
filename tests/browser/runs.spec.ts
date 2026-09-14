@@ -221,8 +221,13 @@ test('reasoning reported by the model is shown separately from the answer', asyn
   await expect(live).toContainText('Analysis');
   await expect(page.getByText('Reasoned answer.')).toHaveCount(0);
   await expect(page.getByText('Reasoned answer.')).toBeVisible();
+  // A finished thought process starts collapsed (reasoning is optional to read) and opens on request.
   const complete = page.getByRole('region', { name: 'Thought process' });
-  await expect(complete.getByRole('button', { name: /Thought process/ })).toHaveAttribute('aria-expanded', 'true');
+  const toggle = complete.getByRole('button', { name: /Thought process/ });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(complete.locator('.np-reasoning-body')).toHaveCount(0);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(complete).toContainText('Considering the question.');
   await expect(complete).toContainText('Checking the conclusion.');
   await expect(complete.locator('.np-reasoning-body')).toHaveCSS('max-height', 'none');
