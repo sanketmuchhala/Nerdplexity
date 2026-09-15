@@ -24,7 +24,7 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
-import { AGENT_NAME, isAgent, isRouter, ROUTER_NAME, routerName } from '../lib/router';
+import { isAgent, isRouter, routerName } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
 import { AgentActivity } from './AgentActivity';
 import { RouterMark } from './RouterMark';
@@ -522,38 +522,34 @@ export function ChatWorkspace({
                 {message.role === 'assistant' && (message.metadata?.route || message.metadata?.agent || message.metadata?.tools || message.metadata?.activities) && (
                   // Above a saved answer, the panels sit in the transcript column.
                   <div className="np-inline-tools">
-                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
-                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} />}
+                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} showModels={false} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} showModels={false} />}
                     {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
                   </div>
                 )}
-                <Message
-                  message={{ ...message, timestamp: message.createdAt }}
-                  animate={!message.runId}
-                  model={message.role === 'assistant' ? answerModel(message.provenance) : undefined}
-                />
-                {message.role === 'assistant' &&
-                  (message.provenance ||
-                    message.runStatus ||
-                    message.finishReason === 'length' ||
-                    message.finishReason === 'max_tokens') && (
-                    <p
-                      className={`np-provenance ${message.runStatus ? 'partial' : ''}`}
-                    >
-                      {[
-                        message.provenance &&
-                          `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
-                        message.metadata?.agent ? `via ${AGENT_NAME}` : message.metadata?.route && `via ${ROUTER_NAME}`,
-                        message.runStatus &&
-                          RUN_STATUS_LABEL[message.runStatus],
-                        (message.finishReason === 'length' ||
-                          message.finishReason === 'max_tokens') &&
-                          'Stopped at the output limit',
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  )}
+                {(() => {
+                  // Answers from the Free Agent or Free Router speak as Nerdplexity: the chat does not
+                  // name the models behind them (Run history does). A model the user picked is named.
+                  const chosenByNerdplexity = !!(message.metadata?.agent || message.metadata?.route);
+                  const credit = message.role === 'assistant' ? [
+                    !chosenByNerdplexity && message.provenance &&
+                      `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
+                    message.runStatus && RUN_STATUS_LABEL[message.runStatus],
+                    (message.finishReason === 'length' || message.finishReason === 'max_tokens') && 'Stopped at the output limit',
+                  ].filter(Boolean) : [];
+                  return (
+                    <>
+                      <Message
+                        message={{ ...message, timestamp: message.createdAt }}
+                        animate={!message.runId}
+                        model={message.role === 'assistant' && !chosenByNerdplexity ? answerModel(message.provenance) : undefined}
+                      />
+                      {credit.length > 0 && (
+                        <p className={`np-provenance ${message.runStatus ? 'partial' : ''}`}>{credit.join(' · ')}</p>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="np-message-actions">
                   <button
                     className="np-icon-button"
@@ -641,12 +637,12 @@ export function ChatWorkspace({
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
-                model={liveModel}
+                model={routed ? undefined : liveModel}
                 streaming={run.running}
                 status={run.running ? run.phase : undefined}
               >
-                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} />}
+                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} showModels={false} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} showModels={false} />}
                 {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
               </Message>
             )}
@@ -921,7 +917,7 @@ export function ChatWorkspace({
               webAuto && 'Web search is automatic (Exa)',
               routed
                 ? isAgent(ref)
-                  ? `The Free Agent may ask several of your ${pool?.models ?? 0} free models per message (at most 5 requests) and writes one checked answer; prompts go only to the models it asks.`
+                  ? `The Free Agent picks from your ${pool?.models ?? 0} free models for each part of an answer and has the strongest check the result; prompts go only to the models it asks.`
                   : `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'

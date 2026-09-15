@@ -111,7 +111,7 @@ test('a provider connection is only saved after its API key passes validation', 
   expect(targets.filter(target => target.kind === 'openrouter').map(target => target.apiKey)).toEqual(['bad-key', 'valid-key', 'valid-key']);
 });
 
-test('the Free Router becomes the default once a free model is connected, and never replaces a chosen model', async ({ page }) => {
+test('the Free Agent becomes the default once a free model is connected, and never replaces a chosen model', async ({ page }) => {
   await mockDiscovery(page, target => target.kind === 'openrouter'
     ? { ok: true, execution: 'remote', models: [model('openrouter/free', { displayName: 'Free Models Router', pricing: 'zero-price' }), model('meta/llama:free', { pricing: 'zero-price' })] }
     : offline);
@@ -125,7 +125,7 @@ test('the Free Router becomes the default once a free model is connected, and ne
   // In-app navigation keeps the session-only key.
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
   const toolbar = page.getByRole('button', { name: 'Choose model', exact: true });
-  await expect(toolbar).toContainText('Free Router');
+  await expect(toolbar).toContainText('Free Agent');
   await expect(toolbar.locator('img.np-router-mark')).toHaveAttribute('src', '/brand/nerdplexity-mark.svg');
 
   // A model the user picks stays chosen.

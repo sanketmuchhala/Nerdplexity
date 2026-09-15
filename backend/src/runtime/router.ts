@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
+import type { AgentConfig, BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
 import { AdapterEvent, ModelMessage, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
 import { ResolvedTarget } from './destinations.js';
 import { runWithTools } from './toolLoop.js';
@@ -269,6 +269,8 @@ export interface RoutedRun {
   documents: WorkspaceDocument[];
   /** auto: search the web once before the first attempt when the message needs it. */
   search?: { apiKey: string; auto?: boolean };
+  /** The user's Free Agent settings, already checked against the candidates. */
+  agent?: AgentConfig;
 }
 
 export interface RouterDeps {

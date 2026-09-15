@@ -732,3 +732,24 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-agent-text pre { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; background: var(--np-sidebar); color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .np-specialists td strong { display: block; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .np-specialists .np-specialist-why { white-space: normal; min-width: 220px; color: var(--np-muted); font-size: 10px; }
+
+/* Let Nerdplexity choose: the Free Agent and Free Router, and how the agent works */
+.np-agent-settings { margin-bottom: 24px; }
+.np-agent-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.np-agent-choice { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--np-line); border-radius: 10px; background: var(--np-bg); }
+.np-agent-choice.active { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-choice strong { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.np-agent-choice p { font-size: 11px; color: var(--np-muted); margin-top: 6px; line-height: 1.6; }
+.np-agent-choice .np-button { align-self: flex-start; }
+.np-agent-config { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--np-line); display: flex; flex-direction: column; gap: 16px; }
+.np-agent-config h3 { font-size: 12px; font-weight: 500; }
+.np-agent-behavior { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.np-agent-behavior label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--np-line); border-radius: 8px; cursor: pointer; }
+.np-agent-behavior label:has(input:checked) { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-behavior input { margin-top: 2px; accent-color: var(--np-accent); }
+.np-agent-behavior span { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--np-muted); line-height: 1.5; }
+.np-agent-behavior strong { font-size: 12px; font-weight: 500; color: var(--np-text); }
+.np-agent-drafts { max-width: 220px; }
+.np-agent-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.np-agent-role select { text-overflow: ellipsis; }
+.np-agent-note { font-size: 11px; color: var(--np-muted); line-height: 1.6; margin-top: -8px; }

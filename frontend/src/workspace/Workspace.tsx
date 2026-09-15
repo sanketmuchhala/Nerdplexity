@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { chooseRouterByDefault, isRouter, routerName } from '../lib/router';
+import { chooseAgentByDefault, isAgent, isRouter, routerName } from '../lib/router';
 import { RouterMark } from './RouterMark';
 import {
   ArrowUpRight,
@@ -94,11 +94,15 @@ export default function Workspace() {
   }, [discoverAll]);
   // With no model chosen yet, the default is the Free Router, as soon as it has a free model to use.
   // A model someone chose is never replaced.
+  // The Free Agent is the default: chosen when nothing is chosen yet, and once in place of the
+  // Free Router, which was the automatic default before. A model someone picked is never replaced.
   useEffect(() => {
-    if (defaultedRouter.current || !settings || settings.activeModel) return;
+    if (defaultedRouter.current || !settings) return;
+    const earlierDefault = !settings.agentDefault && isRouter(settings.activeModel) && !isAgent(settings.activeModel);
+    if (settings.activeModel && !earlierDefault) return;
     if (!currentRouterPool(connections, catalog).models) return;
     defaultedRouter.current = true;
-    void chooseRouterByDefault(state).catch(() => { defaultedRouter.current = false; });
+    void chooseAgentByDefault(state).catch(() => { defaultedRouter.current = false; });
   }, [catalog, connections, settings, state]);
   const checking = Object.values(catalog).some((c) => c.status === 'loading');
   const modelCount = Object.values(catalog).reduce(

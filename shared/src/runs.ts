@@ -99,6 +99,32 @@ export interface RouteRequest {
   strategy: 'free' | 'agent';
   connections: { id: string; target: ConnectionTarget }[];
   models: RouteModel[];
+  /** How the Free Agent should work, from the user's settings. Ignored by the Free Router. */
+  agent?: AgentConfig;
+}
+
+/** One model, on one connection. */
+export interface ModelChoice {
+  connectionId: string;
+  model: string;
+}
+
+/** auto: the agent decides per message. quick: always one model. thorough: always drafts (or parts) checked by a writer. */
+export type AgentBehavior = 'auto' | 'quick' | 'thorough';
+
+/**
+ * The user's Free Agent settings. Every model choice is optional: without one, the agent uses its
+ * ranking. A chosen model that cannot take a message (cooling down, missing a capability) is
+ * replaced by the ranking for that message, and the step says so.
+ */
+export interface AgentConfig {
+  behavior?: AgentBehavior;
+  /** Drafts in an ensemble, 1-3. Default 2. */
+  drafts?: number;
+  writer?: ModelChoice;
+  planner?: ModelChoice;
+  drafters?: ModelChoice[];
+  specialists?: Partial<Record<TaskKind, ModelChoice>>;
 }
 
 /** One step of the router's decision, shown with the answer. */

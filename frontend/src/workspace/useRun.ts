@@ -66,14 +66,14 @@ const lastWriter = (steps: AgentStep[] | undefined) => {
 };
 
 /** The status line while a Free Agent step runs. */
+/** The status line while a Free Agent step runs. Chat shows what is happening, not model names. */
 function agentPhase(step: AgentStep) {
-  const who = step.model ?? 'a model';
   switch (step.role) {
-    case 'planner': return `Planning the parts with ${who}`;
-    case 'drafter': return `Drafting with ${who}`;
-    case 'specialist': return `${who} is answering a part`;
-    case 'writer': return `Checking and writing the answer with ${who}`;
-    default: return 'Choosing a strategy';
+    case 'planner': return 'Planning the parts';
+    case 'drafter': return 'Drafting';
+    case 'specialist': return 'Answering each part';
+    case 'writer': return 'Checking and writing the answer';
+    default: return 'Choosing how to answer';
   }
 }
 
@@ -192,7 +192,7 @@ export function useRun() {
           case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
           case 'started': setPhase('Waiting for the model'); break;
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
-          case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); setPhase(`Using ${event.model}`); break;
+          case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); if (!isRouter(record)) setPhase(`Using ${event.model}`); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'activity': {
             const { type: _type, ...activity } = event;
@@ -231,7 +231,7 @@ export function useRun() {
             setRoute(record.route);
             // A new attempt forgets the concrete model a failed attempt reported.
             if (step.status === 'trying') { record.routedModel = undefined; record.routedProvider = undefined; setSelectedModel(undefined); setSelectedProvider(undefined); }
-            setPhase(step.status === 'trying' ? `Asking ${step.model}` : `${step.model} failed; choosing another free model`);
+            setPhase(step.status === 'trying' ? (step.attempt === 1 ? 'Asking the best free model' : 'Asking another free model') : 'A model was busy; choosing another free model');
             break;
           }
         }
@@ -278,7 +278,10 @@ export function useRun() {
     try {
       // Durable before contacting the model, so a reload can find this run.
       await store.runs.put(record);
-      const choice = pool?.route ? { route: { ...pool.route, strategy: routeStrategy(attempt) } } : { target: targetFor(connection!), model: attempt.model };
+      const agentSettings = useChat.getState().settings?.agent;
+      const choice = pool?.route
+        ? { route: { ...pool.route, strategy: routeStrategy(attempt), ...(routeStrategy(attempt) === 'agent' && agentSettings ? { agent: agentSettings } : {}) } }
+        : { target: targetFor(connection!), model: attempt.model };
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
         settings: attempt.input.settings,

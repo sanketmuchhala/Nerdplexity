@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentStep, RunMessage } from '@app/types';
+import type { AgentConfig, AgentStep, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import type { ProgressPayload } from './runs.js';
-import { AGENT_LIMITS, agentExecutor, chooseStrategy, family, looksMultiPart, parsePlan, pickDrafters, specialists } from './agent.js';
+import { AGENT_LIMITS, agentExecutor, agentSettings, chooseStrategy, family, looksMultiPart, parsePlan, pickDrafters, specialists } from './agent.js';
 import { benchIndex, profileTask, rankCandidates, RouterHealth, type RouteCandidate } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
-const or = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
+const orTarget = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
 const candidate = (model: string, extra: Partial<RouteCandidate> = {}): RouteCandidate => ({
-  connectionId: 'or', model, target: or, capabilities: { tools: true, vision: false }, contextLength: 131_072, ...extra,
+  connectionId: 'or', model, target: orTarget, capabilities: { tools: true, vision: false }, contextLength: 131_072, ...extra,
 });
 const user = (content: string): RunMessage[] => [{ role: 'user', content }];
 const sse = (text: string, usage = { prompt_tokens: 10, completion_tokens: 5 }) =>
@@ -142,7 +142,7 @@ describe('Free Agent runs', () => {
     const noWriter = fakeModels((model, role) => role === 'writer' ? fail(503) : ok(`Draft from ${model}.`));
     const drafted = await runAgent(three(), user('Solve 12 * 7'), noWriter.fn);
     expect(drafted.text).toBe('Draft from qwen/qwen3-32b:free.');
-    expect(drafted.events).toContainEqual({ type: 'status', message: 'No model could write the final answer, so this is the draft from qwen/qwen3-32b:free.' });
+    expect(drafted.events).toContainEqual({ type: 'status', message: 'No model could check and rewrite the drafts, so this is one unchecked draft.' });
     expect(drafted.result?.agent?.writer.model).toBe('qwen/qwen3-32b:free');
   });
 
@@ -177,11 +177,13 @@ describe('Free Agent runs', () => {
     expect(calls.map(c => c.role)).toEqual(['planner', 'draft', 'draft', 'writer']);
   });
 
-  it(`never sends more than ${AGENT_LIMITS.calls} requests for one message`, async () => {
+  it('gives each step a limited number of models, so a failing provider cannot loop', async () => {
     const list = ['a-100b', 'b-90b', 'c-80b', 'd-70b', 'e-60b', 'f-50b', 'g-40b'].map(m => candidate(`vendor${m[0]}/${m}`));
     const { fn, calls } = fakeModels(() => fail(503));
     const { thrown } = await runAgent(list, user('Solve 12 * 7'), fn);
-    expect(calls.length).toBeLessThanOrEqual(AGENT_LIMITS.calls);
+    const { drafter, writer } = AGENT_LIMITS.attempts;
+    expect(calls.filter(c => c.role === 'draft' && c.body.messages.every((m: any) => m.role !== 'system')).length).toBeLessThanOrEqual(AGENT_LIMITS.drafters * drafter + writer);
+    expect(calls.length).toBeLessThanOrEqual(AGENT_LIMITS.drafters * drafter + writer);
     expect(thrown).toBeDefined();
   });
 
@@ -211,6 +213,73 @@ describe('Free Agent runs', () => {
     expect(final('strategy')).toMatchObject({ mode: 'direct' });
     expect(lonely.calls.map(c => c.model)).toEqual(['solo-70b', 'openrouter/free']);
     expect(text).toBe('From the provider router.');
+  });
+
+  describe('agent settings', () => {
+    const models = () => [candidate('meta-llama/llama-3.3-70b-instruct:free'), candidate('qwen/qwen3-32b:free'), candidate('google/gemma-3-12b-it:free'), candidate('mistralai/mistral-7b:free')];
+    const run = async (text: string, agent: AgentConfig, answer = (model: string, role: string) => role === 'writer' ? ok(`Final by ${model}.`) : ok(`Draft by ${model}.`)) => {
+      const { fn, calls } = fakeModels(answer);
+      const events: ProgressPayload[] = [];
+      const executor = agentExecutor({ owner: 'u', candidates: models(), request: { maxTokens: 512 }, messages: user(text), tools: [], documents: [], agent }, { health: new RouterHealth(), fetchImpl: fn, enqueue: task => task() });
+      const result = await executor({ signal: new AbortController().signal, emit: e => events.push(e) });
+      const steps = events.filter((e): e is Extract<ProgressPayload, { type: 'agent' }> => e.type === 'agent');
+      return { result, calls, final: (id: string) => [...steps].reverse().find(s => s.id === id) };
+    };
+    const or = (model: string) => ({ connectionId: 'or', model });
+
+    it('quick always answers with one model; thorough always drafts', async () => {
+      const quick = await run('Solve 12 * 7', { behavior: 'quick' });
+      expect(quick.result.agent?.mode).toBe('direct');
+      expect(quick.calls).toHaveLength(1);
+      const thorough = await run('Hi!', { behavior: 'thorough' });
+      expect(thorough.result.agent?.mode).toBe('ensemble');
+      expect(thorough.final('strategy')?.reason).toContain('Thorough, from your agent settings');
+    });
+
+    it('uses the chosen writer, drafters, and number of drafts', async () => {
+      const { result, calls, final } = await run('Solve 12 * 7', {
+        writer: or('mistralai/mistral-7b:free'), drafters: [or('google/gemma-3-12b-it:free')], drafts: 3,
+      });
+      expect(result.agent?.writer.model).toBe('mistralai/mistral-7b:free');
+      expect(final('draft-1')).toMatchObject({ model: 'google/gemma-3-12b-it:free', reason: expect.stringContaining('your choice') });
+      expect(final('draft-3')?.status).toBe('done');
+      const drafted = calls.filter(c => c.role === 'draft').map(c => c.model);
+      expect(drafted).toHaveLength(3);
+      expect(drafted).not.toContain('mistralai/mistral-7b:free');
+    });
+
+    it('uses the chosen planner and specialists for parts', async () => {
+      const { calls } = await run('Write a Python function to parse dates. Then write a short email announcing it to the team.', {
+        planner: or('google/gemma-3-12b-it:free'), specialists: { code: or('mistralai/mistral-7b:free') },
+      }, (model, role) => role === 'planner'
+        ? ok('{"parts":[{"task":"Write the date parser","kind":"code"},{"task":"Write the email","kind":"writing"}]}')
+        : ok(`${role} by ${model}.`));
+      expect(calls.find(c => c.role === 'planner')!.model).toBe('google/gemma-3-12b-it:free');
+      expect(calls.find(c => c.role === 'part' && c.body.messages.at(-1).content === 'Write the date parser')!.model).toBe('mistralai/mistral-7b:free');
+    });
+
+    it('lets the ranking stand in for a chosen model that cannot take the message, and says so', async () => {
+      const health = new RouterHealth();
+      const { accountOf } = await import('./router.js');
+      health.failure(accountOf('u', orTarget), 'mistralai/mistral-7b:free', { category: 'quota', message: 'limited', retryable: true, retryAfterMs: 60_000 });
+      const { fn } = fakeModels((model, role) => role === 'writer' ? ok(`Final by ${model}.`) : ok('Draft.'));
+      const events: ProgressPayload[] = [];
+      const executor = agentExecutor({ owner: 'u', candidates: models(), request: {}, messages: user('Solve 12 * 7'), tools: [], documents: [], agent: { writer: or('mistralai/mistral-7b:free') } }, { health, fetchImpl: fn, enqueue: task => task() });
+      const result = await executor({ signal: new AbortController().signal, emit: e => events.push(e) });
+      expect(result.agent?.writer.model).toBe('meta-llama/llama-3.3-70b-instruct:free');
+      const strategy = events.find(e => e.type === 'agent' && e.id === 'strategy');
+      expect(strategy).toMatchObject({ reason: expect.stringContaining('Your writer, mistralai/mistral-7b:free, cannot take this message right now') });
+    });
+
+    it('keeps only well-formed settings that name models in the free pool', () => {
+      const pool = models();
+      expect(agentSettings({
+        behavior: 'turbo', drafts: 9, writer: or('not/in-pool'), planner: or('qwen/qwen3-32b:free'),
+        drafters: [or('google/gemma-3-12b-it:free'), 'junk', or('missing')], specialists: { code: or('qwen/qwen3-32b:free'), poetry: or('qwen/qwen3-32b:free'), math: or('nope') },
+      }, pool)).toEqual({ planner: or('qwen/qwen3-32b:free'), drafters: [or('google/gemma-3-12b-it:free')], specialists: { code: or('qwen/qwen3-32b:free') } });
+      expect(agentSettings({ behavior: 'thorough', drafts: 3 }, pool)).toEqual({ behavior: 'thorough', drafts: 3 });
+      expect(agentSettings(null, pool)).toEqual({});
+    });
   });
 
   it('accepts the agent strategy in a run request', () => {

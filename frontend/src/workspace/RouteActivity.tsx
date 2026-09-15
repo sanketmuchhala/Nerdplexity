@@ -7,7 +7,7 @@ const TASK: Record<TaskKind, string> = {
 };
 
 /** How the Free Router chose the model behind an answer: every model it sent the request to, why, and what happened. */
-export function RouteActivity({ steps, task, nameOf, live = false }: { steps: RouteStep[]; task?: TaskKind; nameOf: (connectionId: string) => string; live?: boolean }) {
+export function RouteActivity({ steps, task, nameOf, live = false, showModels = true }: { steps: RouteStep[]; task?: TaskKind; nameOf: (connectionId: string) => string; live?: boolean; showModels?: boolean }) {
   const attempts = steps.filter(step => step.status === 'trying').map(step => ({
     step, failure: steps.find(other => other.status === 'failed' && other.attempt === step.attempt),
   }));
@@ -27,9 +27,9 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
           {attempts.map(({ step, failure }) => (
             <li key={step.attempt} className={failure ? 'np-route-failed' : undefined}>
               {failure ? <AlertTriangle size={12} aria-hidden /> : <Check size={12} aria-hidden />}
-              <strong>{step.model}</strong>
-              <small>{nameOf(step.connectionId)} · {failure ? 'failed' : live && step === last.step ? 'answering' : 'answered'}</small>
-              <span>{step.reason}</span>
+              <strong>{showModels ? step.model : `Model ${step.attempt}`}</strong>
+              <small>{[showModels && nameOf(step.connectionId), failure ? 'failed' : live && step === last.step ? 'answering' : 'answered'].filter(Boolean).join(' · ')}</small>
+              {showModels && <span>{step.reason}</span>}
               {failure && <span className="np-route-error">{failure.reason}</span>}
             </li>
           ))}

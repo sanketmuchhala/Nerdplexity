@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import type { BenchScore, RunEnvelope, RunMessage, ToolName } from '@app/types';
+import type { AgentConfig, BenchScore, RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
 import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
@@ -7,7 +7,7 @@ import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
 import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 import { withWebResults } from '../runtime/autoSearch.js';
-import { agentExecutor } from '../runtime/agent.js';
+import { agentExecutor, agentSettings } from '../runtime/agent.js';
 
 type FetchFn = typeof fetch;
 
@@ -15,7 +15,7 @@ interface ValidRun {
   key: string;
   request: ModelRequest;
   /** Present when the server chooses the model; `request.target` and `request.model` are then placeholders. */
-  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent' };
+  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent'; agent?: AgentConfig };
   tools: ToolName[];
   documents: WorkspaceDocument[];
   /** auto: search the web before answering when the latest message needs current information. */
@@ -104,7 +104,7 @@ export function validateRunRequest(body: any): ValidRun {
   }
   return {
     key: body.idempotencyKey,
-    ...(candidates ? { route: { candidates, strategy: body.route.strategy } } : {}),
+    ...(candidates ? { route: { candidates, strategy: body.route.strategy, ...(body.route.strategy === 'agent' ? { agent: agentSettings(body.route.agent, candidates) } : {}) } } : {}),
     request: {
       target, model: candidates ? '' : body.model,
       messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
@@ -123,6 +123,7 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, ow
     const routed = {
       owner, candidates: run.route.candidates, request, messages: messages as RunMessage[], tools: run.tools, documents: run.documents,
       ...(run.search ? { search: run.search } : {}),
+      ...(run.route.agent ? { agent: run.route.agent } : {}),
     };
     const deps = { health, fetchImpl, ...(bench ? { bench } : {}) };
     return run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);

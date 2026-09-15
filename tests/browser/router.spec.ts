@@ -34,12 +34,14 @@ test('the Free Router tries the best free model, falls back when it is rate limi
   const first = prompt('route');
   await send(page, first);
   await expect(page.getByText('Hello from fast-model: café, naïve, \u{1F642}.')).toBeVisible();
-  await expect(page.locator('.np-provenance')).toHaveText('fast-model-8b · Fake router · via Free Router');
+  // The chat does not name the models the router chose.
+  await expect(page.locator('.np-provenance')).toHaveCount(0);
   const decision = page.getByLabel('Free Router decision');
   await expect(decision).toContainText('1 fallback');
   await decision.locator('summary').click();
-  await expect(decision).toContainText('limit-model-70b');
+  await expect(decision).toContainText('Model 1');
   await expect(decision).toContainText('rate limiting');
+  await expect(decision).not.toContainText('limit-model-70b');
 
   const asked = async (text: string) => ((await (await page.request.get(`${fake}/_log?prompt=${encodeURIComponent(text)}`)).json()) as { model: string }[]).map(entry => entry.model);
   expect(await asked(first)).toEqual(['limit-model-70b', 'fast-model-8b']);
@@ -47,7 +49,7 @@ test('the Free Router tries the best free model, falls back when it is rate limi
   // The rate-limited model is cooling down, so the next message goes straight to the one that works.
   const second = prompt('route again');
   await send(page, second);
-  await expect(page.locator('.np-provenance')).toHaveCount(2);
+  await expect(page.getByText('Hello from fast-model: café, naïve, \u{1F642}.')).toHaveCount(2);
   expect(await asked(second)).toEqual(['fast-model-8b']);
   await expect(page.getByLabel('Free Router decision').last()).toContainText('First choice');
 
@@ -88,7 +90,7 @@ test('the Free Router sends only models verified as free, and never a paid or un
   await expect(page.getByRole('button', { name: 'Choose model' })).toContainText('1 free model');
   await send(page, 'Hello');
   await expect(page.getByText('Routed answer.')).toBeVisible();
-  await expect(page.locator('.np-provenance')).toHaveText('meta/llama:free · OpenRouter · via Free Router');
+  await expect(page.locator('.np-provenance')).toHaveCount(0);
 
   expect(bodies).toHaveLength(1);
   expect(bodies[0].target).toBeUndefined();
