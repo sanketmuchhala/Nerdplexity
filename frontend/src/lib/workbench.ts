@@ -7,7 +7,7 @@ import type {
   ToolName,
 } from '@app/types';
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
-import { DOCUMENT_LIMITS, documentFileError, readDocument } from './documents';
+import { DOCUMENT_LIMITS, documentFileError, fileBase64, isPdf, pdfBytes, readDocument } from './documents';
 import { documentContext } from './documentContext';
 
 /**
@@ -104,10 +104,9 @@ export async function attachmentFromFile(file: File, current: ThreadAttachment[]
       binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
     content = btoa(binary);
   } else content = await readDocument(file);
-  if (!image && content.includes('\0')) throw new Error('This file does not appear to be plain text.');
   if (current.reduce((n, item) => n + new TextEncoder().encode(item.content).length, 0) + new TextEncoder().encode(content).length > 8_000_000)
     throw new Error('Keep extracted text and encoded images under 8 MB total per thread.');
-  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now() };
+  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now(), ...(isPdf(file) ? { hasPdf: true, pdfBase64: await fileBase64(file) } : {}) };
 }
 
 export function workbenchSettings(
@@ -310,9 +309,9 @@ export function exportConversation(conversation: Conversation): string {
   return JSON.stringify(
     {
       format: 'nerdplexity-thread',
-      version: 3,
+      version: 4,
       title: conversation.title,
-      attachments: (conversation.attachments ?? []).map(({ name, mimeType, size, content, kind, createdAt }) => ({ name, mimeType, size, content, kind, createdAt })),
+      attachments: (conversation.attachments ?? []).map(({ name, mimeType, size, content, kind, createdAt, pdfBase64 }) => ({ name, mimeType, size, content, kind, createdAt, ...(pdfBase64 ? { pdfBase64 } : {}) })),
       messages: conversation.messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -337,8 +336,8 @@ export function exportConversation(conversation: Conversation): string {
 export function parseConversation(
   text: string,
 ): Pick<Conversation, 'title' | 'messages' | 'attachments'> {
-  if (new TextEncoder().encode(text).length > 25_000_000)
-    throw new Error('Import a thread smaller than 25 MB.');
+  if (new TextEncoder().encode(text).length > 50_000_000)
+    throw new Error('Import a thread smaller than 50 MB.');
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -350,7 +349,7 @@ export function parseConversation(
   const value = data as Record<string, unknown>;
   if (
     value.format !== 'nerdplexity-thread' ||
-    ![1, 2, 3].includes(value.version as number) ||
+    ![1, 2, 3, 4].includes(value.version as number) ||
     typeof value.title !== 'string' ||
     !value.title.trim() ||
     value.title.length > 200 ||
@@ -408,8 +407,10 @@ export function parseConversation(
     const encodedSize = typeof file.content === 'string' ? new TextEncoder().encode(file.content).length : Infinity;
     if (typeof file.name !== 'string' || !file.name.trim() || file.name.length > 200 || typeof file.content !== 'string' || (image ? encodedSize > Math.ceil(ATTACHMENT_LIMITS.imageBytes * 4 / 3) || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.content) : encodedSize > ATTACHMENT_LIMITS.textBytes) || (!image && file.content.includes('\0')))
       throw new Error('An attachment in this file is invalid or too large.');
-    const size = image ? Math.floor(file.content.length * 3 / 4) : encodedSize;
-    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now() };
+    if (file.pdfBase64 !== undefined && (image || typeof file.pdfBase64 !== 'string')) throw new Error('An attachment has invalid PDF data.');
+    const original = typeof file.pdfBase64 === 'string' ? pdfBytes(file.pdfBase64) : undefined;
+    const size = original?.length ?? (image ? Math.floor(file.content.length * 3 / 4) : encodedSize);
+    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now(), ...(original ? { hasPdf: true, pdfBase64: file.pdfBase64 as string } : {}) };
   });
   if (attachments.reduce((n, file) => n + new TextEncoder().encode(file.content).length, 0) > 8_000_000) throw new Error('Extracted text and encoded images exceed 8 MB total.');
   if (attachments.filter(file => file.kind === 'image').reduce((n, file) => n + file.size, 0) > 5_000_000) throw new Error('Images exceed 5 MB total.');

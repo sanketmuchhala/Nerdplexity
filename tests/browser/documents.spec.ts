@@ -25,14 +25,22 @@ const epub = zip({
   'OEBPS/chapter.xhtml': '<html><body><h1>Kestrel handbook</h1><p>Escalate issues to Amira.</p><script>bad script</script></body></html>',
 });
 
-function pdf(text: string) {
-  const stream = text ? `BT /F1 12 Tf 72 720 Td (${text}) Tj ET` : '';
-  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
+function pdf(text: string | string[], nullGlyph = false) {
+  const pages = Array.isArray(text) ? text : [text];
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${pages.map((_, i) => `${4 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`, `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica ${nullGlyph ? `/ToUnicode ${4 + pages.length * 2} 0 R` : ''} >>`];
+  pages.forEach((text, i) => {
+    const stream = text ? `BT /F1 12 Tf 72 720 Td (${text}) Tj ET` : '';
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`, `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+  if (nullGlyph) {
+    const cmap = '/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /NullGlyph def\n/CMapType 2 def\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n1 beginbfchar\n<23> <0000>\nendbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend';
+    objects.push(`<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`);
+  }
   let output = '%PDF-1.4\n';
   const offsets = [0];
   objects.forEach((object, i) => { offsets.push(Buffer.byteLength(output)); output += `${i + 1} 0 obj\n${object}\nendobj\n`; });
   const start = Buffer.byteLength(output);
-  output += `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
+  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${start}\n%%EOF`;
   return Buffer.from(output);
 }
 
@@ -47,6 +55,29 @@ async function setup(page: Page) {
   await page.getByRole('article').filter({ hasText: 'fast-model' }).getByRole('button', { name: 'Select Model' }).click();
   await expect(page).toHaveURL(/\/app$/);
 }
+
+test('PDF font mappings with null characters still upload, persist, preview, and reach the model', async ({ page }) => {
+  await setup(page);
+  const original = pdf('Basis # reference number: 729.', true);
+  await page.getByLabel('Attach files').setInputFiles({ name: 'basis.pdf', mimeType: 'application/pdf', buffer: original });
+  await expect(page.locator('.np-attachment')).toHaveCount(1);
+  await page.reload();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.np-attachment summary').click();
+  const viewer = page.getByRole('dialog', { name: 'basis.pdf', exact: true });
+  await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
+  await viewer.getByText('Extracted text used in chat', { exact: true }).click();
+  await expect(viewer.locator('pre')).toContainText('reference number: 729');
+  expect(await viewer.locator('pre').textContent()).not.toContain('\0');
+  await page.keyboard.press('Escape');
+  const prompt = `What is the basis reference number? ${Date.now()}`;
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.locator('.np-provenance')).toHaveCount(1);
+  const requests = await (await page.request.get(`${fake}/_log?prompt=${encodeURIComponent(prompt)}`)).json();
+  expect(JSON.stringify(requests[0].messages)).toContain('reference number: 729');
+  expect(JSON.stringify(requests[0].messages)).not.toContain('\\u0000');
+});
 
 test('PDF and Office uploads persist as readable text and reach the model', async ({ page }) => {
   await setup(page);
@@ -74,6 +105,8 @@ test('PDF and Office uploads persist as readable text and reach the model', asyn
   for (const fact of ['[Page 1]', 'reference number: 729', 'Owner\tAmira', '[Sheet: Budget]', 'C1: 42000', 'C2: 84000 [formula: =C1*2]', 'C3: 1900-01-01 [Excel serial: 1]', 'D3: 42%', '[Slide 1]\nKestrel milestone', '[Slide 2]\nNext milestone', 'supplier delay', 'Escalate issues to Amira']) expect(text).toContain(fact);
   expect(text).not.toContain('bad script');
   expect(text).not.toContain('<w:document');
+  expect(JSON.stringify(requests)).not.toContain('pdfBase64');
+  expect(JSON.stringify(requests)).not.toContain(pdf('Kestrel reference number: 729.').toString('base64'));
 });
 
 test('Workspace imports documents through the same reader and saves larger text', async ({ page }) => {
@@ -88,6 +121,75 @@ test('Workspace imports documents through the same reader and saves larger text'
   await expect(page.locator('.np-document')).toHaveCount(2);
   await page.reload();
   await expect(page.locator('.np-document')).toHaveCount(2);
+});
+
+test('uploaded PDFs open as rendered pages after reload, with navigation, zoom, and download', async ({ page }, testInfo) => {
+  await setup(page);
+  const original = pdf(['Kestrel page one.', 'Kestrel page two.']);
+  await page.getByLabel('Attach files').setInputFiles({ name: 'preview.pdf', mimeType: 'application/pdf', buffer: original });
+  await expect(page.locator('.np-attachment')).toContainText('Open PDF');
+  await page.reload();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.np-attachment summary').click();
+  const viewer = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
+  await expect(viewer.getByRole('img', { name: 'Page 1 of 2' })).toBeVisible();
+  await expect(viewer.getByRole('status')).toHaveCount(0);
+  // Text glyphs make the rendered page visibly different from an empty white canvas.
+  expect(await viewer.locator('canvas').evaluate(canvas => {
+    const data = (canvas as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, (canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height).data;
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 4) if (data[i] < 100 && data[i + 3] > 0) ink++;
+    return ink;
+  })).toBeGreaterThan(20);
+  await page.screenshot({ path: testInfo.outputPath('pdf-preview-desktop.png') });
+  await viewer.getByRole('button', { name: 'Next page' }).click();
+  await expect(viewer.getByRole('img', { name: 'Page 2 of 2' })).toBeVisible();
+  await expect(viewer.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  await viewer.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(viewer).toContainText('125%');
+  const downloading = page.waitForEvent('download');
+  await viewer.getByRole('link', { name: 'Download PDF' }).click();
+  const download = await downloading;
+  const { readFile } = await import('node:fs/promises');
+  expect(await readFile((await download.path())!)).toEqual(original);
+  await page.keyboard.press('Escape');
+  await expect(viewer).toHaveCount(0);
+  await expect(page.locator('.np-attachment summary')).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.np-attachment summary').click();
+  await expect(viewer.getByRole('img', { name: 'Page 1 of 2' })).toBeVisible();
+  const bounds = await viewer.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: testInfo.outputPath('pdf-preview-mobile.png') });
+  await viewer.getByRole('button', { name: 'Remove from context' }).click();
+  await expect(viewer).toHaveCount(0);
+  await expect(page.locator('.np-attachment')).toHaveCount(0);
+});
+
+test('older PDF attachments can recover the original preview without duplicating their context', async ({ page }) => {
+  await setup(page);
+  const original = pdf('Original Kestrel report.');
+  await page.route('**/v1/conversations/*/attachments', async route => {
+    const { pdfBase64: _original, ...body } = route.request().postDataJSON();
+    await route.continue({ postData: JSON.stringify(body) });
+  });
+  await page.getByLabel('Attach files').setInputFiles({ name: 'older.pdf', mimeType: 'application/pdf', buffer: original });
+  await expect(page.locator('.np-attachment')).toHaveCount(1);
+  await page.reload();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.locator('.np-attachment summary').click();
+  const viewer = page.getByRole('dialog', { name: 'older.pdf', exact: true });
+  await expect(viewer).toContainText('saved only extracted text');
+  await viewer.getByLabel('Choose original PDF', { exact: true }).setInputFiles({ name: 'other.pdf', mimeType: 'application/pdf', buffer: pdf('Wrong file') });
+  await expect(viewer.getByRole('alert')).toContainText('does not match');
+  await viewer.getByLabel('Choose original PDF', { exact: true }).setInputFiles({ name: 'older.pdf', mimeType: 'application/pdf', buffer: original });
+  await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  await expect(page.locator('.np-attachment')).toHaveCount(1);
+  await page.locator('.np-attachment summary').click();
+  await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
 });
 
 test('OpenDocument spreadsheets and slides, HTML, RTF, and code reach the model as text', async ({ page }) => {

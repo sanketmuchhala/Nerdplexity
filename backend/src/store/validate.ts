@@ -24,6 +24,13 @@ export const message = z.object({
 });
 export type MessageInput = z.infer<typeof message>;
 
+export const pdfBase64 = z.string().max(26_666_668).refine(value => {
+  if (!value || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return false;
+  const bytes = Buffer.from(value, 'base64');
+  return bytes.length <= 20_000_000 && bytes.toString('base64') === value && bytes.subarray(0, 1024).includes(Buffer.from('%PDF-'));
+}, 'Choose a PDF smaller than 20 MB.');
+export const pdfSource = z.object({ pdfBase64 });
+
 export const attachment = z.object({
   id,
   name: text(500),
@@ -31,8 +38,9 @@ export const attachment = z.object({
   size: z.number().int().min(0),
   content: text(20_000_000),
   kind: z.enum(['text', 'image']),
+  pdfBase64: pdfBase64.optional(),
   createdAt: time,
-});
+}).refine(file => !file.pdfBase64 || file.kind === 'text', 'Only document attachments can have a PDF original.');
 export type AttachmentInput = z.infer<typeof attachment>;
 
 /** Conversation fields with their own columns; anything else is kept in `extra`. */

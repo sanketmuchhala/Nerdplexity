@@ -49,6 +49,8 @@ import { autoWebSearch } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
+import { PdfPreview } from './PdfPreview';
+import * as store from '../lib/store';
 
 const RUN_STATUS_LABEL = {
   canceled: 'Stopped · partial answer',
@@ -110,6 +112,7 @@ export function ChatWorkspace({
   const branchDraft = useRef<string | null>(null);
   const attachmentInput = useRef<HTMLInputElement>(null);
   const [readingAttachments, setReadingAttachments] = useState(false);
+  const [previewPdfId, setPreviewPdfId] = useState<string | null>(null);
   const discovered = ref ? latestResult(catalog[ref.connectionId]) : undefined;
   const descriptor = discovered?.ok
     ? discovered.models.find((m) => m.id === model)
@@ -298,13 +301,12 @@ export function ChatWorkspace({
               className="np-icon-button"
               aria-label="Export thread"
               title="Export thread"
-              onClick={() => {
-                if (conversation)
-                  exportText(
-                    'nerdplexity-thread.json',
-                    exportConversation(conversation),
-                    'application/json',
-                  );
+              onClick={async () => {
+                if (!conversation) return;
+                try {
+                  const exported = await store.conversations.export(conversation.id);
+                  exportText('nerdplexity-thread.json', exportConversation(exported), 'application/json');
+                } catch (error) { setActionError(`Unable to export this thread. ${(error as Error).message}`); }
               }}
             >
               <Download size={16} />
@@ -772,12 +774,14 @@ export function ChatWorkspace({
         )}
         {!!conversation?.attachments?.length && (
           <div className="np-attachments" aria-label="Thread attachments">
-            {conversation.attachments.map((file) => (
+            {conversation.attachments.map((file) => {
+              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
+              return (
               <details key={file.id} className="np-attachment">
-                <summary>
+                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
                   {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
                   <span>{file.name}</span>
-                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · inspect</small>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
                 </summary>
                 <div>
                   {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
@@ -786,9 +790,14 @@ export function ChatWorkspace({
                   </button>
                 </div>
               </details>
-            ))}
+            ); })}
           </div>
         )}
+        {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
+          <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
+            useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
+          }} />
+        ))}
         <form
           className="np-composer"
           onSubmit={(e) => {

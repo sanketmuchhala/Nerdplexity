@@ -427,6 +427,19 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-attachment > div { padding: 0 9px 9px; }
 .np-attachment pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-block: 1px solid var(--np-line); padding: 8px 0; margin-bottom: 8px; color: var(--np-muted); }
 .np-attachment-image { display: block; max-width: 100%; max-height: 220px; object-fit: contain; margin: 2px auto 9px; border-radius: 5px; }
+.np-dialog.np-pdf-dialog { width: min(1100px, calc(100% - 24px)); }
+.np-pdf-dialog h2 { overflow-wrap: anywhere; }
+.np-pdf-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; font-size: 12px; }
+.np-pdf-toolbar a { margin-left: auto; }
+.np-pdf-viewport { overflow: auto; max-height: 65dvh; min-height: 120px; background: #292b30; border-radius: 8px; padding: 16px; }
+.np-pdf-viewport canvas { display: block; margin: auto; background: white; box-shadow: 0 2px 12px #0005; }
+.np-pdf-text { margin-top: 14px; font-size: 12px; }
+.np-pdf-text summary { cursor: pointer; padding: 8px 0; }
+.np-pdf-text pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-pdf-restore { padding: 12px 0; font-size: 13px; line-height: 1.6; }
+.np-pdf-restore label { position: relative; margin-top: 12px; }
+.np-pdf-restore input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.np-pdf-restore label:focus-within { outline: 2px solid var(--np-accent); outline-offset: 3px; }
 .np-close-nav { display: none; }
 .np-runtime-summary > div { min-width: 0; }
 .np-runtime-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

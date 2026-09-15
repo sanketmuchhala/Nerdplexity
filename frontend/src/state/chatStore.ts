@@ -239,7 +239,8 @@ const useChat = create<ChatStore>((set, get) => ({
   addAttachment: async (conversationId, attachment) => {
     const conversation = get().conversations.find(c => c.id === conversationId);
     if (!conversation) throw new Error('Create a thread before attaching a file.');
-    const updated = { ...conversation, attachments: [...(conversation.attachments ?? []), attachment], updatedAt: Date.now() };
+    const { pdfBase64, ...metadata } = attachment;
+    const updated = { ...conversation, attachments: [...(conversation.attachments ?? []), { ...metadata, ...(pdfBase64 ? { hasPdf: true } : {}) }], updatedAt: Date.now() };
     await store.conversations.addAttachment(conversationId, attachment);
     set(state => ({ conversations: state.conversations.map(c => c.id === conversationId ? updated : c) }));
   },
