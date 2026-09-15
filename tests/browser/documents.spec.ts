@@ -1,6 +1,9 @@
 import { createRequire } from 'node:module';
 import { test, expect, type Page } from './fixtures';
 
+// Full Chromium includes the native PDF viewer; the default headless shell does not.
+test.use({ channel: process.env.PLAYWRIGHT_CHANNEL || 'chromium' });
+
 const { zipSync, strToU8 } = createRequire(new URL('../../frontend/package.json', import.meta.url))('fflate');
 const fake = `http://127.0.0.1:${Number(process.env.FAKE_PROVIDER_PORT) || 5299}`;
 const zip = (files: Record<string, string>) => Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([name, content]) => [name, strToU8(content)]))));
