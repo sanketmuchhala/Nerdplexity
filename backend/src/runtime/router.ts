@@ -68,7 +68,7 @@ export function parameterBillions(id: string): number | undefined {
 }
 
 /** Routers that pick a model themselves; kept as the last resort because their choice cannot be ranked. */
-const isMetaRouter = (id: string) => /^openrouter\/(free|auto)$/.test(id);
+export const isMetaRouter = (id: string) => /^openrouter\/(free|auto)$/.test(id);
 
 // ---------------------------------------------------------------------------
 // Health: what recent runs on this server showed about each model and account.

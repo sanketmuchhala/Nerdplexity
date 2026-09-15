@@ -198,6 +198,21 @@ describe('Free Agent runs', () => {
     expect(tools.calls[0].body.tools?.[0]?.function?.name).toBe('calculator');
   });
 
+  it("assigns work only to models the Free Router can rank, never to OpenRouter's own router", async () => {
+    const withMeta = [candidate('openrouter/free'), ...three()];
+    const { fn, calls } = fakeModels((_model, role) => role === 'writer' ? ok('Final.') : ok('Draft.'));
+    await runAgent(withMeta, user('Solve 12 * 7'), fn);
+    expect(calls.map(c => c.model)).not.toContain('openrouter/free');
+
+    // With one real model and openrouter/free, there is nothing to combine: the Free Router answers,
+    // with openrouter/free as its last resort only.
+    const lonely = fakeModels(model => model === 'openrouter/free' ? ok('From the provider router.') : fail(503));
+    const { final, text } = await runAgent([candidate('openrouter/free'), candidate('solo-70b')], user('Solve 12 * 7'), lonely.fn);
+    expect(final('strategy')).toMatchObject({ mode: 'direct' });
+    expect(lonely.calls.map(c => c.model)).toEqual(['solo-70b', 'openrouter/free']);
+    expect(text).toBe('From the provider router.');
+  });
+
   it('accepts the agent strategy in a run request', () => {
     const run = validateRunRequest({
       idempotencyKey: 'agent-run-1', messages: user('Hi'),

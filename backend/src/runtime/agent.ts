@@ -4,7 +4,7 @@ import { withWebResults } from './autoSearch.js';
 import { enqueueLocal } from '../queue/localQueue.js';
 import type { RunContext, RunExecutor } from './runs.js';
 import {
-  AttemptContext, BenchIndex, noneLeft, profileTask, rankCandidates, RankedCandidate, RouteCandidate, RoutedRun,
+  AttemptContext, BenchIndex, isMetaRouter, noneLeft, profileTask, rankCandidates, RankedCandidate, RouteCandidate, RoutedRun,
   RouterDeps, RouterHealth, TASK_LABEL, TaskProfile, tryInOrder,
 } from './router.js';
 
@@ -178,6 +178,13 @@ const sumUsage = (usages: (Usage | undefined)[]): Usage | undefined => {
 
 const describe = (entry: RankedCandidate) => entry.why.length ? entry.why.join(', ') : 'next in the ranking';
 
+/**
+ * The models the agent assigns work to: the Free Router's ranking without provider-side routers
+ * (openrouter/free, openrouter/auto), whose actual model is unknown and cannot be ranked. They stay
+ * in the writer's list, last, as the Free Router's final fallback.
+ */
+const ranked = (list: RankedCandidate[]) => list.filter(entry => !isMetaRouter(entry.candidate.model));
+
 interface Draft { entry: RankedCandidate; text: string; task?: string }
 
 export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
@@ -188,8 +195,9 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const task = profileTask(messages, run.tools, run.request.maxTokens);
     const text = lastUserText(messages);
     const table = specialists(run.candidates, task, health, run.owner, bench);
-    const ranked = table[task.kind];
-    if (!ranked.length) throw noneLeft(rankCandidates(run.candidates, task, health, run.owner, bench), 0, health.now());
+    const all = table[task.kind];
+    if (!all.length) throw noneLeft(rankCandidates(run.candidates, task, health, run.owner, bench), 0, health.now());
+    const own = ranked(all);
 
     let calls = 0;
     const usages: (Usage | undefined)[] = [];
@@ -226,14 +234,15 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       }
     };
 
-    let { mode, reason } = chooseStrategy(text, task, ranked.length);
-    const writer = ranked[0];
+    let { mode, reason } = chooseStrategy(text, task, own.length);
+    const writer = own[0] ?? all[0];
     let drafts: Draft[] = [];
 
     if (mode === 'plan') {
-      const planner = table.extraction[0] ?? writer;
+      const planners = ranked(table.extraction);
+      const planner = planners[0] ?? writer;
       step({ id: 'strategy', role: 'strategy', status: 'done', mode, reason });
-      const plan = await runStep('planner', 'planner', [planner, ...table.extraction.filter(entry => entry !== planner)], {
+      const plan = await runStep('planner', 'planner', [planner, ...planners.filter(entry => entry !== planner)], {
         messages: [{ role: 'system', content: PLANNER_PROMPT }, { role: 'user', content: text }],
         request: { ...run.request, maxTokens: AGENT_LIMITS.plannerTokens, temperature: 0 },
       });
@@ -242,7 +251,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
         const budget = Math.max(0, AGENT_LIMITS.calls - calls - 1);
         const used = new Set<string>();
         const assigned = parts.slice(0, Math.max(1, budget)).map(part => {
-          const list = table[part.kind].length ? table[part.kind] : ranked;
+          const list = ranked(table[part.kind]).length ? ranked(table[part.kind]) : own;
           const pick = list.find(entry => !used.has(`${entry.candidate.connectionId}\n${entry.candidate.model}`)) ?? list[0];
           used.add(`${pick.candidate.connectionId}\n${pick.candidate.model}`);
           return { part, list: [pick, ...list.filter(entry => entry !== pick)] };
@@ -261,10 +270,10 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
 
     if (mode === 'ensemble') {
       step({ id: 'strategy', role: 'strategy', status: 'done', mode, reason });
-      const picks = pickDrafters(ranked, writer, AGENT_LIMITS.drafters);
+      const picks = pickDrafters(own, writer, AGENT_LIMITS.drafters);
       const spare = Math.max(1, AGENT_LIMITS.calls - calls - 1 - picks.length);
       const answers = await Promise.all(picks.map((pick, i) => runStep(`draft-${i + 1}`, 'drafter',
-        [pick, ...ranked.filter(entry => entry !== writer && !picks.includes(entry))],
+        [pick, ...own.filter(entry => entry !== writer && !picks.includes(entry))],
         { maxAttempts: i === 0 ? spare : 1, request: { ...run.request, maxTokens: AGENT_LIMITS.draftTokens } })));
       drafts = answers.filter((answer): answer is Draft => !!answer);
     }

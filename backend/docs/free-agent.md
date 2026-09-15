@@ -38,7 +38,9 @@ Code: `backend/src/runtime/agent.ts` (server), `frontend/src/workspace/AgentActi
 | Requests per message | 1 normally, up to 4 on failures | 1 for simple messages, usually 3–4, never more than 5 | 1 |
 | In the model picker | **Free Router** (the default) | **Free Agent** | An ordinary model |
 
-The Free Agent is built on the Free Router: it uses the same free-model pool, the same ranking, the same health and cooldowns, and the same fallback rules for every model it asks. Read the Free Router page for those; this page covers what the agent adds.
+The Free Agent is built on the Free Router: it uses the same free-model pool, the same ranking, the same health and cooldowns, and the same fallback rules (`tryInOrder`) for every model it asks. Read the Free Router page for those; this page covers what the agent adds.
+
+It assigns work only to models the Free Router can rank. OpenRouter's own routers (`openrouter/free`, `openrouter/auto`) pick an unknown model on OpenRouter's side, so they are never chosen as a drafter, specialist, or planner, and they do not count toward the two models an ensemble needs. They stay where the Free Router keeps them: last in the writer's list, used only if every other model fails.
 
 ## 2. Using it
 
