@@ -103,6 +103,10 @@ flowchart TD
     RunRoutes --> Destinations[runtime/destinations.ts]
     RunRoutes --> Registry[runtime/runs.ts]
     RunRoutes --> Router[runtime/router.ts]
+    RunRoutes --> Agent[runtime/agent.ts]
+    Agent --> Router
+    App --> AgentRoutes[routes/agent.ts]
+    AgentRoutes --> Agent
     Router --> Adapters
     Router --> ToolLoop
     App --> BenchRoutes[routes/bench.ts]

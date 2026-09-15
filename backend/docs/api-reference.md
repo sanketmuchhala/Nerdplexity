@@ -292,6 +292,28 @@ Every connection passes the same destination policy as `target`. The web app lis
 
 Rate limits put a model (or, for account-wide limits such as OpenRouter's free-model quota and bad keys, every model on that account) on cooldown until the provider's reset. Health is kept in memory per user, provider, address, and key hash.
 
+### Free Agent example
+
+`"strategy": "agent"` runs the Free Agent on the same route ([Free Agent](free-agent.md), [architecture](free-agent-architecture.md)). The optional `route.agent` carries the user's settings; every field is optional, and any choice that does not name a model in `route.models` is dropped rather than rejected:
+
+```json
+"route": {
+  "strategy": "agent",
+  "connections": [ … ],
+  "models": [ … ],
+  "agent": {
+    "behavior": "auto | quick | thorough",
+    "drafts": 2,
+    "writer": { "connectionId": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free" },
+    "planner": { "connectionId": "openrouter", "model": "qwen/qwen3-32b:free" },
+    "drafters": [{ "connectionId": "openrouter", "model": "google/gemma-3-27b-it:free" }],
+    "specialists": { "code": { "connectionId": "openrouter", "model": "qwen/qwen3-coder:free" } }
+  }
+}
+```
+
+The run then reports `agent` step events and ends with `completed.agent` (section 6).
+
 ## 6. Follow and replay events
 
 ### `GET /v1/runs/:id/events?after=N`

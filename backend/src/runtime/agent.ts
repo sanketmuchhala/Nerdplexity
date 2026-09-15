@@ -293,6 +293,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     let { mode, reason } = chooseStrategy(text, task, own.length, config.behavior);
     // The writer the drafts are built around: the user's choice, or the top model for this kind of task.
     const writerChoice = withChoice(own, config.writer, 'writer');
+    if (writerChoice.note) notes.push(writerChoice.note);
     const writer = writerChoice.list[0] ?? all[0];
     let drafts: Draft[] = [];
 
@@ -331,7 +332,6 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     }
 
     if (mode === 'ensemble') {
-      if (writerChoice.note) notes.push(writerChoice.note);
       strategyStep();
       const count = config.drafts ?? AGENT_LIMITS.drafters;
       // The user's drafters first, in their order, then the ranking fills any remaining places.
@@ -341,12 +341,14 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       const picks = [...chosen, ...pickDrafters(own.filter(entry => !chosen.some(pick => isEntry(pick, entry))), writer, count - chosen.length)]
         .map(entry => chosen.some(pick => isEntry(pick, entry)) ? { ...entry, why: ['your choice', ...entry.why] } : entry);
       const spares = own.filter(entry => !isEntry(entry, writer) && !picks.some(pick => isEntry(pick, entry)));
-      const answers = await Promise.all(picks.map((pick, i) => runStep(`draft-${i + 1}`, 'drafter', [pick, ...spares],
+      // Each drafter starts its spares at a different place, so two failed drafters do not both move to the same model.
+      const sparesFor = (i: number) => [...spares.slice(i % (spares.length || 1)), ...spares.slice(0, i % (spares.length || 1))];
+      const answers = await Promise.all(picks.map((pick, i) => runStep(`draft-${i + 1}`, 'drafter', [pick, ...sparesFor(i)],
         { maxAttempts: AGENT_LIMITS.attempts.drafter, request: { ...run.request, maxTokens: AGENT_LIMITS.draftTokens } })));
       drafts = answers.filter((answer): answer is Draft => !!answer);
     }
 
-    if (mode === 'direct') { if (writerChoice.note) notes.push(writerChoice.note); strategyStep(); }
+    if (mode === 'direct') strategyStep();
 
     // The writer: the strongest model streams the final answer, with the drafts or part answers as input.
     const note = mode === 'plan'

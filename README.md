@@ -105,7 +105,7 @@ Provider notes: OpenRouter free models have per-minute and per-day limits, and a
 
 **Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
 
-Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md), and [Bench](backend/docs/bench.md).
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md) and its [architecture](backend/docs/free-agent-architecture.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 

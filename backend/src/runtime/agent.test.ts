@@ -133,6 +133,17 @@ describe('Free Agent runs', () => {
     expect(none.calls.at(-1)!.body.messages.some((m: any) => m.role === 'system')).toBe(false);
   });
 
+  it('moves two failed drafters to different spare models', async () => {
+    const five = [...three(), candidate('mistralai/mistral-small-24b:free'), candidate('deepseek/deepseek-chat-v3:free')];
+    let drafts = 0;
+    const { fn } = fakeModels((model, role) => role === 'writer' ? ok('Final.') : role === 'draft' && ++drafts <= 2 ? fail(503) : ok(`Draft from ${model}.`));
+    const { final } = await runAgent(five, user('Solve 12 * 7'), fn);
+    const [first, second] = [final('draft-1'), final('draft-2')];
+    expect(first).toMatchObject({ status: 'done' });
+    expect(second).toMatchObject({ status: 'done' });
+    expect(first!.model).not.toBe(second!.model);
+  });
+
   it('falls back to the next writer before any output, and shows a draft when no writer can answer', async () => {
     const next = fakeModels((model, role) => role === 'writer' && model.startsWith('meta') ? fail(429) : role === 'writer' ? ok('Second writer.') : ok('Draft.'));
     const fallback = await runAgent(three(), user('Solve 12 * 7'), next.fn);
@@ -269,6 +280,15 @@ describe('Free Agent runs', () => {
       expect(result.agent?.writer.model).toBe('meta-llama/llama-3.3-70b-instruct:free');
       const strategy = events.find(e => e.type === 'agent' && e.id === 'strategy');
       expect(strategy).toMatchObject({ reason: expect.stringContaining('Your writer, mistralai/mistral-7b:free, cannot take this message right now') });
+
+      // The same note in plan mode, where the strategy step is reported before the planner runs.
+      const planned = fakeModels((model, role) => role === 'planner'
+        ? ok('{"parts":[{"task":"Write the date parser","kind":"code"},{"task":"Write the email","kind":"writing"}]}')
+        : ok(`${role} by ${model}.`));
+      const planEvents: ProgressPayload[] = [];
+      const plan = agentExecutor({ owner: 'u', candidates: models(), request: {}, messages: user('Write a Python function to parse dates. Then write a short email announcing it to the team.'), tools: [], documents: [], agent: { writer: or('mistralai/mistral-7b:free') } }, { health, fetchImpl: planned.fn, enqueue: task => task() });
+      expect((await plan({ signal: new AbortController().signal, emit: e => planEvents.push(e) })).agent?.mode).toBe('plan');
+      expect(planEvents.find(e => e.type === 'agent' && e.id === 'strategy')).toMatchObject({ reason: expect.stringContaining('Your writer, mistralai/mistral-7b:free, cannot take this message right now') });
     });
 
     it('keeps only well-formed settings that name models in the free pool', () => {

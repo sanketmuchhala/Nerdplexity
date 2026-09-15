@@ -4,7 +4,7 @@
 
 The Free Agent is Nerdplexity's multi-model assistant and the default model. The [Free Router](free-router.md) sends each message to the single best free model; the Free Agent can also put several different free models to work on one message. It knows which of your models is best at what, asks the right ones, and has the strongest check their work and write one answer. You can change how it behaves and which model does each part (section 9).
 
-Code: `backend/src/runtime/agent.ts` (server), `frontend/src/workspace/AgentActivity.tsx` (the steps panel), `frontend/src/workspace/AgentSettings.tsx` (the settings), `frontend/src/lib/router.ts` (how it is chosen).
+Code: `backend/src/runtime/agent.ts` (server), `frontend/src/workspace/AgentActivity.tsx` (the steps panel), `frontend/src/workspace/AgentSettings.tsx` (the settings), `frontend/src/lib/router.ts` (how it is chosen). How the pieces fit together, from the browser to the providers, is in [Free Agent architecture](free-agent-architecture.md).
 
 ## Contents
 
@@ -147,7 +147,7 @@ Examples, computed by the code with three usable models and the Automatic behavi
 
 1. **Writer**: your chosen final-answer model, or the top-ranked model for the message's kind.
 2. **Drafters**: as many as **Drafts per answer** (2 by default; 1 to 3), never the writer. Drafters you chose come first, in their order; the ranking fills the remaining places (`pickDrafters`), choosing models from **model families** different from the writer's and each other's when possible, so their mistakes are less likely to be the same. A family is the part of the model ID before `/` (`meta-llama/llama-3.3-70b` → `meta-llama`), or the leading word when there is no `/` (`llama-3.1-8b-instant` → `llama`, `gemma-4-31B-it` → `gemma`). When there are not enough other families, models from the same family fill the places.
-3. The drafters run **in parallel**, each on the full conversation (including automatic web results, when there are any), with up to 1,500 output tokens. A drafter whose model fails before answering moves to another model that is neither the writer nor another drafter's first choice, up to 2 models per drafter (section 9).
+3. The drafters run **in parallel**, each on the full conversation (including automatic web results, when there are any), with up to 1,500 output tokens. A drafter whose model fails before answering moves to another model that is neither the writer nor another drafter's first choice, up to 2 models per drafter (section 9). Each drafter walks the spare models from a different starting place, so two drafters that fail at once do not both move to the same model.
 4. Each finished draft is shown as a step, shortened to 6,000 characters.
 5. The writer receives the conversation plus this instruction (after any leading system messages), followed by the drafts:
 
@@ -228,7 +228,7 @@ A part whose specialist failed is passed to the writer marked "no answer", and t
 | Draft 1 … Draft N | Automatic, or any free model | Drafters, in order. Automatic places are filled by the ranking. A drafter that is also the writer is skipped. |
 | Specialists for parts | Automatic, or any free model, for each of code, math, reasoning, writing, structured output, general | Which model answers a part of that kind in plan mode. |
 
-Each **Automatic** option says what the ranking would pick now (from `POST /v1/agent/specialists`). **Reset to automatic** clears everything. The settings are saved in the browser with the other settings (`settings.agent`) and sent with each Free Agent run as `route.agent` (section 12).
+Each **Automatic** option says what the ranking would pick now (from `POST /v1/agent/specialists`). **Reset to automatic** clears everything. The settings are saved with your other settings on your Nerdplexity server (`settings.agent`, one row per user; on your computer, the local database), and the web app sends them with each Free Agent run as `route.agent` (section 12).
 
 A chosen model is used only when it can take the message. If it is cooling down after failures, cannot take images, tools, or the context the message needs, or was removed, the ranking chooses for that message, and the strategy step says so ("Your writer, *model*, cannot take this message right now, so the ranking chose instead."). The server drops any choice that is not in the free pool it received, so a stale choice never blocks a message. A chosen model that fails before answering is replaced by the next model in the role's list, as for any step.
 
@@ -368,7 +368,7 @@ The ranking assumes a text-only request of about 2,000 tokens without tools, and
 
 - **Keyword-based decisions.** Strategy and task kind come from wording. A cover letter that mentions "SQL" counts as code; "and in Rust?" after a code question is general and answered directly.
 - **More requests and more time.** An ensemble answer takes about one draft's time plus the writer's, and three requests with the default two drafts. Drafts are not streamed to the user.
-- **Settings are per browser.** They are saved with the other settings, not per thread, and apply to every Free Agent message.
+- **Settings are per user, not per thread.** They apply to every Free Agent message in every thread.
 - **The writer is only as good as the strongest free model you have.** It can combine and correct drafts, but it cannot know what none of the models know.
 - **No tools in ensemble or plan.** Tool runs use direct mode.
 - **Images disable plan mode.** The planner and specialists receive text; images go to drafters and the writer.

@@ -65,7 +65,6 @@ const lastWriter = (steps: AgentStep[] | undefined) => {
   return writer ? { connectionId: writer.connectionId!, model: writer.model! } : undefined;
 };
 
-/** The status line while a Free Agent step runs. */
 /** The status line while a Free Agent step runs. Chat shows what is happening, not model names. */
 function agentPhase(step: AgentStep) {
   switch (step.role) {
