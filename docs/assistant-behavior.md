@@ -32,7 +32,7 @@ If a provider stops at its output limit, the partial text and finish reason are 
 
 Answers and displayable reasoning use `react-markdown` with CommonMark and `remark-gfm` for tables, nested lists, task lists, autolinks, and strikethrough. Code fences use the existing copyable code-block component.
 
-Raw HTML is ignored and the syntax tree is passed through `rehype-sanitize`. Links are limited to HTTP(S), email, or same-document anchors. Model-authored Markdown images are rendered as alt-text placeholders, so an answer cannot silently load a remote tracking image. Incomplete Markdown remains renderable while streaming.
+Raw HTML is ignored and the syntax tree is passed through `rehype-sanitize`. Code blocks are syntax-highlighted with Prism, which escapes the code before it is inserted as markup; `frontend/src/components/Message.test.tsx` checks that HTML in a code block stays text. Links are limited to HTTP(S), email, or same-document anchors. Model-authored Markdown images are rendered as alt-text placeholders, so an answer cannot silently load a remote tracking image. Incomplete Markdown remains renderable while streaming.
 
 ## Not implemented yet
 

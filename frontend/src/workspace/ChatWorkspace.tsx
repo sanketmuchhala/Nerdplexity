@@ -9,7 +9,6 @@ import {
   Download,
   FileText,
   GitBranch,
-  Globe,
   Lightbulb,
   Paperclip,
   Pencil,
@@ -25,8 +24,10 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
-import { isRouter, ROUTER_NAME } from '../lib/router';
+import { AGENT_NAME, isAgent, isRouter, ROUTER_NAME, routerName } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
+import { AgentActivity } from './AgentActivity';
+import { RouterMark } from './RouterMark';
 import useConnections, {
   currentRouterPool,
   isLocal,
@@ -44,7 +45,7 @@ import {
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
-import { hasSearchKey } from '../lib/searchKey';
+import { autoWebSearch } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -60,13 +61,11 @@ export function ChatWorkspace({
   documents,
   onModels,
   onDocuments,
-  onConnections,
 }: {
   run: ReturnType<typeof useRun>;
   documents: WorkspaceDocument[];
   onModels: () => void;
   onDocuments: () => void;
-  onConnections: () => void;
 }) {
   const {
     activeConversation,
@@ -128,6 +127,8 @@ export function ChatWorkspace({
     };
   };
   const enabledTools = configured.tools;
+  // Searches run on their own when a message needs current information; there is no Web button.
+  const webAuto = autoWebSearch(settings?.webSearch);
   const documentsOn = enabledTools.includes('documents');
   const preview = buildContext(
     conversation?.messages ?? [],
@@ -168,8 +169,12 @@ export function ChatWorkspace({
     'removed connection';
   // The live answer shows the model being asked: the Free Router's current attempt, or the chosen
   // model, replaced by the concrete model when a provider's own router (openrouter/free) reports it.
+  // For the Free Agent, the live answer is the writer's; drafts show in the steps, not as the answer.
   const asking = [...run.route].reverse().find((step) => step.status === 'trying');
-  const liveRef = routed
+  const writing = [...run.agent].reverse().find((step) => step.role === 'writer' && step.status === 'running' && step.model && step.connectionId);
+  const liveRef = isAgent(ref)
+    ? writing && { connectionId: writing.connectionId!, modelId: writing.model! }
+    : routed
     ? asking && { connectionId: asking.connectionId, modelId: asking.model }
     : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
   const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
@@ -215,9 +220,7 @@ export function ChatWorkspace({
   const toggleTool = async (tool: WorkbenchTool) => {
     // Documents open their panel: the documents are shown even when this model cannot use them.
     if (tool === 'documents') { setShowDocs(true); return; }
-    const turningOn = !enabledTools.includes(tool);
-    if (turningOn && tool === 'web' && !hasSearchKey()) { onConnections(); return; }
-    await setTool(tool, turningOn);
+    await setTool(tool, !enabledTools.includes(tool));
   };
   const branch = async (
     messageId: string,
@@ -261,8 +264,8 @@ export function ChatWorkspace({
           disabled={run.running}
           onClick={() => setShowPicker(true)}
         >
-          <span className="np-model-dot" />
-          <span>{routed ? ROUTER_NAME : model || 'Choose a model'}</span>
+          {routed ? <RouterMark size={16} /> : <span className="np-model-dot" />}
+          <span>{routed ? routerName(ref) : model || 'Choose a model'}</span>
           <span className="np-model-source">
             {routed
               ? `${pool?.models ?? 0} free model${pool?.models === 1 ? '' : 's'}`
@@ -517,11 +520,13 @@ export function ChatWorkspace({
           <div className="np-thread">
             {messages.map((message, index) => (
               <Fragment key={message.id}>
-                {message.role === 'assistant' && message.metadata?.route && (
-                  <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />
-                )}
-                {message.role === 'assistant' && (message.metadata?.tools || message.metadata?.activities) && (
-                  <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />
+                {message.role === 'assistant' && (message.metadata?.route || message.metadata?.agent || message.metadata?.tools || message.metadata?.activities) && (
+                  // Above a saved answer, the panels sit in the transcript column.
+                  <div className="np-inline-tools">
+                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} />}
+                    {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
+                  </div>
                 )}
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
@@ -539,7 +544,7 @@ export function ChatWorkspace({
                       {[
                         message.provenance &&
                           `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
-                        message.metadata?.route && `via ${ROUTER_NAME}`,
+                        message.metadata?.agent ? `via ${AGENT_NAME}` : message.metadata?.route && `via ${ROUTER_NAME}`,
                         message.runStatus &&
                           RUN_STATUS_LABEL[message.runStatus],
                         (message.finishReason === 'length' ||
@@ -626,14 +631,12 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
-            {ownRun && !saved && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-            {ownRun && !saved && <ToolActivity tools={run.tools} activities={run.activities} />}
-            {ownRun && !saved && (run.partial || run.reasoning) && (
+            {ownRun && !saved && (run.running || run.partial || run.reasoning || run.route?.length > 0 || run.agent?.length > 0 || run.tools?.length > 0 || run.activities?.length > 0) && (
               <Message
                 message={{
                   id: 'stream',
                   role: 'assistant',
-                  content: run.partial,
+                  content: run.partial || '',
                   timestamp: Date.now(),
                   metadata: run.reasoning
                     ? { reasoning: run.reasoning }
@@ -641,17 +644,12 @@ export function ChatWorkspace({
                 }}
                 model={liveModel}
                 streaming={run.running}
-              />
-            )}
-            {ownRun && run.running && (
-              <div className="np-live-status" role="status">
-                <span className="np-live-dots">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                {run.phase}
-              </div>
+                status={run.running ? run.phase : undefined}
+              >
+                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} />}
+                {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
+              </Message>
             )}
             {ownRun && !run.running && run.phase && (
               <div className="np-live-status">{run.phase}</div>
@@ -875,7 +873,6 @@ export function ChatWorkspace({
               {([
                 ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
                 ['documents', Workflow, 'Documents', 'Open your Workspace documents and choose whether this thread may search them'],
-                ['web', Globe, 'Web', 'Lets the model search the web with Exa using your key; queries are sent to Exa'],
               ] as const).map(([tool, Icon, name, hint]) => (
                 <button
                   key={tool}
@@ -929,20 +926,22 @@ export function ChatWorkspace({
         <div className="np-composer-footnote">
           <span>
             {[
-              enabledTools.length > 0 &&
+              (enabledTools.includes('calculator') || documentsOn) &&
                 `Tools: ${[
                   enabledTools.includes('calculator') && 'Calculator',
                   documentsOn && `Documents (${documents.length}, search and read only)`,
-                  enabledTools.includes('web') && 'Web (search queries go to Exa)',
                 ]
                   .filter(Boolean)
                   .join(', ')}`,
+              webAuto && 'Web search is automatic (Exa)',
               routed
-                ? `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
+                ? isAgent(ref)
+                  ? `The Free Agent may ask several of your ${pool?.models ?? 0} free models per message (at most 5 requests) and writes one checked answer; prompts go only to the models it asks.`
+                  : `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'
                 : local
-                  ? enabledTools.includes('web') ? 'The model runs on this machine.' : 'Requests stay on this machine.'
+                  ? webAuto ? 'The model runs on this machine.' : 'Requests stay on this machine.'
                   : `Prompts are sent to ${connection.name}${hasKey(connection.id) ? ' with your API key' : ''}.`,
             ]
               .filter(Boolean)

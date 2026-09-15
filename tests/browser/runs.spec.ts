@@ -216,23 +216,34 @@ test('reasoning reported by the model is shown separately from the answer', asyn
 }) => {
   await useFakeModel(page, 'reasoning-model');
   await send(page, prompt('reasoning'));
+  // Reasoning stays folded while it streams; opening it shows the live text.
   const live = page.getByRole('region', { name: 'Thinking live' });
   await expect(live).toBeVisible();
+  // The drawer heading reads "Thinking..." plus the current status, so it has no fixed name.
+  const liveToggle = live.locator('summary');
+  await expect(liveToggle).toHaveAttribute('aria-expanded', 'false');
+  // The streaming bubble animates, so the toggle never holds still long enough for a normal click.
+  await liveToggle.click({ force: true });
   await expect(live).toContainText('Analysis');
   await expect(page.getByText('Reasoned answer.')).toHaveCount(0);
   await expect(page.getByText('Reasoned answer.')).toBeVisible();
+  // A finished thought process starts collapsed (reasoning is optional to read) and opens on request.
   const complete = page.getByRole('region', { name: 'Thought process' });
-  await expect(complete.getByRole('button', { name: /Thought process/ })).toHaveAttribute('aria-expanded', 'true');
+  const toggle = complete.locator('summary');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(complete.locator('.np-reasoning-body')).not.toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(complete).toContainText('Considering the question.');
   await expect(complete).toContainText('Checking the conclusion.');
   await expect(complete.locator('.np-reasoning-body')).toHaveCSS('max-height', 'none');
   expect(await complete.evaluate(node => {
-    const answer = node.parentElement?.querySelector('.np-answer-content');
+    const answer = document.querySelector('.np-answer-content');
     return !!answer && Boolean(node.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING);
   })).toBe(true);
 
-  await complete.getByRole('button', { name: /Thought process/ }).click();
-  await expect(complete.locator('.np-reasoning-body')).toHaveCount(0);
-  await complete.getByRole('button', { name: /Thought process/ }).click();
+  await complete.locator('summary').click();
+  await expect(complete.locator('.np-reasoning-body')).not.toBeVisible();
+  await complete.locator('summary').click();
   await expect(complete).toContainText('Checking the conclusion.');
 });

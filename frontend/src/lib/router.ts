@@ -7,7 +7,34 @@ export const ROUTER_MODEL_ID = 'free';
 export const ROUTER_NAME = 'Free Router';
 export const ROUTER_REF: ModelRef = { connectionId: ROUTER_CONNECTION_ID, modelId: ROUTER_MODEL_ID };
 
-export const isRouter = (ref?: { connectionId?: string } | null) => ref?.connectionId === ROUTER_CONNECTION_ID;
+/** The Free Agent is chosen the same way, with its own model ID on the router's connection. */
+export const AGENT_MODEL_ID = 'agent';
+export const AGENT_NAME = 'Free Agent';
+export const AGENT_REF: ModelRef = { connectionId: ROUTER_CONNECTION_ID, modelId: AGENT_MODEL_ID };
+
+type Choice = { connectionId?: string; modelId?: string; model?: string } | null | undefined;
+/** The server chooses the model: the Free Router or the Free Agent. */
+export const isRouter = (ref?: Choice) => ref?.connectionId === ROUTER_CONNECTION_ID;
+export const isAgent = (ref?: Choice) => isRouter(ref) && (ref?.modelId ?? ref?.model) === AGENT_MODEL_ID;
+export const routerName = (ref?: Choice) => isAgent(ref) ? AGENT_NAME : ROUTER_NAME;
+export const routeStrategy = (ref?: Choice): 'free' | 'agent' => isAgent(ref) ? 'agent' : 'free';
+
+/** The chat store actions needed to choose a model. */
+interface ChatActions {
+  saveSettings: (patch: { activeModel: ModelRef }) => Promise<void>;
+  activeConversation: () => { id: string; model?: string; messages: unknown[] } | null | undefined;
+  setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
+}
+
+/**
+ * Make the Free Router the chosen model, and the model of the open thread if it is new and empty.
+ * Callers use it only when no model has been chosen, so a person's choice is never replaced.
+ */
+export async function chooseRouterByDefault(chat: ChatActions) {
+  await chat.saveSettings({ activeModel: ROUTER_REF });
+  const conversation = chat.activeConversation();
+  if (conversation && !conversation.model && conversation.messages.length === 0) await chat.setConversationModel(conversation.id, ROUTER_REF);
+}
 
 /** The server's limits on one route. */
 const MAX_CONNECTIONS = 12;

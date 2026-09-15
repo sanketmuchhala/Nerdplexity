@@ -102,6 +102,13 @@ describe('Bench over HTTP', () => {
     const route = (await user.follow(routed.body.runId)).find(e => e.event.type === 'route')?.event;
     expect(route).toMatchObject({ model: 'good-8b', status: 'trying', reason: expect.stringContaining('passed 3 of 3 Bench math tests') });
 
+    // The specialists view ranks with the same results: the 8B model leads math, the 70B model leads where nothing was measured.
+    const table = (await user.post('/v1/agent/specialists', { route: { connections: connections(), models: [{ connectionId: 'fake', model: 'bad-70b' }, { connectionId: 'fake', model: 'good-8b' }] } })).body.specialists;
+    expect(table.math[0]).toMatchObject({ model: 'good-8b', why: expect.arrayContaining(['passed 3 of 3 Bench math tests']) });
+    expect(table.code[0].model).toBe('bad-70b');
+    expect(Object.keys(table)).toEqual(['code', 'math', 'reasoning', 'writing', 'extraction', 'general']);
+    expect((await user.post('/v1/agent/specialists', { route: { connections: [], models: [] } })).status).toBe(400);
+
     expect((await user.del('/v1/bench/results', { connectionId: 'fake', model: 'bad-70b' })).body).toEqual({ removed: 3 });
     expect(((await user.get('/v1/bench/results')).body as BenchResults).scores.map(s => s.model)).toEqual(['good-8b']);
     expect((await user.del('/v1/bench/results')).body).toEqual({ removed: 3 });

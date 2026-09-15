@@ -454,41 +454,57 @@ test('document tools search, then read, local workspace documents in a multi-ste
   expect(requests[0].messages[0].content).toContain('Launch notes');
 });
 
-test('web search uses the Exa key from Connections, shows safe sources, and keeps the key out of the model request', async ({ page }) => {
+test('web search runs on its own when a message needs current information, shows safe sources, and keeps the key out of the model request', async ({ page }) => {
   const key = 'exa-test-key-000001';
-  await setup(page, 'tool-model');
-  // Without a key, turning on Web leads to Connections instead of sending.
-  await page.getByRole('button', { name: 'Web tool' }).click();
-  await expect(page).toHaveURL(/\/app\/connections$/);
+  const nav = (name: string) => page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name });
+  const exaLog = async () => (await page.request.get(`${fake}/_exa_log`)).json();
+  await setup(page, 'fast-model');
+  // There is no Web button: search is automatic once an Exa key is saved in Connections.
+  await expect(page.getByRole('button', { name: 'Web tool' })).toHaveCount(0);
+  await expect(page.locator('.np-composer-footnote')).not.toContainText('Web search');
+  await nav('Connections').click();
   await page.getByLabel('Exa API key').fill(key);
   await page.getByRole('button', { name: 'Save key' }).click();
   await expect(page.locator('.np-web-search')).toContainText('Key saved for this tab');
   await expect(page.locator('.np-web-search')).toContainText('exa••••0001');
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
-  await page.getByRole('button', { name: 'Web tool' }).click();
-  await expect(page.getByRole('button', { name: 'Web tool' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.np-composer-footnote')).toContainText('Web (search queries go to Exa)');
+  await expect(page.getByRole('checkbox', { name: /Search automatically/ })).toBeChecked();
+  await nav('Chat').click();
+  await expect(page.locator('.np-composer-footnote')).toContainText('Web search is automatic (Exa)');
 
-  const text = unique('Please search the web for news');
+  // A question about something current is searched before the model answers.
+  const text = unique('What is the latest Nerdplexity release?');
   await send(page, text, 1);
   const activity = page.locator('.np-thread .np-tool');
   await expect(activity).toContainText('Searched the web');
-  await expect(activity).toContainText('“nerdplexity release” · 1 result');
-  await expect(page.locator('.np-thread')).toContainText('Found 1 page: Nerdplexity 2.0 released (https://example.com/nerdplexity-2).');
+  await expect(activity).toContainText('· 1 result');
+  await expect(activity).toContainText('Automatic');
   await activity.locator('summary').click();
   await expect(activity).toContainText('Retrieved from the web through Exa');
   const link = activity.getByRole('link', { name: 'Nerdplexity 2.0 released' });
   await expect(link).toHaveAttribute('href', 'https://example.com/nerdplexity-2');
   await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   await expect(activity.getByRole('link')).toHaveCount(1);
-
-  const exa = await (await page.request.get(`${fake}/_exa_log`)).json();
-  expect(exa.at(-1)).toMatchObject({ key, body: { query: 'nerdplexity release', numResults: 5 } });
+  expect((await exaLog()).at(-1)).toMatchObject({ key, body: { query: text, numResults: 5 } });
   const requests = await upstream(page, text);
-  expect(requests[0].tools).toEqual(['web_search']);
+  expect(requests[0].tools).toEqual([]);
+  expect(requests[0].messages.some((m: { role: string; content: string }) => m.role === 'system' && m.content.includes('https://example.com/nerdplexity-2'))).toBe(true);
   expect(JSON.stringify(requests)).not.toContain(key);
-  await page.goto('/app/runs');
-  await page.locator('.np-run-list').getByRole('button', { name: new RegExp(text) }).first().click();
+
+  // A message that does not need the web is not searched.
+  const searches = (await exaLog()).length;
+  await send(page, unique('Tell me a joke about cats'), 2);
+  expect((await exaLog()).length).toBe(searches);
+
+  // Turned off in Connections, nothing is searched.
+  await nav('Connections').click();
+  await page.getByRole('checkbox', { name: /Search automatically/ }).uncheck();
+  await nav('Chat').click();
+  await expect(page.locator('.np-composer-footnote')).not.toContainText('Web search');
+  await send(page, unique('Any news today?'), 3);
+  expect((await exaLog()).length).toBe(searches);
+
+  await nav('Run history').click();
+  await page.locator('.np-run-list').getByRole('button', { name: text }).first().click();
   await page.getByText('Input and settings sent', { exact: true }).click();
   await expect(page.locator('.np-run-detail')).not.toContainText(key);
 });

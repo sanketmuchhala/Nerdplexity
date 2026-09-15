@@ -159,6 +159,23 @@ queued → started → model events → tool(running) → tool(result)
        → model events → ... → completed
 ```
 
+Free Router run ([Free Router](free-router.md)):
+
+```text
+queued → started → route(trying) → [route(failed) → route(trying)]* → [model/status/quota/reasoning/delta/tool]*
+       → completed { route }
+```
+
+A routed run is registered as remote, so it is never queued as a whole; an attempt on a model on this machine waits in the local queue. Fallback happens only before the first delta, reasoning, or tool event of an attempt.
+
+Bench job ([Bench](bench.md)):
+
+```text
+queued → started → [bench(result) | bench(skipped) | status]* → completed
+```
+
+A Bench job uses the same registry with a 3-hour time limit instead of 10 minutes, and is followed and canceled through the same `/v1/runs/:id` routes.
+
 Failure and cancellation replace `completed` as the one terminal event.
 
 ## 6. Replay and reconnection

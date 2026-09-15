@@ -204,6 +204,10 @@ flowchart TD
     OAList --> Descriptors
 ```
 
+### Routers
+
+OpenRouter's `openrouter/free` is an ordinary model on the OpenRouter connection that asks OpenRouter to pick a free model; the adapter reports the model it picked as a `model` event. Nerdplexity's own [Free Router](free-router.md) is different: the server picks among free models on every connection. The Free Router page compares the two.
+
 ### Discovery behavior by provider
 
 | Kind | Extra behavior |

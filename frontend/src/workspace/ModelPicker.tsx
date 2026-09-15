@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Shuffle, Search, Star } from 'lucide-react';
+import { Check, Search, Star } from 'lucide-react';
 import type { ModelDescriptor, ModelRef } from '@app/types';
 import useConnections, {
   currentRouterPool,
@@ -7,7 +7,8 @@ import useConnections, {
   latestResult,
   modelKey,
 } from '../state/connections';
-import { isRouter, ROUTER_NAME, ROUTER_REF } from '../lib/router';
+import { AGENT_NAME, AGENT_REF, isAgent, isRouter, ROUTER_NAME, ROUTER_REF } from '../lib/router';
+import { RouterMark } from './RouterMark';
 import useChat from '../state/chatStore';
 import { WorkbenchDialog } from './WorkbenchDialog';
 
@@ -26,8 +27,11 @@ export function ModelPicker({
   const [error, setError] = useState('');
   const favorites = settings?.favoriteModels ?? [];
   const pool = currentRouterPool(connections, catalog);
-  const showRouter = `${ROUTER_NAME} free auto best`.toLowerCase().includes(query.toLowerCase().trim());
-  const routerActive = isRouter(selected);
+  const search = query.toLowerCase().trim();
+  const showRouter = `${ROUTER_NAME} free auto best`.toLowerCase().includes(search);
+  const showAgent = `${AGENT_NAME} free agent best specialists team`.toLowerCase().includes(search);
+  const routerActive = isRouter(selected) && !isAgent(selected);
+  const agentActive = isAgent(selected);
   const entries = connections
     .filter((c) => c.enabled)
     .flatMap((connection) => {
@@ -100,7 +104,7 @@ export function ModelPicker({
               onClick={() => void choose(ROUTER_REF)}
             >
               <span>
-                <strong><Shuffle size={14} aria-hidden /> {ROUTER_NAME}</strong>
+                <strong><RouterMark size={18} /> {ROUTER_NAME}</strong>
                 <small>
                   {pool.models
                     ? `Picks the best of ${pool.models} free model${pool.models === 1 ? '' : 's'} on ${pool.connections} connection${pool.connections === 1 ? '' : 's'} for each message, and tries the next when one is busy`
@@ -108,6 +112,28 @@ export function ModelPicker({
                 </small>
               </span>
               {routerActive && <Check size={17} />}
+            </button>
+          </div>
+        )}
+        {showAgent && (
+          <div className={`np-picker-row np-picker-router ${agentActive ? 'active' : ''}`}>
+            <button
+              className="np-picker-choice"
+              aria-label={`Use the ${AGENT_NAME}`}
+              aria-pressed={agentActive}
+              onClick={() => void choose(AGENT_REF)}
+            >
+              <span>
+                <strong><RouterMark size={18} /> {AGENT_NAME}</strong>
+                <small>
+                  {pool.models > 1
+                    ? `For harder questions, asks the free models best at each kind of task, then the strongest checks their work and writes one answer. Up to 5 free requests per message`
+                    : pool.models === 1
+                      ? 'Needs two or more free models to combine; with one it answers like the Free Router'
+                      : 'No free models yet: connect OpenRouter with a free key, or a model on this machine'}
+                </small>
+              </span>
+              {agentActive && <Check size={17} />}
             </button>
           </div>
         )}
@@ -162,7 +188,7 @@ export function ModelPicker({
             </div>
           );
         })}
-        {!entries.length && !showRouter && (
+        {!entries.length && !showRouter && !showAgent && (
           <div className="np-empty-panel">
             <h3>No matching models</h3>
             <p>

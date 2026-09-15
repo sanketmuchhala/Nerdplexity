@@ -7,6 +7,8 @@ import type { BackendHealth } from '@app/types';
 import { runsRouter } from './routes/runs.js';
 import { benchRouter } from './routes/bench.js';
 import { benchScores } from './store/bench.js';
+import { agentRouter } from './routes/agent.js';
+import { RouterHealth } from './runtime/router.js';
 import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
 import { errorHandler } from './middleware/errors.js';
@@ -102,7 +104,11 @@ export function createApp(options: AppOptions): NerdplexityApp {
   // Run engine: start, stream ordered events with replay, cancel. Hosted servers require an account.
   // The Free Router ranks models with the user's Bench results.
   const registry = options.registry ?? new RunRegistry();
-  app.use('/v1/runs', user, express.json({ limit: '10mb' }), runsRouter(registry, fetch, undefined, owner => benchScores(db, owner)));
+  // One health record per server, shared by the Free Router, the Free Agent, and the specialists view.
+  const routerHealth = new RouterHealth();
+  const scores = (owner: string) => benchScores(db, owner);
+  app.use('/v1/runs', user, express.json({ limit: '10mb' }), runsRouter(registry, fetch, routerHealth, scores));
+  app.use('/v1/agent', user, express.json({ limit: '1mb' }), agentRouter(routerHealth, scores));
   // Bench jobs run in the same registry, so their events, replay, and cancel use /v1/runs/:id.
   app.use('/v1/bench', user, express.json({ limit: '1mb' }), benchRouter(registry, db));
   // Installing or removing Ollama models only makes sense on the user's own machine.

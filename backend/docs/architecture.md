@@ -46,9 +46,9 @@ flowchart TB
     Shared -. compile-time .-> Routes
 ```
 
-### Why durable data and live execution are separate
+### Where data lives
 
-The server database saves threads, documents, connection metadata, input snapshots, partial/final output, and finished run history. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume.
+The server database (PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set) saves each user's threads, documents, connection metadata, input snapshots, partial/final output, finished run history, presets, settings, and [Bench](bench.md) results. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume.
 
 ## 2. Startup and middleware order
 
@@ -102,6 +102,15 @@ flowchart TD
 
     RunRoutes --> Destinations[runtime/destinations.ts]
     RunRoutes --> Registry[runtime/runs.ts]
+    RunRoutes --> Router[runtime/router.ts]
+    Router --> Adapters
+    Router --> ToolLoop
+    App --> BenchRoutes[routes/bench.ts]
+    BenchRoutes --> Registry
+    BenchRoutes --> BenchRunner[bench/runner.ts]
+    BenchRunner --> Adapters
+    BenchRunner --> Graders[bench/grade.ts]
+    Router -. Bench scores .-> Store[store/bench.ts]
     RunRoutes --> Adapters[runtime/adapters.ts]
     RunRoutes --> ToolLoop[runtime/toolLoop.ts]
 
@@ -183,12 +192,14 @@ Hosted mode includes both a network safety policy and required Better Auth accou
 | API keys | Browser session memory or optional device storage | Depends on user choice |
 | Documents and attachments | Server database, scoped to owner | Durable |
 | Run input/output/history | Server database, scoped to owner | Durable |
-| Active run controller | Backend `RunRegistry` | Until terminal state or process restart |
+| Bench results | Server database (`bench_results`), scoped to owner | Durable until cleared |
+| Active run controller (chat runs, routed runs, Bench jobs) | Backend `RunRegistry` | Until terminal state or process restart |
 | Ordered event replay buffer | Backend `RunRegistry` | In memory; bounded and temporary |
+| Free Router health (cooldowns, success rates) | Backend `RouterHealth` | In memory; process lifetime |
 | Provider request/key | Active backend call closure | One discovery or run request |
 | Local queue | Backend singleton | Process lifetime |
 
-There is no worker process or shared live-event store. Horizontal scaling would break reconnect semantics unless run ownership and event storage were externalized or requests were pinned to one process.
+There is no worker process or shared live-event store. Horizontal scaling would break reconnect semantics and split router health unless run ownership, event storage, and health were externalized or requests were pinned to one process.
 
 ## 6. Shared contracts
 

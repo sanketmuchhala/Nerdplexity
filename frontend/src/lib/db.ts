@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
-import type { ActivityTrace, Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
+import type { ActivityTrace, AgentMode, AgentOutcome, AgentStep, Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -42,6 +42,9 @@ export interface RunRecord {
   /** Free Router runs: every model the request was sent to, and which one answered. */
   route?: RouteStep[];
   routedTo?: RouteOutcome;
+  /** Free Agent runs: every step, and how the run went. */
+  agent?: AgentStep[];
+  agentOutcome?: AgentOutcome;
   /** Immutable catalog pricing metadata captured before the request. */
   pricing?: {
     execution: ExecutionLocation;
@@ -103,6 +106,8 @@ export interface Message {
     tools?: ToolTrace[];
     /** How the Free Router chose the model; provenance names the model that answered. */
     route?: { steps: RouteStep[]; task?: TaskKind };
+    /** How the Free Agent worked; provenance names the model that wrote the final answer. */
+    agent?: { steps: AgentStep[]; mode?: AgentMode; calls?: number; task?: TaskKind };
   };
   /** Which model produced an assistant message. Absent on legacy messages: unknown. */
   provenance?: ModelRef;
@@ -204,6 +209,8 @@ export interface AppSettings {
   favoriteModels?: string[];
   /** Set once legacy provider settings have been converted to connections. */
   connectionsVersion?: number;
+  /** Web search runs automatically when a message needs current information and an Exa key is set. Default 'auto'. */
+  webSearch?: 'auto' | 'off';
   /** 'free-only' blocks runs that cannot be confirmed free. */
   costPolicy?: 'any' | 'free-only';
   theme?: 'dark' | 'light';

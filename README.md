@@ -92,9 +92,19 @@ Each connection says whether it is offline, rejected the key, has the wrong addr
 
 Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), **Free plan** (you marked the account as having no billing), a catalog price, or **Price unknown**. Nerdplexity cannot see your billing settings; the billing choice on a connection is your statement.
 
-With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches models or providers on its own.
+With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model you chose hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches a model you chose on its own.
 
 Provider notes: OpenRouter free models have per-minute and per-day limits, and a negative balance blocks them. On Gemini's free tier, Google may use your prompts to improve its products.
+
+## Free Router and Bench
+
+**Free Router** is Nerdplexity's own router and the default model once you connect a provider with free models (it never replaces a model you picked). It sits at the top of the model picker with the Nerdplexity logo. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
+
+**Free Agent** puts several free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; two specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. Simple messages still cost one request, and no message uses more than five. Every draft is shown with the answer.
+
+**Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
+
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 
@@ -102,7 +112,7 @@ Turn tools on from the message box; the choice is saved with the thread and in p
 
 - **Calculator:** exact arithmetic computed by the app, on any model.
 - **Documents:** search and read the notes in **Workspace**. This tool is available only for models on this machine; workspace documents are never sent to online models by the tool.
-- **Web:** web search through [Exa](https://exa.ai) with your own key, added under **Connections**. Your search queries go to Exa, even when the model is local. Results are shown with their links.
+- **Web search, automatic:** add an [Exa](https://exa.ai) key under **Connections** and there is nothing to turn on. When a message needs current information (news, prices, recent releases, a link, or "search the web for…"), Nerdplexity searches before the model answers, the model answers from the results, and the sources are shown. Works with every model, including the Free Router. Switch it off under **Connections → Web search**. Search queries go to Exa, even when the model is local.
 
 A run may use at most 6 model steps and 12 tool calls. Each call appears above the answer with its exact input, result, and time, and is kept in Run history. Tool results are treated as data, not instructions, and no tool changes anything outside the app.
 
