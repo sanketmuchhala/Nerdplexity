@@ -12,6 +12,7 @@ export interface ThreadAttachment {
   mimeType: string;
   size: number;
   content: string;
+  fileData?: string;
   kind: 'text' | 'image';
   createdAt: number;
 }

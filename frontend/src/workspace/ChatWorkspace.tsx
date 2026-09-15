@@ -6,7 +6,6 @@ import {
   Calculator,
   Code2,
   Copy,
-  Download,
   FileText,
   GitBranch,
   Lightbulb,
@@ -19,6 +18,7 @@ import {
   ThumbsUp,
   Workflow,
   X,
+  Download,
 } from 'lucide-react';
 import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
@@ -780,9 +780,23 @@ export function ChatWorkspace({
                 </summary>
                 <div>
                   {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
-                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
-                    <X size={12} /> Remove from context
-                  </button>
+                  <div className="np-attachment-actions" style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                      <X size={12} /> Remove from context
+                    </button>
+                    {file.fileData && (
+                      <a 
+                        className="np-button ghost small"
+                        href={`data:${file.mimeType};base64,${file.fileData}`}
+                        download={file.name}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <Download size={12} /> View original
+                      </a>
+                    )}
+                  </div>
                 </div>
               </details>
             ))}
