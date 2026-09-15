@@ -41,7 +41,7 @@ Nerdplexity deals with two different things that are both called a "free router"
 | Picked in the app as | **Free Router**, first row of the model picker, marked with the Nerdplexity logo; the default model | An ordinary model in the OpenRouter catalog |
 | Model ID | Connection `nerdplexity-router`, model `free` (not a real connection) | `openrouter/free` on your OpenRouter connection |
 
-The Free Router can use `openrouter/free` as one of its candidates, always last (section 7). Section 15 covers how the app treats `openrouter/free` on its own.
+The Free Router can use `openrouter/free` as one of its candidates, always last (section 7). Section 15 covers how the app treats `openrouter/free` on its own. The [Free Agent](free-agent.md) is built on the Free Router and can ask several models per message.
 
 ## 2. Using it
 
@@ -130,7 +130,7 @@ The first rule that matches wins, in this order:
 | Order | Kind | Matches (case-insensitive, whole words) |
 | --- | --- | --- |
 | 1 | `code` | A code fence (three backticks), or: function, class, def, const, compile(s/d), stack trace, exception, bug, debug, refactor, regex, sql, typescript, javascript, python, rust, golang, java, c++, html, css, endpoint, unit test(s), script, snippet, code |
-| 2 | `math` | solve, equation, integral, derivative, probability, prove, proof, theorem, calculate, compute, percent(age), matrix, algebra, geometry, arithmetic; or a digit, an operator (`- + * / ^ × ÷ =`), and a digit; or "N% of" |
+| 2 | `math` | solve, equation, integral, derivative, probability, prove, proof, theorem, calculate, compute, percent(age), matrix, algebra, geometry, arithmetic; or a digit, an operator (`+ * / ^ × ÷ =`), and a digit; or a minus sign with spaces around it ("12 - 7", so dates and phone numbers like 2026-09-14 do not count); or "N% of" |
 | 3 | `extraction` | json, yaml, csv, table, extract, parse, classify, categorize/categorise, schema, fill in, bullet list |
 | 4 | `writing` | write, draft, rewrite, rephrase, proofread, essay, email/e-mail, letter, story, poem, blog, tweet, summary/summarize/summarise, translate, tone, cover letter |
 | 5 | `reasoning` | why, explain, reason(ing), compare, trade-off(s), pros and cons, step by step, analyze/analyse, plan, design, puzzle, riddle, logic |

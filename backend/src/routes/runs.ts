@@ -7,6 +7,7 @@ import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
 import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 import { withWebResults } from '../runtime/autoSearch.js';
+import { agentExecutor } from '../runtime/agent.js';
 
 type FetchFn = typeof fetch;
 
@@ -14,7 +15,7 @@ interface ValidRun {
   key: string;
   request: ModelRequest;
   /** Present when the server chooses the model; `request.target` and `request.model` are then placeholders. */
-  route?: { candidates: RouteCandidate[] };
+  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent' };
   tools: ToolName[];
   documents: WorkspaceDocument[];
   /** auto: search the web before answering when the latest message needs current information. */
@@ -39,7 +40,7 @@ export function resolveConnections(connections: unknown, limit = ROUTE_LIMITS.co
 
 /** Validate a route: every connection passes the destination policy, and every model names one of them. */
 export function validateRoute(route: any): RouteCandidate[] {
-  if (!route || typeof route !== 'object' || route.strategy !== 'free') throw new Error('Unknown route strategy.');
+  if (!route || typeof route !== 'object' || (route.strategy !== 'free' && route.strategy !== 'agent')) throw new Error('Unknown route strategy.');
   const { models } = route;
   const targets = resolveConnections(route.connections);
   if (!Array.isArray(models) || !models.length || models.length > ROUTE_LIMITS.models) throw new Error(`A route needs 1–${ROUTE_LIMITS.models} models.`);
@@ -103,7 +104,7 @@ export function validateRunRequest(body: any): ValidRun {
   }
   return {
     key: body.idempotencyKey,
-    ...(candidates ? { route: { candidates } } : {}),
+    ...(candidates ? { route: { candidates, strategy: body.route.strategy } } : {}),
     request: {
       target, model: candidates ? '' : body.model,
       messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
@@ -119,10 +120,12 @@ export function validateRunRequest(body: any): ValidRun {
 function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex): RunExecutor {
   if (run.route) {
     const { target: _target, model: _model, messages, ...request } = run.request;
-    return routedExecutor({
+    const routed = {
       owner, candidates: run.route.candidates, request, messages: messages as RunMessage[], tools: run.tools, documents: run.documents,
       ...(run.search ? { search: run.search } : {}),
-    }, { health, fetchImpl, ...(bench ? { bench } : {}) });
+    };
+    const deps = { health, fetchImpl, ...(bench ? { bench } : {}) };
+    return run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
   }
   return async ({ signal, emit }) => {
     const request = run.search?.auto

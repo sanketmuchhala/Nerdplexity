@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { chooseRouterByDefault, isRouter, ROUTER_NAME } from '../lib/router';
+import { chooseRouterByDefault, isRouter, routerName } from '../lib/router';
 import { RouterMark } from './RouterMark';
 import {
   ArrowUpRight,
@@ -362,7 +362,7 @@ export default function Workspace() {
             </span>
             <div>
               <strong>
-                {isRouter(settings?.activeModel) ? <><RouterMark size={13} /> {ROUTER_NAME}</> : settings?.activeModel?.modelId || 'No model chosen'}
+                {isRouter(settings?.activeModel) ? <><RouterMark size={13} /> {routerName(settings?.activeModel)}</> : settings?.activeModel?.modelId || 'No model chosen'}
               </strong>
               <span>
                 {checking

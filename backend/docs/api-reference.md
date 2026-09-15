@@ -35,6 +35,7 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 | POST | `/v1/bench` | Start a Bench job (followed and canceled through `/v1/runs/:id`) | Available; private targets refused |
 | GET | `/v1/bench/results` | Pass counts per model and category, and recent answers | Available |
 | DELETE | `/v1/bench/results` | Delete all results, or one model's (`{ connectionId, model }`) | Available |
+| POST | `/v1/agent/specialists` | The top models per kind of task for a list of free models ([Free Agent](free-agent.md#12-api-contract)) | Available; private targets refused |
 | POST | `/v1/models/ollama/pull` | Pull an Ollama model with progress | Disabled |
 | DELETE | `/v1/models/ollama` | Delete an Ollama model | Disabled |
 
@@ -333,7 +334,8 @@ Errors:
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
 | `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
 | `model` | model, provider | The concrete model answering, reported by OpenRouter's stream (for `openrouter/free`, the model its router picked) |
-| `completed` | usage/finishReason/loadMs/route/timing | Successful terminal event; `route` names the model that answered a routed run |
+| `agent` | id, role, status, reason, connectionId, model, mode, task, kind, text, durationMs | A Free Agent step started, switched model, finished, or failed ([Free Agent, section 12](free-agent.md#12-api-contract)) |
+| `completed` | usage/finishReason/loadMs/route/agent/timing | Successful terminal event; `route` names the model that answered a routed run, `agent` how a Free Agent run went and who wrote the answer |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |
 

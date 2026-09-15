@@ -100,9 +100,11 @@ Provider notes: OpenRouter free models have per-minute and per-day limits, and a
 
 **Free Router** is Nerdplexity's own router and the default model once you connect a provider with free models (it never replaces a model you picked). It sits at the top of the model picker with the Nerdplexity logo. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
 
+**Free Agent** puts several free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; two specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. Simple messages still cost one request, and no message uses more than five. Every draft is shown with the answer.
+
 **Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
 
-Full details: [Free Router](backend/docs/free-router.md) and [Bench](backend/docs/bench.md).
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 

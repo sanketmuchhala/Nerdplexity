@@ -18,6 +18,9 @@ const MODELS = [
 // Under /router/v1 the catalog lists two sizes, so the Free Router tries the larger one first.
 // A "-70b"-style suffix selects the same behavior as the plain name.
 const ROUTER_MODELS = ['limit-model-70b', 'fast-model-8b'];
+// Under /agent/v1, three sizes of one model for the Free Agent: it answers as a drafter, a planner,
+// a part specialist, or the final writer, depending on the system note it receives.
+const AGENT_MODELS = ['agent-model-70b', 'agent-model-30b', 'agent-model-8b'];
 // Groq-style rate-limit headers on every successful response.
 const QUOTA = {
   'x-ratelimit-limit-requests': '1000',
@@ -37,8 +40,8 @@ async function readJSON(req) {
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
-    const routerCatalog = url.pathname.startsWith('/router/');
-    const path = routerCatalog ? url.pathname.slice('/router'.length) : url.pathname;
+    const catalog = /^\/(router|agent)\//.exec(url.pathname)?.[1];
+    const path = catalog ? url.pathname.slice(catalog.length + 1) : url.pathname;
     if (url.pathname === '/_log') {
       const prompt = url.searchParams.get('prompt');
       res
@@ -72,7 +75,7 @@ http
     if (req.method === 'GET' && path === '/v1/models') {
       res
         .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ data: (routerCatalog ? ROUTER_MODELS : MODELS).map((id) => ({ id })) }));
+        .end(JSON.stringify({ data: (catalog === 'router' ? ROUTER_MODELS : catalog === 'agent' ? AGENT_MODELS : MODELS).map((id) => ({ id })) }));
       return;
     }
     if (req.method !== 'POST' || path !== '/v1/chat/completions') {
@@ -105,6 +108,20 @@ http
       if (!entry.completed) entry.aborted = true;
     });
 
+    if (model === 'agent-model') {
+      const system = body.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+      const text = system.includes("Split the user's message")
+        ? JSON.stringify({ parts: [{ task: 'Explain what an API is', kind: 'general' }, { task: 'Write a haiku about APIs', kind: 'writing' }] })
+        : system.includes('final writer') ? `Checked final answer from ${body.model}.`
+          : system.includes('Answer only this part') ? `Part answer from ${body.model}.`
+            : `Draft from ${body.model}.`;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(delta(text));
+      res.write(frame({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 3 } }));
+      entry.completed = true;
+      res.end('data: [DONE]\n\n');
+      return;
+    }
     if (model === 'limit-model') {
       res
         .writeHead(429, {

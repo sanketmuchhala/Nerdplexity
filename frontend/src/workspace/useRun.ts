@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { ActivityTrace, DiscoveryResult, ModelRef, ProviderErrorCategory, RouteStep, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
+import type { ActivityTrace, AgentStep, DiscoveryResult, ModelRef, ProviderErrorCategory, RouteStep, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
 import type { RunRecord, WorkspaceDocument } from '../lib/db';
 import * as store from '../lib/store';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { currentRouterPool, isLocal, latestResult, targetFor } from '../state/connections';
-import { isRouter, ROUTER_NAME } from '../lib/router';
+import { isRouter, routerName, routeStrategy } from '../lib/router';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 import { autoWebSearch, searchKey } from '../lib/searchKey';
@@ -59,6 +59,24 @@ export function policyBlock(ref: ModelRef, conversationId?: string): string | nu
 
 const NO_FREE_MODELS = 'The Free Router has no free models to use. Connect OpenRouter with a free key, or a model on this machine, then refresh its catalog in Models.';
 
+/** The Free Agent's writer, the model behind any partial answer of an agent run. */
+const lastWriter = (steps: AgentStep[] | undefined) => {
+  const writer = [...(steps ?? [])].reverse().find(step => step.role === 'writer' && step.model && step.connectionId);
+  return writer ? { connectionId: writer.connectionId!, model: writer.model! } : undefined;
+};
+
+/** The status line while a Free Agent step runs. */
+function agentPhase(step: AgentStep) {
+  const who = step.model ?? 'a model';
+  switch (step.role) {
+    case 'planner': return `Planning the parts with ${who}`;
+    case 'drafter': return `Drafting with ${who}`;
+    case 'specialist': return `${who} is answering a part`;
+    case 'writer': return `Checking and writing the answer with ${who}`;
+    default: return 'Choosing a strategy';
+  }
+}
+
 /** Which model a routed run was last sent to: the one behind any partial answer. */
 const lastTried = (steps: RouteStep[] | undefined) => [...(steps ?? [])].reverse().find(step => step.status === 'trying');
 
@@ -76,6 +94,7 @@ export function useRun() {
   const [tools, setTools] = useState<ToolTrace[]>([]);
   const [activities, setActivities] = useState<ActivityTrace[]>([]);
   const [route, setRoute] = useState<RouteStep[]>([]);
+  const [agent, setAgent] = useState<AgentStep[]>([]);
   const [runConversationId, setRunConversationId] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   /** Server run shown in the live bubble; the saved message for it replaces the bubble. */
@@ -84,7 +103,7 @@ export function useRun() {
   const lastAttempt = useRef<(Attempt & { recordId: string }) | null>(null);
 
   const showRunning = (record: RunRecord, phaseText: string) => {
-    setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools); setActivities(record.activities ?? []); setRoute(record.route ?? []);
+    setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools); setActivities(record.activities ?? []); setRoute(record.route ?? []); setAgent(record.agent ?? []);
     setSelectedModel(record.routedModel); setSelectedProvider(record.routedProvider);
     setError(null); setCanRetry(false); setPhase(phaseText); setRunConversationId(record.conversationId);
   };
@@ -94,9 +113,11 @@ export function useRun() {
     const status = outcome.type === 'local' ? outcome.status : outcome.type;
     const timing = outcome.type === 'local' ? undefined : outcome.timing;
     const routedTo = outcome.type === 'completed' ? outcome.route : undefined;
+    const agentOutcome = outcome.type === 'completed' ? outcome.agent : undefined;
     const final: RunRecord = {
       ...record,
       ...(routedTo ? { routedTo } : {}),
+      ...(agentOutcome ? { agentOutcome } : {}),
       status,
       durationMs: timing?.durationMs ?? Date.now() - record.startedAt,
       ...(timing ? { queuedMs: timing.queuedMs, ttftMs: timing.ttftMs } : {}),
@@ -111,10 +132,11 @@ export function useRun() {
       if (claimed && (record.output || record.reasoning)) {
         // A routed answer is attributed to the model that wrote it, not to a router: the Free Router's
         // choice, and within it the concrete model OpenRouter's own router picked, when reported.
-        const answered = routedTo ?? lastTried(record.route);
+        const answered = agentOutcome?.writer ?? routedTo ?? lastTried(record.route) ?? lastWriter(record.agent);
         const metadata = {
           ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.activities?.length ? { activities: record.activities } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
           ...(record.route?.length ? { route: { steps: record.route, ...(routedTo ? { task: routedTo.task } : {}) } } : {}),
+          ...(record.agent?.length ? { agent: { steps: record.agent, ...(agentOutcome ? { mode: agentOutcome.mode, calls: agentOutcome.calls, task: agentOutcome.task } : {}) } } : {}),
         };
         const provenance = answered ? { connectionId: answered.connectionId, modelId: record.routedModel || answered.model }
           : record.connectionId && !isRouter(record) ? { connectionId: record.connectionId, modelId: record.routedModel || record.model } : undefined;
@@ -160,7 +182,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, activities: record.activities, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
+      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, activities: record.activities, agent: record.agent, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -192,6 +214,15 @@ export function useRun() {
             record.quota = event.quota;
             const owner = event.connectionId ?? record.connectionId;
             if (owner && !isRouter({ connectionId: owner })) useConnections.getState().setQuota(owner, event.quota);
+            break;
+          }
+          case 'agent': {
+            const { type: _type, ...step } = event;
+            const steps = record.agent ?? [];
+            const index = steps.findIndex(existing => existing.id === step.id);
+            record.agent = index >= 0 ? steps.map((existing, i) => i === index ? step : existing) : [...steps, step];
+            setAgent(record.agent);
+            if (step.status === 'running') setPhase(agentPhase(step));
             break;
           }
           case 'route': {
@@ -235,7 +266,7 @@ export function useRun() {
     } : undefined;
     const controller = new AbortController();
     const record: RunRecord = {
-      id: uuidv4(), conversationId: attempt.conversationId, connectionId: attempt.connectionId, provider: connection?.name ?? ROUTER_NAME, model: attempt.model,
+      id: uuidv4(), conversationId: attempt.conversationId, connectionId: attempt.connectionId, provider: connection?.name ?? routerName(attempt), model: attempt.model,
       prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.tools.length ? 'agent' : 'chat',
       input: structuredClone(attempt.input), notices: [...(attempt.input.context.notices ?? [])],
       output: '', reasoning: '', activities: [], tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
@@ -247,7 +278,7 @@ export function useRun() {
     try {
       // Durable before contacting the model, so a reload can find this run.
       await store.runs.put(record);
-      const choice = pool?.route ? { route: pool.route } : { target: targetFor(connection!), model: attempt.model };
+      const choice = pool?.route ? { route: { ...pool.route, strategy: routeStrategy(attempt) } } : { target: targetFor(connection!), model: attempt.model };
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
         settings: attempt.input.settings,
@@ -386,7 +417,7 @@ export function useRun() {
   useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
 
   return {
-    send, retry, stop, running, partial, reasoning, activities, selectedModel, selectedProvider, phase, error, tools, route, runConversationId, streamRunId,
+    send, retry, stop, running, partial, reasoning, activities, selectedModel, selectedProvider, phase, error, tools, route, agent, runConversationId, streamRunId,
     canRetry: canRetry && !!lastAttempt.current && !running,
     clearError: () => setError(null),
   };

@@ -1,17 +1,17 @@
 import { randomUUID } from 'crypto';
-import type { ProviderError, RouteOutcome, RunEnvelope, RunEventPayload, RunState, RunTiming, TerminalPayload, Usage } from '@app/types';
+import type { AgentOutcome, ProviderError, RouteOutcome, RunEnvelope, RunEventPayload, RunState, RunTiming, TerminalPayload, Usage } from '@app/types';
 import { enqueueLocal, getLocalQueueStatus } from '../queue/localQueue.js';
 import { ProviderFailure } from './adapters.js';
 
 /** Events an executor may emit. Lifecycle events are emitted by the registry. */
-export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'model' | 'delta' | 'reasoning' | 'activity' | 'quota' | 'tool' | 'route' | 'bench' }>;
+export type ProgressPayload = Extract<RunEventPayload, { type: 'status' | 'model' | 'delta' | 'reasoning' | 'activity' | 'quota' | 'tool' | 'route' | 'agent' | 'bench' }>;
 
 export interface RunContext {
   signal: AbortSignal;
   emit: (payload: ProgressPayload) => void;
 }
 
-export type RunExecutor = (ctx: RunContext) => Promise<{ usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome }>;
+export type RunExecutor = (ctx: RunContext) => Promise<{ usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome; agent?: AgentOutcome }>;
 
 export interface RunRegistryOptions {
   /** Cancel a run when no client has been subscribed for this long. */

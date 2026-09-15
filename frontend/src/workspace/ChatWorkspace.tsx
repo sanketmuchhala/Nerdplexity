@@ -24,8 +24,9 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
-import { isRouter, ROUTER_NAME } from '../lib/router';
+import { AGENT_NAME, isAgent, isRouter, ROUTER_NAME, routerName } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
+import { AgentActivity } from './AgentActivity';
 import { RouterMark } from './RouterMark';
 import useConnections, {
   currentRouterPool,
@@ -167,8 +168,12 @@ export function ChatWorkspace({
     'removed connection';
   // The live answer shows the model being asked: the Free Router's current attempt, or the chosen
   // model, replaced by the concrete model when a provider's own router (openrouter/free) reports it.
+  // For the Free Agent, the live answer is the writer's; drafts show in the steps, not as the answer.
   const asking = [...run.route].reverse().find((step) => step.status === 'trying');
-  const liveRef = routed
+  const writing = [...run.agent].reverse().find((step) => step.role === 'writer' && step.status === 'running' && step.model && step.connectionId);
+  const liveRef = isAgent(ref)
+    ? writing && { connectionId: writing.connectionId!, modelId: writing.model! }
+    : routed
     ? asking && { connectionId: asking.connectionId, modelId: asking.model }
     : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
   const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
@@ -259,7 +264,7 @@ export function ChatWorkspace({
           onClick={() => setShowPicker(true)}
         >
           {routed ? <RouterMark size={16} /> : <span className="np-model-dot" />}
-          <span>{routed ? ROUTER_NAME : model || 'Choose a model'}</span>
+          <span>{routed ? routerName(ref) : model || 'Choose a model'}</span>
           <span className="np-model-source">
             {routed
               ? `${pool?.models ?? 0} free model${pool?.models === 1 ? '' : 's'}`
@@ -514,11 +519,13 @@ export function ChatWorkspace({
           <div className="np-thread">
             {messages.map((message, index) => (
               <Fragment key={message.id}>
-                {message.role === 'assistant' && message.metadata?.route && (
-                  <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />
-                )}
-                {message.role === 'assistant' && (message.metadata?.tools || message.metadata?.activities) && (
-                  <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />
+                {message.role === 'assistant' && (message.metadata?.route || message.metadata?.agent || message.metadata?.tools || message.metadata?.activities) && (
+                  // Above a saved answer, the panels sit in the transcript column.
+                  <div className="np-inline-tools">
+                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} />}
+                    {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
+                  </div>
                 )}
                 <Message
                   message={{ ...message, timestamp: message.createdAt }}
@@ -536,7 +543,7 @@ export function ChatWorkspace({
                       {[
                         message.provenance &&
                           `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
-                        message.metadata?.route && `via ${ROUTER_NAME}`,
+                        message.metadata?.agent ? `via ${AGENT_NAME}` : message.metadata?.route && `via ${ROUTER_NAME}`,
                         message.runStatus &&
                           RUN_STATUS_LABEL[message.runStatus],
                         (message.finishReason === 'length' ||
@@ -623,7 +630,7 @@ export function ChatWorkspace({
                 </div>
               </Fragment>
             ))}
-            {ownRun && !saved && (run.running || run.partial || run.reasoning || run.route?.length > 0 || run.tools?.length > 0 || run.activities?.length > 0) && (
+            {ownRun && !saved && (run.running || run.partial || run.reasoning || run.route?.length > 0 || run.agent?.length > 0 || run.tools?.length > 0 || run.activities?.length > 0) && (
               <Message
                 message={{
                   id: 'stream',
@@ -639,6 +646,7 @@ export function ChatWorkspace({
                 status={run.running ? run.phase : undefined}
               >
                 {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} />}
                 {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
               </Message>
             )}
@@ -912,7 +920,9 @@ export function ChatWorkspace({
                   .join(', ')}`,
               webAuto && 'Web search is automatic (Exa)',
               routed
-                ? `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
+                ? isAgent(ref)
+                  ? `The Free Agent may ask several of your ${pool?.models ?? 0} free models per message (at most 5 requests) and writes one checked answer; prompts go only to the models it asks.`
+                  : `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'
                 : local

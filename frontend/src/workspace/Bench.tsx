@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlaskConical, Play, Square, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import type { BenchCategory, BenchResult, BenchResults, BenchStartResponse, BenchSuiteInfo, ConnectionKind } from '@app/types';
+import type { BenchCategory, BenchResult, BenchResults, BenchStartResponse, BenchSuiteInfo, ConnectionKind, SpecialistEntry, TaskKind } from '@app/types';
 import { api } from '../lib/api';
 import useConnections, { currentRouterPool, modelKey } from '../state/connections';
 import { cancelRun, followRun } from './runClient';
@@ -13,6 +13,8 @@ const DAILY_LIMIT: Partial<Record<ConnectionKind, { requests: number; note: stri
   openrouter: { requests: 50, note: 'free accounts allow 50 free-model requests a day (1,000 after buying $10 of credit)' },
   sambanova: { requests: 20, note: 'the free tier allows 20 requests a day' },
 };
+
+const KIND_LABEL: Record<TaskKind, string> = { code: 'Code', math: 'Math', reasoning: 'Reasoning', writing: 'Writing', extraction: 'Structured output', general: 'General' };
 
 type Job = { runId: string; total: number; done: number; skipped: number; status: string; running: boolean; outcome?: string };
 
@@ -32,6 +34,7 @@ export function Bench() {
   const [live, setLive] = useState<BenchResult[]>([]);
   const [error, setError] = useState('');
   const controller = useRef<AbortController | null>(null);
+  const [specialists, setSpecialists] = useState<Record<TaskKind, SpecialistEntry[]> | null>(null);
 
   const loadResults = () => api<BenchResults>('/v1/bench/results').then(setResults, (reason: Error) => setError(`Unable to read Bench results. ${reason.message}`));
   useEffect(() => {
@@ -41,6 +44,15 @@ export function Bench() {
   }, []);
 
   const models = pool.route?.models ?? [];
+  // Who the Free Agent would ask for each kind of task, refreshed when results or models change.
+  const poolKey = models.map(m => `${m.connectionId}\n${m.model}`).join('|');
+  useEffect(() => {
+    if (!pool.route) { setSpecialists(null); return; }
+    let current = true;
+    api<{ specialists: Record<TaskKind, SpecialistEntry[]> }>('/v1/agent/specialists', { body: { route: pool.route } })
+      .then(data => { if (current) setSpecialists(data.specialists); }, () => { if (current) setSpecialists(null); });
+    return () => { current = false; };
+  }, [poolKey, results]);
   const nameOf = (connectionId: string) => connections.find(c => c.id === connectionId)?.name ?? connectionId;
   const kindOf = (connectionId: string) => connections.find(c => c.id === connectionId)?.kind;
   const chosen = models.filter(m => selected.has(modelKey(m.connectionId, m.model)));
@@ -171,5 +183,19 @@ export function Bench() {
       </table></div> : <div className="np-empty-panel"><FlaskConical size={26} /><h3>No results yet.</h3><p>Run Bench on a few free models. Three questions per category is enough to start; the router trusts results more as they add up.</p></div>}
       {live.length > 0 && <details className="np-tool-detail"><summary>This run's answers ({live.length})</summary><ol className="np-bench-live">{live.map((r, i) => <li key={`${r.at}-${i}`} className={`np-bench-${r.status}`}><strong>{r.model}</strong> · {CATEGORY_LABEL[r.category]} · {r.itemId} · {r.status}{r.detail ? `: ${r.detail}` : ''}</li>)}</ol></details>}
     </section>
+
+    {specialists && <section className="np-panel np-bench-results" aria-label="Specialists">
+      <div className="np-section-title"><div><h2>Specialists</h2><p>Who the Free Agent and Free Router ask first for each kind of task, from your Bench results, model size, and recent reliability. More Bench results make this more accurate.</p></div></div>
+      <div className="np-bench-table-wrap"><table className="np-bench-table np-specialists">
+        <thead><tr><th scope="col">Task</th><th scope="col">First choice</th><th scope="col">Why</th><th scope="col">Next</th></tr></thead>
+        <tbody>{(Object.keys(KIND_LABEL) as TaskKind[]).map(kind => { const [first, ...rest] = specialists[kind] ?? [];
+          return <tr key={kind}>
+            <th scope="row">{KIND_LABEL[kind]}</th>
+            <td>{first ? <><strong>{first.displayName ?? first.model}</strong><small>{nameOf(first.connectionId)}</small></> : '—'}</td>
+            <td className="np-specialist-why">{first?.why.length ? first.why.join(', ') : '—'}</td>
+            <td>{rest.length ? rest.map(entry => entry.displayName ?? entry.model).join(', ') : '—'}</td>
+          </tr>; })}</tbody>
+      </table></div>
+    </section>}
   </div>;
 }

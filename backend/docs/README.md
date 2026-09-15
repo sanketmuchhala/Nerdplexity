@@ -14,11 +14,12 @@ Read these pages in order if the backend is new to you:
 2. [Run harness](run-harness.md) — the core execution lifecycle, streaming, replay, queueing, and cancellation.
 3. [Providers and model discovery](providers-and-models.md) — how one internal request becomes Ollama, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, or Hugging Face traffic.
 4. [Free Router](free-router.md) — how Nerdplexity picks the best free model for each message, falls back when one is busy, and how it differs from OpenRouter's `openrouter/free`.
-5. [Bench](bench.md) — graded questions from published datasets, how answers are checked, how jobs are paced, and how results rank models.
-6. [Tools](tools.md) — the bounded agent loop, calculator, document retrieval, and Exa web search.
-7. [API reference](api-reference.md) — every active HTTP endpoint and event payload.
-8. [Security and data](security-and-data.md) — keys, documents, origin checks, destination restrictions, and known limits.
-9. [Development and testing](development.md) — setup, debugging paths, tests, and safe extension points.
+5. [Free Agent](free-agent.md) — the multi-model assistant: specialists per kind of task, drafts checked and combined by the strongest model, multi-part plans, and a 5-request budget.
+6. [Bench](bench.md) — graded questions from published datasets, how answers are checked, how jobs are paced, and how results rank models.
+7. [Tools](tools.md) — the bounded agent loop, calculator, document retrieval, and Exa web search.
+8. [API reference](api-reference.md) — every active HTTP endpoint and event payload.
+9. [Security and data](security-and-data.md) — keys, documents, origin checks, destination restrictions, and known limits.
+10. [Development and testing](development.md) — setup, debugging paths, tests, and safe extension points.
 
 ## The 30-second mental model
 
@@ -57,6 +58,7 @@ The browser sends a model choice explicitly, or chooses the [Free Router](free-r
 | **Idempotency key** | A client-generated key that makes a retried start request return the existing run instead of starting a duplicate. |
 | **Replay** | Sending events the browser missed, beginning after its last sequence number. |
 | **Free Router** | Nerdplexity's own router: one routed run tries up to four free models in ranked order, falling back only before any output. |
+| **Free Agent** | Nerdplexity's multi-model assistant: for harder messages, specialists draft or answer parts and the strongest model checks them and writes the answer, within 5 requests. |
 | **Bench** | Graded questions run on your free models; the results rank models for the Free Router. |
 | **Cooldown** | A period after a rate limit or failure during which the router leaves a model (or a whole account) out. |
 
@@ -86,7 +88,8 @@ backend/
     │   └── localQueue.ts       # One-at-a-time execution for local models
     └── runtime/
         ├── runs.ts             # Run state machine, event buffer, replay
-        ├── router.ts           # Free Router: task profile, ranking, health, fallback
+        ├── router.ts           # Free Router: task profile, ranking, health, fallback (tryInOrder)
+        ├── agent.ts            # Free Agent: specialists, strategy, drafts, plans, writer, budget
         ├── adapters.ts         # All live streaming provider adapters
         ├── discovery.ts        # Provider-specific model catalog discovery
         ├── destinations.ts     # URL, key, and local/remote policy

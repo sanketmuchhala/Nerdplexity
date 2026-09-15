@@ -282,9 +282,13 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
 .np-stats { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--np-line); border-radius: 10px; background: var(--np-bg); margin-bottom: 27px; }.np-stats > div { padding: 24px; }.np-stats > div + div { border-left: 1px solid var(--np-border); }.np-stats span { font-size: 10px; color: var(--np-muted); display: block; }.np-stats strong { display: block; font-size: 30px; font-weight: 500; letter-spacing: -1px; margin: 9px 0 3px; }.np-stats small { color: var(--np-muted); font-size: 9px; }
 .np-run-list { display: flex; flex-direction: column; gap: 8px; }.np-run-row { display: flex; align-items: center; gap: 14px; padding: 17px; border: 1px solid var(--np-line); border-radius: 8px; text-align: left; width: 100%; min-width: 0; }.np-run-row:hover, .np-run-row.selected { border-color: rgba(var(--np-accent-rgb), 0.251); background: rgba(var(--np-accent-rgb), 0.020); }.np-run-row > svg { flex-shrink: 0; }.np-run-row > div { min-width: 0; flex: 1; }.np-run-row strong { font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }.np-run-row div span { color: var(--np-muted); font-size: 9px; display: block; margin-top: 5px; }.np-run-duration { font-size: 11px; color: var(--np-text); }
 .np-run-detail { margin-top: 22px; }.np-run-detail dl { display: flex; gap: 32px; margin-bottom: 24px; }.np-run-detail dt { font-size: 9px; color: var(--np-muted); }.np-run-detail dd { font-size: 12px; color: var(--np-text); margin-top: 5px; }
-.np-tool-detail, .np-inline-tools details { border: 1px solid var(--np-line); border-radius: 6px; overflow: hidden; margin-top: 10px; }
-.np-tool-detail summary, .np-inline-tools summary { display: flex; align-items: center; gap: 9px; padding: 10px 12px; font-size: 10px; color: var(--np-text); cursor: pointer; background: rgba(var(--np-accent-rgb), 0.020); }.np-tool-detail summary span, .np-inline-tools summary span { margin-left: auto; font-size: 8px; color: var(--np-muted); }
-.np-tool-detail pre, .np-inline-tools pre { background: var(--np-sidebar); padding: 15px; font-size: 10px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; color: var(--np-text); }
+/* Tool, router, and agent panels are styled on the panel itself, so they look the same in the Thinking drawer, above a saved answer, and in Run history. */
+.np-tool-detail, .np-inline-tools details, details.np-tool { border: 1px solid var(--np-line); border-radius: 6px; overflow: hidden; margin-top: 10px; }
+.np-tool-detail summary, .np-inline-tools summary, details.np-tool > summary { display: flex; align-items: center; gap: 9px; padding: 10px 12px; font-size: 10px; color: var(--np-text); cursor: pointer; background: rgba(var(--np-accent-rgb), 0.020); }.np-tool-detail summary span, .np-inline-tools summary span, details.np-tool > summary span { margin-left: auto; font-size: 8px; color: var(--np-muted); }
+.np-tool-detail pre, .np-inline-tools pre, details.np-tool pre { background: var(--np-sidebar); padding: 15px; font-size: 10px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; color: var(--np-text); }
+details.np-tool .np-tool-body pre { margin: 0 -12px 10px; }
+.np-agent-text summary { display: block; background: none; }
+details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-inline-tools { max-width: 680px; margin: 10px auto; padding: 0 16px; }
 .np-tool summary > strong { font-weight: 600; white-space: nowrap; }
 .np-tool summary .np-tool-summary { margin-left: 0; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -720,3 +724,9 @@ button.np-reasoning-heading:hover { color: var(--np-text); background: rgba(var(
   transform: translate(-50%, -50%);
   animation-delay: -6s;
 }
+.np-route-steps li .np-agent-task { color: var(--np-text); font-size: 10px; }
+.np-agent-text { margin: 5px 0 2px; border: 1px solid var(--np-line); border-radius: 6px; overflow: hidden; }
+.np-agent-text summary { padding: 6px 9px; font-size: 10px; color: var(--np-muted); cursor: pointer; }
+.np-agent-text pre { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; background: var(--np-sidebar); color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-specialists td strong { display: block; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.np-specialists .np-specialist-why { white-space: normal; min-width: 220px; color: var(--np-muted); font-size: 10px; }

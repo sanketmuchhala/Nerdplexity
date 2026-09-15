@@ -90,9 +90,13 @@ export interface RouteModel {
   contextLength?: number;
 }
 
-/** Let the server choose the model: candidates across connections, each connection's key sent once. */
+/**
+ * Let the server choose: candidates across connections, each connection's key sent once.
+ * 'free': the Free Router answers with the best single model. 'agent': the Free Agent may draft
+ * with several specialists and have the strongest model check and write the answer.
+ */
 export interface RouteRequest {
-  strategy: 'free';
+  strategy: 'free' | 'agent';
   connections: { id: string; target: ConnectionTarget }[];
   models: RouteModel[];
 }
@@ -107,6 +111,50 @@ export interface RouteStep {
   /** Safe to show: why this model was chosen, skipped, or failed. */
   reason: string;
   category?: ProviderErrorCategory;
+}
+
+/** How the Free Agent handles one message. */
+export type AgentMode = 'direct' | 'ensemble' | 'plan';
+
+/**
+ * One step of a Free Agent run. Steps are reported as they start and finish (same id).
+ * strategy: the chosen mode and why. planner: split the message into parts. drafter: an
+ * independent draft. specialist: the answer to one part. writer: the checked final answer.
+ */
+export interface AgentStep {
+  id: string;
+  role: 'strategy' | 'planner' | 'drafter' | 'specialist' | 'writer';
+  status: 'running' | 'done' | 'failed' | 'skipped';
+  /** Safe to show: why this step or model, or why it failed. */
+  reason: string;
+  connectionId?: string;
+  model?: string;
+  mode?: AgentMode;
+  /** The part of the message a specialist answers. */
+  task?: string;
+  kind?: TaskKind;
+  /** A draft or part answer, shortened, for the user to inspect. The final answer streams as deltas. */
+  text?: string;
+  durationMs?: number;
+}
+
+/** The top models for one kind of task, as the Free Agent would pick them (POST /v1/agent/specialists). */
+export interface SpecialistEntry {
+  connectionId: string;
+  model: string;
+  displayName?: string;
+  score: number;
+  why: string[];
+}
+
+/** How a Free Agent run went. */
+export interface AgentOutcome {
+  mode: AgentMode;
+  task: TaskKind;
+  /** Model requests sent, including failed attempts. */
+  calls: number;
+  /** The model that wrote the final answer. */
+  writer: { connectionId: string; model: string };
 }
 
 /** Which model answered a routed run. */
@@ -131,10 +179,11 @@ export type RunEventPayload =
   | { type: 'quota'; quota: RateLimitState; connectionId?: string }
   | ({ type: 'tool' } & ToolTrace)
   | ({ type: 'route' } & RouteStep)
+  | ({ type: 'agent' } & AgentStep)
   /** A Bench job graded one item (result), or skipped planned requests after a limit; done of total requests. */
   | { type: 'bench'; result?: BenchResult; skipped?: number; done: number; total: number }
   /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */
-  | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome; timing: RunTiming }
+  | { type: 'completed'; usage?: Usage; finishReason?: string; loadMs?: number; route?: RouteOutcome; agent?: AgentOutcome; timing: RunTiming }
   | { type: 'failed'; error: ProviderError; timing: RunTiming }
   | { type: 'canceled'; reason: 'user' | 'no-client' | 'timeout'; timing: RunTiming };
 

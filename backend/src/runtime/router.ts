@@ -1,12 +1,12 @@
 import { createHash } from 'crypto';
 import type { BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
-import { ModelMessage, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
+import { AdapterEvent, ModelMessage, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
 import { ResolvedTarget } from './destinations.js';
 import { runWithTools } from './toolLoop.js';
 import { WorkspaceDocument } from './tools.js';
 import { enqueueLocal } from '../queue/localQueue.js';
 import { withWebResults } from './autoSearch.js';
-import type { RunContext, RunExecutor } from './runs.js';
+import type { ProgressPayload, RunContext, RunExecutor } from './runs.js';
 
 type FetchFn = typeof fetch;
 
@@ -31,7 +31,8 @@ export const MAX_ATTEMPTS = 4;
 const FALLBACK = new Set<ProviderErrorCategory>(['quota', 'unavailable', 'transport', 'timeout', 'invalid-request', 'context', 'auth']);
 
 const CODE = /```|\b(function|class|def|const|compile[sd]?|stack ?trace|exception|bug|debug|refactor|regex|sql|typescript|javascript|python|rust|golang|java|c\+\+|html|css|endpoint|unit tests?|script|snippet|code)\b/i;
-const MATH = /\b(solve|equation|integral|derivative|probability|prove|proof|theorem|calculate|compute|percent(age)?|matrix|algebra|geometry|arithmetic)\b|\d\s*[-+*/^×÷=]\s*\d|\d\s*%\s*of\b/i;
+// A minus sign counts only with spaces ("12 - 7"), so dates, phone numbers, and IDs ("2026-09-14") are not math.
+const MATH = /\b(solve|equation|integral|derivative|probability|prove|proof|theorem|calculate|compute|percent(age)?|matrix|algebra|geometry|arithmetic)\b|\d\s*[+*/^×÷=]\s*\d|\d\s+-\s+\d|\d\s*%\s*of\b/i;
 const EXTRACTION = /\b(json|yaml|csv|table|extract|parse|classify|categori[sz]e|schema|fill in|bullet list)\b/i;
 const WRITING = /\b(write|draft|rewrite|rephrase|proofread|essay|e-?mail|letter|story|poem|blog|tweet|summar(y|i[sz]e)|translate|tone|cover letter)\b/i;
 const REASONING = /\b(why|explain|reason(ing)?|compare|trade-?offs?|pros and cons|step by step|analy[sz]e|plan|design|puzzle|riddle|logic)\b/i;
@@ -279,7 +280,7 @@ export interface RouterDeps {
   enqueue?: <T>(fn: () => Promise<T>) => Promise<T>;
 }
 
-const TASK_LABEL: Record<TaskKind, string> = {
+export const TASK_LABEL: Record<TaskKind, string> = {
   code: 'coding', math: 'math', reasoning: 'reasoning', writing: 'writing', extraction: 'structured output', general: 'general questions',
 };
 
@@ -288,7 +289,7 @@ function seconds(ms: number) {
   return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`;
 }
 
-function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderError): ProviderFailure {
+export function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderError): ProviderFailure {
   const reasons = Object.entries(ranking.excluded).map(([reason, count]) => `${count} ${reason}`);
   const wait = ranking.nextAvailableAt !== undefined ? ranking.nextAvailableAt - now : undefined;
   const parts = [
@@ -304,6 +305,90 @@ function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderE
   });
 }
 
+export type DoneEvent = Extract<AdapterEvent, { type: 'done' }>;
+
+/** What one "best model, then the next" step needs. The Free Router and every Free Agent step use it. */
+export interface AttemptContext {
+  owner: string;
+  health: RouterHealth;
+  request: Omit<ModelRequest, 'target' | 'model' | 'messages'>;
+  messages: RunMessage[];
+  tools: ToolName[];
+  documents: WorkspaceDocument[];
+  search?: { apiKey: string; auto?: boolean };
+  signal: AbortSignal;
+  fetchImpl: FetchFn;
+  enqueue: <T>(fn: () => Promise<T>) => Promise<T>;
+  maxAttempts: number;
+  /** Accounts found unusable earlier in this run (a bad key, an account-wide limit), shared between steps. */
+  blockedAccounts: Set<string>;
+}
+
+export interface AttemptHooks {
+  /** A model is about to be sent the request. `previous` names the model that just failed. */
+  trying?: (candidate: RankedCandidate, attempt: number, previous?: string) => void;
+  /** It failed before answering; the next model will be tried. */
+  failed?: (candidate: RankedCandidate, attempt: number, error: ProviderError) => void;
+  /** Every stream event except the final one. Quota events carry the connection ID. */
+  event?: (event: ProgressPayload, candidate: RouteCandidate) => void;
+}
+
+export type AttemptResult =
+  | { ok: true; ranked: RankedCandidate; done: DoneEvent; text: string; attempts: number }
+  | { ok: false; attempts: number; last?: ProviderError };
+
+/**
+ * Send a request to the ranked models in order until one answers. A model that fails before any
+ * output (text, reasoning, activity, or a tool call) is left for the next; after output, or on a
+ * refusal, the failure is thrown, because switching models would splice two answers together or
+ * shop for a model that complies. Returns the answer text as well as streaming it through hooks.
+ */
+export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext, hooks: AttemptHooks = {}): Promise<AttemptResult> {
+  let attempts = 0;
+  let last: ProviderError | undefined;
+  let previous: string | undefined;
+  for (const entry of ranked) {
+    if (attempts >= ctx.maxAttempts) break;
+    const { candidate } = entry;
+    const account = accountOf(ctx.owner, candidate.target);
+    if (ctx.blockedAccounts.has(account) || ctx.health.coolingUntil(account, candidate.model)) continue;
+    attempts++;
+    hooks.trying?.(entry, attempts, previous);
+    const request: ModelRequest = { ...ctx.request, target: candidate.target, model: candidate.model, messages: ctx.messages as ModelMessage[], waitOnRateLimit: false };
+    const sentAt = Date.now();
+    let answeredAt: number | undefined;
+    let text = '';
+    const attempt = async () => {
+      const events = ctx.tools.length
+        ? runWithTools(request, ctx.tools, ctx.documents, ctx.signal, ctx.fetchImpl, ctx.search)
+        : streamModel(request, ctx.signal, ctx.fetchImpl);
+      for await (const event of events) {
+        if (event.type === 'done') return event;
+        if (event.type === 'quota') { hooks.event?.({ ...event, connectionId: candidate.connectionId }, candidate); continue; }
+        if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'activity' || event.type === 'tool') answeredAt ??= Date.now();
+        if (event.type === 'delta') text += event.text;
+        hooks.event?.(event, candidate);
+      }
+      throw new Error('The model stream ended without a result.');
+    };
+    try {
+      const done = candidate.target.execution === 'local' ? await ctx.enqueue(attempt) : await attempt();
+      ctx.health.success(account, candidate.model, answeredAt !== undefined ? answeredAt - sentAt : undefined);
+      return { ok: true, ranked: entry, done, text, attempts };
+    } catch (error) {
+      if (ctx.signal.aborted) throw error;
+      if (!(error instanceof ProviderFailure)) throw error;
+      ctx.health.failure(account, candidate.model, error.error);
+      if (answeredAt !== undefined || !FALLBACK.has(error.error.category)) throw error;
+      if (error.error.scope === 'account') ctx.blockedAccounts.add(account);
+      last = error.error;
+      previous = candidate.displayName || candidate.model;
+      hooks.failed?.(entry, attempts, error.error);
+    }
+  }
+  return { ok: false, attempts, ...(last ? { last } : {}) };
+}
+
 /**
  * Run a request on the best free model, trying the next one when a model fails before answering.
  * Once any answer text, reasoning, or tool call has been shown, the run stays on that model: a
@@ -316,52 +401,22 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const messages = run.search?.auto ? await withWebResults(run.messages, run.search.apiKey, signal, emit, fetchImpl) : run.messages;
     const task = profileTask(messages, run.tools, run.request.maxTokens);
     const ranking = rankCandidates(run.candidates, task, health, run.owner, bench);
-    const blockedAccounts = new Set<string>();
-    let attempts = 0;
-    let last: ProviderError | undefined;
-    let previous: string | undefined;
-
-    for (const { candidate, why } of ranking.ranked) {
-      if (attempts >= MAX_ATTEMPTS) break;
-      const account = accountOf(run.owner, candidate.target);
-      if (blockedAccounts.has(account) || health.coolingUntil(account, candidate.model)) continue;
-      attempts++;
-      const lead = attempts === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;
-      emit({ type: 'route', attempt: attempts, connectionId: candidate.connectionId, model: candidate.model, status: 'trying', reason: why.length ? `${lead}: ${why.join(', ')}.` : `${lead}.` });
-
-      const request: ModelRequest = { ...run.request, target: candidate.target, model: candidate.model, messages: messages as ModelMessage[], waitOnRateLimit: false };
-      const sentAt = Date.now();
-      let answeredAt: number | undefined;
-      const attempt = async () => {
-        const events = run.tools.length
-          ? runWithTools(request, run.tools, run.documents, signal, fetchImpl, run.search)
-          : streamModel(request, signal, fetchImpl);
-        for await (const event of events) {
-          if (event.type === 'done') return event;
-          if (event.type === 'quota') { emit({ ...event, connectionId: candidate.connectionId }); continue; }
-          if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'activity' || event.type === 'tool') answeredAt ??= Date.now();
-          emit(event);
-        }
-        throw new Error('The model stream ended without a result.');
-      };
-
-      try {
-        const done = candidate.target.execution === 'local' ? await enqueue(attempt) : await attempt();
-        health.success(account, candidate.model, answeredAt !== undefined ? answeredAt - sentAt : undefined);
-        const route: RouteOutcome = { connectionId: candidate.connectionId, model: candidate.model, task: task.kind, attempts };
-        return { usage: done.usage, finishReason: done.finishReason, ...(done.loadMs !== undefined ? { loadMs: done.loadMs } : {}), route };
-      } catch (error) {
-        if (signal.aborted) throw error;
-        if (!(error instanceof ProviderFailure)) throw error;
-        health.failure(account, candidate.model, error.error);
-        // After the user has seen part of an answer, switching models would splice two answers together.
-        if (answeredAt !== undefined || !FALLBACK.has(error.error.category)) throw error;
-        if (error.error.scope === 'account') blockedAccounts.add(account);
-        last = error.error;
-        previous = candidate.displayName || candidate.model;
-        emit({ type: 'route', attempt: attempts, connectionId: candidate.connectionId, model: candidate.model, status: 'failed', reason: error.error.message, category: error.error.category });
-      }
-    }
-    throw noneLeft(ranking, attempts, health.now(), last);
+    const result = await tryInOrder(ranking.ranked, {
+      owner: run.owner, health, request: run.request, messages, tools: run.tools, documents: run.documents, search: run.search,
+      signal, fetchImpl, enqueue, maxAttempts: MAX_ATTEMPTS, blockedAccounts: new Set(),
+    }, {
+      trying: ({ candidate, why }, attempt, previous) => {
+        const lead = attempt === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;
+        emit({ type: 'route', attempt, connectionId: candidate.connectionId, model: candidate.model, status: 'trying', reason: why.length ? `${lead}: ${why.join(', ')}.` : `${lead}.` });
+      },
+      failed: ({ candidate }, attempt, error) => {
+        emit({ type: 'route', attempt, connectionId: candidate.connectionId, model: candidate.model, status: 'failed', reason: error.message, category: error.category });
+      },
+      event: event => emit(event),
+    });
+    if (!result.ok) throw noneLeft(ranking, result.attempts, health.now(), result.last);
+    const { candidate } = result.ranked;
+    const route: RouteOutcome = { connectionId: candidate.connectionId, model: candidate.model, task: task.kind, attempts: result.attempts };
+    return { usage: result.done.usage, finishReason: result.done.finishReason, ...(result.done.loadMs !== undefined ? { loadMs: result.done.loadMs } : {}), route };
   };
 }
