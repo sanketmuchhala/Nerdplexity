@@ -204,6 +204,7 @@ export function ChatWorkspace({
       return;
     const prompt = input.trim();
     setInput('');
+    setActionNotice('');
     sticky.current = true;
     void run.send(prompt, documents);
   };
@@ -444,6 +445,36 @@ export function ChatWorkspace({
           </form>
         </WorkbenchDialog>
       )}
+
+      {!!conversation?.attachments?.length && (
+        <section className="np-thread-files" aria-label="Files in this chat">
+          <header><h2>Files in this chat <span>({conversation.attachments.length})</span></h2><span>Included with each prompt</span></header>
+          <div className="np-attachments" aria-label="Thread attachments">
+            {conversation.attachments.map((file) => {
+              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
+              return (
+              <details key={file.id} className="np-attachment">
+                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
+                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
+                </summary>
+                <div>
+                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
+                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                    <X size={12} /> Remove from context
+                  </button>
+                </div>
+              </details>
+            ); })}
+          </div>
+        </section>
+      )}
+      {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
+        <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
+          useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
+        }} />
+      ))}
 
       <div
         className={`np-chat-scroll ${empty ? 'empty' : ''}`}
@@ -772,32 +803,6 @@ export function ChatWorkspace({
             </div>
           </div>
         )}
-        {!!conversation?.attachments?.length && (
-          <div className="np-attachments" aria-label="Thread attachments">
-            {conversation.attachments.map((file) => {
-              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
-              return (
-              <details key={file.id} className="np-attachment">
-                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
-                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
-                  <span>{file.name}</span>
-                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
-                </summary>
-                <div>
-                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
-                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
-                    <X size={12} /> Remove from context
-                  </button>
-                </div>
-              </details>
-            ); })}
-          </div>
-        )}
-        {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
-          <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
-            useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
-          }} />
-        ))}
         <form
           className="np-composer"
           onSubmit={(e) => {

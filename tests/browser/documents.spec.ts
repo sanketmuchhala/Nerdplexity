@@ -123,6 +123,54 @@ test('Workspace imports documents through the same reader and saves larger text'
   await expect(page.locator('.np-document')).toHaveCount(2);
 });
 
+for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+  test(`PDF files stay visible and openable during and after a run at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await setup(page);
+    await page.setViewportSize(viewport);
+    await page.getByLabel('Attach files').setInputFiles({ name: 'basis.pdf', mimeType: 'application/pdf', buffer: pdf('Basis reference number: 729.') });
+    const files = page.getByRole('region', { name: 'Files in this chat', exact: true });
+    const card = files.locator('summary').filter({ hasText: 'basis.pdf' });
+    await expect(card).toBeInViewport({ ratio: 1 });
+    // Hold delivery of the run ID so the running state lasts until the preview is checked.
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/v1/runs', async route => {
+      const response = await route.fetch();
+      await gate;
+      await route.fulfill({ response });
+    });
+    const prompt = 'Review the attached basis PDF.\n' + 'Explain the reference number and summarize the document.\n'.repeat(30);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
+    await page.getByRole('button', { name: 'Send message' }).click();
+    const viewer = page.getByRole('dialog', { name: 'basis.pdf', exact: true });
+    try {
+      await expect(page.getByRole('button', { name: 'Stop generation' })).toBeVisible();
+      await expect(card).toBeInViewport({ ratio: 1 });
+      await card.click();
+      await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
+      await expect(viewer.getByRole('button', { name: 'Remove from context' })).toBeDisabled();
+      await expect(viewer.getByRole('link', { name: 'Download PDF' })).toBeVisible();
+      await page.keyboard.press('Escape');
+    } finally { release(); }
+    await expect(page.locator('.np-provenance')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Stop generation' })).toHaveCount(0);
+    await expect(card).toBeInViewport({ ratio: 1 });
+    await page.locator('.np-chat-scroll').evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await expect(card).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: testInfo.outputPath('pdf-after-response.png') });
+    await card.click();
+    await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
+    await expect(viewer.getByRole('button', { name: 'Remove from context' })).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await page.reload();
+    if (viewport.width < 760) await page.getByRole('button', { name: 'Open navigation' }).click();
+    await page.getByRole('button', { name: /^Review the attached basis PDF/ }).click();
+    await expect(card).toBeInViewport({ ratio: 1 });
+    await card.click();
+    await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
+  });
+}
+
 test('uploaded PDFs open as rendered pages after reload, with navigation, zoom, and download', async ({ page }, testInfo) => {
   await setup(page);
   const original = pdf(['Kestrel page one.', 'Kestrel page two.']);
@@ -147,6 +195,11 @@ test('uploaded PDFs open as rendered pages after reload, with navigation, zoom, 
   await expect(viewer.getByRole('button', { name: 'Next page' })).toBeDisabled();
   await viewer.getByRole('button', { name: 'Zoom in' }).click();
   await expect(viewer).toContainText('125%');
+  const nativeViewer = page.waitForEvent('popup');
+  await viewer.getByRole('link', { name: 'Open in browser', exact: true }).click();
+  const nativePage = await nativeViewer;
+  await expect(nativePage).toHaveURL(/^blob:/);
+  await nativePage.close();
   const downloading = page.waitForEvent('download');
   await viewer.getByRole('link', { name: 'Download PDF' }).click();
   const download = await downloading;

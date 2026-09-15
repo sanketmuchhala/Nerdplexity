@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { ThreadAttachment } from '../lib/db';
 import { fileBase64, isPdf, loadPdf, pdfBytes, readDocument } from '../lib/documents';
@@ -113,7 +113,10 @@ export function PdfPreview({ conversationId, file, onClose, onRestored, onRemove
       <button type="button" className="np-icon-button" aria-label="Zoom out" disabled={!document || zoom <= .5} onClick={() => setZoom(n => Math.max(.5, n - .25))}><ZoomOut size={17} /></button>
       <span>{Math.round(zoom * 100)}%</span>
       <button type="button" className="np-icon-button" aria-label="Zoom in" disabled={!document || zoom >= 2} onClick={() => setZoom(n => Math.min(2, n + .25))}><ZoomIn size={17} /></button>
-      {download && <a className="np-button small ghost" href={download} download={file.name}><Download size={15} />Download PDF</a>}
+      {download && <div className="np-pdf-actions">
+        <a className="np-button small ghost" href={download} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Open in browser</a>
+        <a className="np-button small ghost" href={download} download={file.name}><Download size={15} />Download PDF</a>
+      </div>}
     </div>
     {error && <p className="np-error" role="alert">{error}</p>}
     {!file.hasPdf && !source && <div className="np-pdf-restore">

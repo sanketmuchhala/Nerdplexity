@@ -420,6 +420,12 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-context-trigger > span:last-child { display: flex; align-items: center; gap: 7px; }
 .np-action-notice { font-size: 11px; color: var(--np-accent); }
 .np-attachments { display: flex; flex-wrap: wrap; gap: 7px; padding-bottom: 9px; }
+.np-thread-files { flex: 0 0 auto; min-height: 0; width: 100%; max-width: 840px; margin: 0 auto; padding: 8px 20px; border-bottom: 1px solid var(--np-line); }
+.np-thread-files > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 8px; }
+.np-thread-files h2 { color: var(--np-text); font-size: 12px; font-weight: 500; }
+.np-thread-files h2 span, .np-thread-files > header > span { color: var(--np-muted); font-size: 10px; }
+.np-thread-files .np-attachments { max-height: min(24dvh, 220px); overflow: auto; padding: 2px 2px 8px; }
+@media (max-width: 760px) { .np-thread-files { padding: 6px 14px; } }
 .np-attachment { max-width: min(100%, 360px); border: 1px solid var(--np-line); border-radius: 7px; background: var(--np-raised); font-size: 10px; color: var(--np-muted); }
 .np-attachment summary { display: flex; align-items: center; gap: 6px; padding: 7px 9px; cursor: pointer; list-style: none; }
 .np-attachment summary span { color: var(--np-text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -430,7 +436,7 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-dialog.np-pdf-dialog { width: min(1100px, calc(100% - 24px)); }
 .np-pdf-dialog h2 { overflow-wrap: anywhere; }
 .np-pdf-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; font-size: 12px; }
-.np-pdf-toolbar a { margin-left: auto; }
+.np-pdf-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
 .np-pdf-viewport { overflow: auto; max-height: 65dvh; min-height: 120px; background: #292b30; border-radius: 8px; padding: 16px; }
 .np-pdf-viewport canvas { display: block; margin: auto; background: white; box-shadow: 0 2px 12px #0005; }
 .np-pdf-text { margin-top: 14px; font-size: 12px; }
