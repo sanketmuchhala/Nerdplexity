@@ -50,7 +50,7 @@ The Free Router can use `openrouter/free` as one of its candidates, always last 
 3. The [Free Agent](free-agent.md), which is built on the Free Router, is the **default model**: as soon as a connection has a free model and no model has been chosen, the app selects it (for the settings and for an empty new thread). To send each message to one model instead, open the model picker and choose **Free Router**, the second row, marked with the Nerdplexity logo, or choose it under **Models → Let Nerdplexity choose**. Its row says how many free models on how many connections it can use. Choosing any model keeps that choice; the default never replaces it. (Until 2026-09-14 the Free Router was the default; a settings value still holding that automatic default is switched to the Free Agent once. A Free Router chosen by hand after that stays.)
 4. Optional but recommended: run [Bench](bench.md) on a few models. The router then ranks by measured results instead of guesses from model names.
 
-In the chat, answers speak as Nerdplexity: no model names on the answer, and the **Free Router** panel shows the attempts ("Model 1 · failed", "Model 2 · answered") with the failure reasons but not the models. **Run history** names the model that answered ("… via Free Router") and every model tried, with the reasons.
+The answer is credited to Nerdplexity, and the **Free Router** panel above it names every model it tried, why, and what happened. **Run history** shows the model that answered ("… via Free Router") and the same attempts.
 
 ## 3. One routed message, end to end
 

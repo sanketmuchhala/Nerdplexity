@@ -116,7 +116,18 @@ http
           : system.includes('Answer only this part') ? `Part answer from ${body.model}.`
             : `Draft from ${body.model}.`;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.write(delta(text));
+      // "slowly" in the message: drafts think, write half, pause, then finish, so a test can watch
+      // them live. Short, because models on this machine share one queue with every other test.
+      const last = [...body.messages].reverse().find((m) => m.role === 'user');
+      if (JSON.stringify(last?.content ?? '').includes('slowly') && text.startsWith('Draft')) {
+        res.write(frame({ choices: [{ delta: { reasoning: `Considering it as ${body.model}.` } }] }));
+        await sleep(500);
+        res.write(delta(`${text} Working through each step`));
+        await sleep(1500);
+        res.write(delta(' with care before the check.'));
+      } else {
+        res.write(delta(text));
+      }
       res.write(frame({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 3 } }));
       entry.completed = true;
       res.end('data: [DONE]\n\n');

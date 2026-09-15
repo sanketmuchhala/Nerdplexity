@@ -163,6 +163,10 @@ export function ChatWorkspace({
     const current = useChat.getState().activeConversation();
     if (current) await setAllowCharges(current.id, true);
   };
+  const providerOf = (connectionId: string) => {
+    const owner = connections.find((c) => c.id === connectionId);
+    return owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '';
+  };
   const nameOf = (connectionId: string) =>
     connections.find((c) => c.id === connectionId)?.name ??
     'removed connection';
@@ -522,14 +526,14 @@ export function ChatWorkspace({
                 {message.role === 'assistant' && (message.metadata?.route || message.metadata?.agent || message.metadata?.tools || message.metadata?.activities) && (
                   // Above a saved answer, the panels sit in the transcript column.
                   <div className="np-inline-tools">
-                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} showModels={false} />}
-                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} showModels={false} />}
+                    {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} providerOf={providerOf} writerThinking={message.metadata.reasoning} />}
                     {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
                   </div>
                 )}
                 {(() => {
-                  // Answers from the Free Agent or Free Router speak as Nerdplexity: the chat does not
-                  // name the models behind them (Run history does). A model the user picked is named.
+                  // Answers from the Free Agent or Free Router are credited to Nerdplexity; their panels name
+                  // every model used. An answer from a model the user picked is credited to that model.
                   const chosenByNerdplexity = !!(message.metadata?.agent || message.metadata?.route);
                   const credit = message.role === 'assistant' ? [
                     !chosenByNerdplexity && message.provenance &&
@@ -540,7 +544,8 @@ export function ChatWorkspace({
                   return (
                     <>
                       <Message
-                        message={{ ...message, timestamp: message.createdAt }}
+                        // The Free Agent's final writer shows its thinking in the agent panel, with the other models'.
+                        message={{ ...message, timestamp: message.createdAt, ...(message.metadata?.agent ? { metadata: { ...message.metadata, reasoning: undefined } } : {}) }}
                         animate={!message.runId}
                         model={message.role === 'assistant' && !chosenByNerdplexity ? answerModel(message.provenance) : undefined}
                       />
@@ -633,7 +638,7 @@ export function ChatWorkspace({
                   role: 'assistant',
                   content: run.partial || '',
                   timestamp: Date.now(),
-                  metadata: run.reasoning
+                  metadata: run.reasoning && !run.agent?.length
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
@@ -641,8 +646,8 @@ export function ChatWorkspace({
                 streaming={run.running}
                 status={run.running ? run.phase : undefined}
               >
-                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} showModels={false} />}
-                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} showModels={false} />}
+                {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} providerOf={providerOf} live={run.running} writerThinking={run.reasoning} />}
                 {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
               </Message>
             )}

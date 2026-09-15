@@ -83,7 +83,8 @@ Each principle is a rule the code enforces, with where it is enforced.
 | 6 | **Bounded work per step.** Each step tries a limited number of models, so a failing provider cannot cause unbounded requests. | `AGENT_LIMITS.attempts` |
 | 7 | **Fail forward.** A lost draft, part, or plan degrades the answer (fewer drafts, the writer answers the part, ensemble instead of plan) instead of failing the run. Only the writer can fail the run. | `runStep` returns `undefined` on failure; section 13 |
 | 8 | **Stateless per message.** Nothing about one message carries to the next, except shared health (cooldowns, success rates). | Section 9 |
-| 9 | **Everything visible.** Every step is an event, saved with the message and in Run history. The chat hides model names; Run history shows them. | `agent` events; `showModels` in the panels |
+| 9 | **Everything visible, live.** Every step is an event, and each model's output and reasoning stream while it works. The panel shows every model, its role, and the hand-offs, in the chat and in Run history. The answer itself is credited to Nerdplexity. | `agent` and `agent_output` events; `AgentActivity` |
+| 10 | **More than one model.** Automatic never answers with one model when two can be used: a simple message gets a draft and a check. | `chooseStrategy` |
 
 ## 3. Components
 
@@ -95,7 +96,7 @@ flowchart LR
         Settings[AgentSettings<br/>edit settings.agent]
         UseRun[useRun<br/>send, follow, record]
         Pool[routerPool<br/>free-model pool]
-        Panels[AgentActivity<br/>chat: no model names<br/>Run history: model names]
+        Panels[AgentActivity<br/>every model, live thinking,<br/>output, hand-offs]
         UseRun --> Pool
         UseRun --> Panels
     end
@@ -131,7 +132,7 @@ flowchart LR
 | Default selection | `workspace/Workspace.tsx`, `workspace/Models.tsx` | Choose the Free Agent when no model is chosen; move the earlier automatic Free Router default once | Replace a model a person picked |
 | Settings UI | `workspace/AgentSettings.tsx` | Edit `AgentConfig`, save optimistically, show what Automatic would pick | Validate choices (the server does) |
 | Run client | `workspace/useRun.ts` | Send the run with the pool and settings, follow events, keep the steps, save the run record and the message | Decide anything about models |
-| Panels | `workspace/AgentActivity.tsx` | Show the strategy and steps; `showModels={false}` in the chat, default `true` in Run history | Fetch anything |
+| Panels | `workspace/AgentActivity.tsx` | The live panel: flow line, a card per step with model, thinking, output, and hand-offs; open while live | Fetch anything |
 | Run route | `backend/src/routes/runs.ts` | Validate the request and route (`validateRoute`), sanitize settings (`agentSettings`), load Bench scores, pick the executor | Rank or call models |
 | Specialists route | `backend/src/routes/agent.ts` | `POST /v1/agent/specialists`: the top three per kind, for the settings hints and the Bench page | Start runs |
 | Run harness | `backend/src/runtime/runs.ts` | Lifecycle, sequence numbers, replay, timeout, orphan cancel, one terminal event | Know about roles or models |
@@ -310,8 +311,8 @@ The writer is ranked twice on purpose. The first ranking (`own`) decides who the
 ### 6.4 Execution branches
 
 - **Plan.** The strategy step is emitted, then the planner runs with only the planner prompt and the latest user text (no history), temperature 0, 400 output tokens. `parsePlan` reads the JSON. With two or more parts, the specialists run in parallel, each on `forPart(messages, task)`. A failed part becomes an empty entry the writer is told to answer itself. With fewer than two usable parts, the mode becomes `ensemble` and the ensemble branch runs; the strategy step is emitted again with the same `id`, so the web app replaces it.
-- **Ensemble.** The strategy step is emitted, the drafters run in parallel on the full conversation with 1,500 output tokens each, and the successful drafts are kept.
-- **Direct.** Only the strategy step; the writer answers the conversation as is, with tools if tools are on.
+- **Ensemble.** The strategy step is emitted, the drafters run in parallel on the full conversation with 1,500 output tokens each, and the successful drafts are kept. The number of drafters is the user's setting, else what the strategy suggests (one for a simple message), else two.
+- **Direct.** Only the strategy step; the writer answers the conversation as is, with tools if tools are on. Used only with tools, a single usable model, or the Quick setting.
 
 ### 6.5 The writer and the commit point
 
@@ -356,7 +357,8 @@ stateDiagram-v2
 | --- | --- | --- |
 | `running` | Each model the step sends to | `connectionId`, `model`, `reason` (the ranking's reasons, or "After *X* failed: …") |
 | `failed` (per model) | That model failed before output | `connectionId`, `model`, `reason` (the provider's safe message) |
-| `done` | A model answered | `model`, `reason`, `text` (shortened), `durationMs` |
+| `agent_output` | While the model writes | `id`, `channel` (`text` or `reasoning`), the new `text`; pieces are collected and sent at most every 150 ms (`AGENT_LIMITS.outputFlushMs`), and whatever is waiting is sent before the step's next event |
+| `done` | A model answered | `model`, `reason`, `text` and `reasoning` (each shortened), `durationMs` |
 | `failed` (final) | No model answered | `reason` |
 
 Overrides per role: `messages` (planner and specialists get their own), `request` (`maxTokens`, and `temperature: 0` for the planner), `maxAttempts`. Every step gets `tools: []`; only the writer gets the run's tools.
@@ -410,25 +412,30 @@ Every step is reported with an `agent` event carrying an `AgentStep` (`shared/sr
 
 - **Identity.** A step's `id` is stable: `strategy`, `planner`, `draft-1`…`draft-3`, `part-1`…`part-3`, `writer`. Every update to a step reuses its `id`; clients **replace** the step with the latest event of the same `id` (upsert), keeping first-seen order.
 - **Order.** Events are totally ordered by `seq` within a run. `strategy` comes before any other step (in plan mode it may be emitted again after the planner, when the plan falls back to ensemble). The `writer` step starts only after all drafts or parts ended. Parallel steps' events interleave.
-- **Content.** `text` on a `done` drafter, specialist, or planner step holds its output, shortened to 6,000 characters. The writer's output arrives only as `delta` events.
+- **Live output.** Between a step's `running` and `done` events, `agent_output` events carry its output and reasoning as the model writes. Clients append them to the step with that `id`. They always precede the step's `done` event, which replaces them with the complete, shortened text.
+- **Content.** `text` and `reasoning` on a `done` drafter, specialist, or planner step hold its output and reasoning, shortened to 6,000 characters. The writer's output arrives only as `delta` events (and its reasoning as `reasoning`), because it is the answer.
 - **Terminal.** `completed.agent` (an `AgentOutcome`) names the mode, task, number of requests, and the writer. A failed run ends with `failed` and no outcome.
 - `status: 'skipped'` is reserved in the type and not emitted today.
 
 A real trace (an ensemble, from the server with a local fake provider; `runId` and timestamps removed):
 
 ```text
-seq 1   queued     position 0
+seq 1   queued        position 0
 seq 2   started
-seq 3   agent      strategy  done     mode ensemble · "A math task: specialists draft independently, then the strongest model checks them and writes the answer."
-seq 4   agent      draft-1   running  qwen/qwen3-32b:free · "32B parameters, on this machine"
-seq 5   agent      draft-2   running  google/gemma-3-12b-it:free · "12B parameters, on this machine"
-seq 6   agent      draft-1   done     text "Draft by qwen/qwen3-32b:free: 84" · 16 ms
-seq 7   agent      draft-2   done     text "Draft by google/gemma-3-12b-it:free: 84" · 16 ms
-seq 8   agent      writer    running  meta-llama/llama-3.3-70b-instruct:free · "Strongest for math: 70B parameters, on this machine"
-seq 9   delta      "12 * 7 = 84."
-seq 10  agent      writer    done     "Checked the drafts and wrote the answer." · 2 ms
-seq 11  completed  agent {mode ensemble, task math, calls 3, writer meta-llama/llama-3.3-70b-instruct:free}
-                   usage {prompt 60, completion 18, total 78} · finishReason stop
+seq 3   agent         strategy  done       mode ensemble · "A math task: specialists draft independently, then the strongest model checks them and writes the answer."
+seq 4   agent         draft-1   running    qwen/qwen3-32b:free · "32B parameters, on this machine"
+seq 5   agent         draft-2   running    google/gemma-3-12b-it:free · "12B parameters, on this machine"
+seq 6   agent_output  draft-1   reasoning  "12 times 7 is 84."
+seq 7   agent_output  draft-1   text       "Draft by qwen/qwen3-32b:free: 84"
+seq 8   agent         draft-1   done       text "Draft by qwen/qwen3-32b:free: 84" · reasoning "12 times 7 is 84." · 15 ms
+seq 9   agent_output  draft-2   reasoning  "12 times 7 is 84."
+seq 10  agent_output  draft-2   text       "Draft by google/gemma-3-12b-it:free: 84"
+seq 11  agent         draft-2   done       text "Draft by google/gemma-3-12b-it:free: 84" · reasoning "12 times 7 is 84." · 16 ms
+seq 12  agent         writer    running    meta-llama/llama-3.3-70b-instruct:free · "Strongest for math: 70B parameters, on this machine"
+seq 13  delta         "12 * 7 = 84."
+seq 14  agent         writer    done       "Checked the drafts and wrote the answer." · 2 ms
+seq 15  completed     agent {mode ensemble, task math, calls 3, writer meta-llama/llama-3.3-70b-instruct:free}
+                      usage {prompt 60, completion 18, total 78} · finishReason stop
 ```
 
 Which events each step forwards to the run:
@@ -436,7 +443,7 @@ Which events each step forwards to the run:
 | Source | Forwards |
 | --- | --- |
 | Automatic web search | `tool` (`web_auto`) |
-| Planner, drafters, specialists | `agent` steps, `quota` |
+| Planner, drafters, specialists | `agent` steps, `agent_output` (their text and reasoning), `quota` |
 | Writer | `agent` step, and every stream event: `delta`, `reasoning`, `activity`, `tool`, `model`, `status`, `quota` |
 | Executor | `status` when the fallback draft is shown |
 
@@ -455,7 +462,8 @@ After that, `agentDefault` is set, so a Free Router picked by hand stays.
 
 | Event | Effect |
 | --- | --- |
-| `agent` | Upsert the step by `id` into `record.agent`; for a `running` step, the status line from its role ("Planning the parts", "Drafting", "Answering each part", "Checking and writing the answer") |
+| `agent` | Upsert the step by `id` into `record.agent`; the status line names the models at work ("Qwen3 32B and Gemma 3 12B are drafting", "Llama 3.3 70B is checking and writing the answer") |
+| `agent_output` | Append the text to that step's `text` or `reasoning`, so its card streams |
 | `delta`, `reasoning` | Append; rendering is batched per animation frame |
 | `model` | Record the concrete model OpenRouter reports (not shown in the status for routed runs) |
 | `quota` | Recorded on the run, and applied to the real connection named in the event (never to the virtual one) |
@@ -472,9 +480,9 @@ The record is written to the server at most once a second while running (`store.
 
 | Surface | Shows |
 | --- | --- |
-| Chat answer | No model name or logo (the header shows Nerdplexity), no credit line unless the run was stopped, failed, or hit the output limit. Decided in `ChatWorkspace.tsx` from `metadata.agent` / `metadata.route`. |
-| Chat panel | `AgentActivity showModels={false}`: strategy and reason, requests, steps by role with time; failure reasons; the drafts' text. Model names, connections, and "why this model" are hidden. |
-| Run history | `AgentActivity` with models: every step's model, connection, reason; the row reads "*writer* via Free Agent · *N* requests". |
+| Chat answer | Credited to Nerdplexity (its name and mark), since several models made it; no single-model credit line unless the run was stopped, failed, or hit the output limit. The writer's reasoning is not repeated here; it shows in the writer's card. Decided in `ChatWorkspace.tsx` from `metadata.agent` / `metadata.route`. |
+| Chat panel | `AgentActivity`, open while live: the strategy and reason; the flow line (plan → drafts or parts → checks and writes) with each model's logo; a card per step with role, model, connection, why chosen, time, live thinking and output, and hand-offs ("From the plan", "Sent to … to check", "Received …"). Folds to one line when the run ends. |
+| Run history | The same panel, and the row "*writer* via Free Agent · *N* requests". |
 | Toolbar, picker, sidebar | "Free Agent" with the Nerdplexity mark |
 
 ## 12. The settings pipeline
@@ -560,14 +568,14 @@ Invariants, each covered by tests (section 16):
 | Unit | `backend/src/runtime/agent.test.ts` | `fetchImpl` is a fake provider (`fakeModels`) that answers by role, recognized from the system note; `RouterHealth` injected; `enqueue` runs at once | Strategy table, multi-part detection, families, plan parsing, specialists, every mode, drafter and writer failures, spare rotation, the fallback draft, attempt limits, every setting, sanitizing |
 | Unit | `backend/src/runtime/router.test.ts` | Same | `tryInOrder` and ranking, which every step relies on |
 | HTTP | `backend/src/routes/bench.test.ts` | A real app and database (PGlite in memory), a local fake provider | The specialists endpoint with real Bench results |
-| Browser | `tests/browser/agent.spec.ts` | Real backend, `tests/fixtures/fake-provider.mjs` catalog `/agent/v1` (three sizes of one model that answer by role) | Ensemble with drafts, no model names in the chat, Run history with models, plan with parts, direct for greetings, the Specialists table, settings (Quick, one draft, a chosen writer, reset) |
+| Browser | `tests/browser/agent.spec.ts` | Real backend, `tests/fixtures/fake-provider.mjs` catalog `/agent/v1` (three sizes of one model that answer by role; "slowly" in a message makes drafts think and write word by word) | Ensemble with models and hand-offs in the panel, Run history, plan with parts, two models for a greeting, the panel streaming live, the Specialists table, settings (Quick, one draft, a chosen writer, reset) |
 | Browser | `tests/browser/connections.spec.ts` | Mocked discovery | The Free Agent becomes the default and never replaces a chosen model |
 
 ## 17. Known architectural limits
 
 - **Health is in memory and per process.** A restart forgets cooldowns and success rates; several server instances would not share them.
 - **Rule-based decisions.** Strategy and task kind come from wording, so they cost nothing but can misjudge a message ([Free Agent, section 15](free-agent.md#15-limitations)).
-- **No streaming of drafts.** Drafts are shown when finished; only the writer streams.
+- **Local models take turns.** Drafts from models on this machine run one after another through the local queue, so their cards stream one at a time.
 - **The writer waits for the slowest input.** A slow drafter delays the answer until it finishes or fails; there is no per-step deadline other than the run's 10 minutes.
 - **Drafts in a system note.** The writer reads drafts with system-message weight. They come from models answering the user's own message, and the note tells the writer they can be wrong, but a draft that repeated instructions from, say, a web page would be read with that weight too.
 - **The server trusts the web app about prices.** A modified client could send paid models in a route; they would run on that client's own keys.

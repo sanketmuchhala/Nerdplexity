@@ -56,9 +56,10 @@ describe('strategy', () => {
     expect(looksMultiPart(text)).toBe(expected);
   });
 
-  it('answers directly when simple, with tools on, or with one model; drafts for hard tasks; plans for several parts', () => {
+  it('always uses two models or more: one draft when simple, more for hard tasks, parts for several; one model only with tools or one model', () => {
     const profile = (text: string, tools: [] | ['calculator'] = []) => profileTask(user(text), tools);
-    expect(chooseStrategy('Hi!', profile('Hi!'), 3).mode).toBe('direct');
+    expect(chooseStrategy('Hi!', profile('Hi!'), 3)).toMatchObject({ mode: 'ensemble', drafts: 1 });
+    expect(chooseStrategy('Hi!', profile('Hi!'), 3, 'quick').mode).toBe('direct');
     expect(chooseStrategy('Solve 12 * 7', profile('Solve 12 * 7', ['calculator']), 3).mode).toBe('direct');
     expect(chooseStrategy('Solve 12 * 7', profile('Solve 12 * 7'), 1).mode).toBe('direct');
     expect(chooseStrategy('Solve 12 * 7', profile('Solve 12 * 7'), 3).mode).toBe('ensemble');
@@ -198,17 +199,39 @@ describe('Free Agent runs', () => {
     expect(thrown).toBeDefined();
   });
 
-  it('answers simple messages with one request, and runs tools on one model', async () => {
-    const { fn, calls } = fakeModels(() => ok('Hello!'));
-    const { result, final } = await runAgent(three(), user('Hi!'), fn);
-    expect(calls).toHaveLength(1);
-    expect(final('strategy')).toMatchObject({ mode: 'direct' });
-    expect(result?.agent).toMatchObject({ mode: 'direct', calls: 1 });
+  it('answers a simple message with two models, a draft and a check, and runs tools on one model', async () => {
+    const { fn, calls } = fakeModels((model, role) => role === 'writer' ? ok('Hello, checked.') : ok(`Hello from ${model}.`));
+    const { result, final, text } = await runAgent(three(), user('Hi!'), fn);
+    expect(calls.map(c => c.role)).toEqual(['draft', 'writer']);
+    expect(calls[0].model).not.toBe(calls[1].model);
+    expect(final('strategy')).toMatchObject({ mode: 'ensemble', reason: expect.stringContaining('one model drafts, and a second') });
+    expect(result?.agent).toMatchObject({ mode: 'ensemble', calls: 2 });
+    expect(text).toBe('Hello, checked.');
 
     const tools = fakeModels(() => ok('42'));
     await runAgent(three(), user('Solve 6 * 7'), tools.fn, { tools: ['calculator'] });
     expect(tools.calls).toHaveLength(1);
     expect(tools.calls[0].body.tools?.[0]?.function?.name).toBe('calculator');
+  });
+
+  it('streams each draft and its reasoning live, in pieces, and keeps them on the finished step', async () => {
+    const pieces = (model: string) => [
+      { choices: [{ delta: { reasoning: 'Thinking about ' } }] }, { choices: [{ delta: { reasoning: `it as ${model}.` } }] },
+      { choices: [{ delta: { content: 'Draft ' } }] }, { choices: [{ delta: { content: 'text.' } }] },
+      { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 3, completion_tokens: 2 } },
+    ].map(record => `data: ${JSON.stringify(record)}\n\n`).join('') + 'data: [DONE]\n\n';
+    const { fn } = fakeModels((model, role) => role === 'writer' ? ok('Final.') : new Response(pieces(model), { headers: { 'content-type': 'text/event-stream' } }));
+    const { events, final } = await runAgent(three(), user('Solve 12 * 7'), fn);
+    const live = (channel: string) => events.filter((e): e is Extract<ProgressPayload, { type: 'agent_output' }> => e.type === 'agent_output' && e.id === 'draft-1' && e.channel === channel).map(e => e.text).join('');
+    const model = final('draft-1')!.model;
+    expect(live('reasoning')).toBe(`Thinking about it as ${model}.`);
+    expect(live('text')).toBe('Draft text.');
+    // Pieces are batched, so there are fewer events than tokens.
+    expect(events.filter(e => e.type === 'agent_output' && e.id === 'draft-1').length).toBeLessThanOrEqual(2);
+    expect(final('draft-1')).toMatchObject({ status: 'done', text: 'Draft text.', reasoning: `Thinking about it as ${model}.` });
+    // Live output comes before the step reports it is done.
+    const doneAt = events.findIndex(e => e.type === 'agent' && e.id === 'draft-1' && e.status === 'done');
+    expect(events.findIndex(e => e.type === 'agent_output' && e.id === 'draft-1')).toBeLessThan(doneAt);
   });
 
   it("assigns work only to models the Free Router can rank, never to OpenRouter's own router", async () => {

@@ -34,14 +34,13 @@ test('the Free Router tries the best free model, falls back when it is rate limi
   const first = prompt('route');
   await send(page, first);
   await expect(page.getByText('Hello from fast-model: café, naïve, \u{1F642}.')).toBeVisible();
-  // The chat does not name the models the router chose.
+  // The answer is credited to Nerdplexity; the router's panel names every model it tried.
   await expect(page.locator('.np-provenance')).toHaveCount(0);
   const decision = page.getByLabel('Free Router decision');
   await expect(decision).toContainText('1 fallback');
   await decision.locator('summary').click();
-  await expect(decision).toContainText('Model 1');
+  await expect(decision).toContainText('limit-model-70b');
   await expect(decision).toContainText('rate limiting');
-  await expect(decision).not.toContainText('limit-model-70b');
 
   const asked = async (text: string) => ((await (await page.request.get(`${fake}/_log?prompt=${encodeURIComponent(text)}`)).json()) as { model: string }[]).map(entry => entry.model);
   expect(await asked(first)).toEqual(['limit-model-70b', 'fast-model-8b']);

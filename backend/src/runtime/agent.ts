@@ -11,8 +11,9 @@ import {
 // The Free Agent: for each message it chooses a strategy, asks the free models that are best at
 // what the message needs, and has the strongest one check their work and write the answer.
 //
-//   direct    one model answers (simple messages, tools on, or only one model available)
-//   ensemble  specialists (two by default) draft independently; the strongest model checks them and writes
+//   direct    one model answers (tools on, only one model available, or the Quick setting)
+//   ensemble  specialists draft independently (one for a simple message, two by default otherwise);
+//             another, the strongest, checks them and writes
 //   plan      a planner splits a multi-part message; a specialist answers each part; the
 //             strongest model checks the parts and writes one reply
 //
@@ -31,6 +32,8 @@ export const AGENT_LIMITS = {
   plannerTokens: 400,
   /** A draft is shortened to this before the writer reads it, and before it is shown. */
   draftChars: 6000,
+  /** Live output of a step is sent in pieces at most this often, not per token. */
+  outputFlushMs: 150,
 } as const;
 
 const TASK_KINDS: readonly TaskKind[] = ['code', 'math', 'reasoning', 'writing', 'extraction', 'general'];
@@ -101,7 +104,12 @@ export function looksMultiPart(text: string): boolean {
 
 const ENSEMBLE_KINDS = new Set<TaskKind>(['code', 'math', 'reasoning', 'extraction']);
 
-export function chooseStrategy(text: string, task: TaskProfile, usable: number, behavior: AgentBehavior = 'auto'): { mode: AgentMode; reason: string } {
+/**
+ * How to handle a message. The Free Agent always uses at least two models when it can: a simple
+ * message gets one draft and a check by a second model; harder ones get more drafts, or parts for
+ * specialists. One model answers alone only with tools, with a single usable model, or on Quick.
+ */
+export function chooseStrategy(text: string, task: TaskProfile, usable: number, behavior: AgentBehavior = 'auto'): { mode: AgentMode; reason: string; drafts?: number } {
   if (task.tools) return { mode: 'direct', reason: 'Tools are on, so one model runs them and answers.' };
   if (usable < 2) return { mode: 'direct', reason: 'Only one free model can take this message, so it answers directly.' };
   if (behavior === 'quick') return { mode: 'direct', reason: 'Quick, from your agent settings: the best model answers directly.' };
@@ -115,7 +123,7 @@ export function chooseStrategy(text: string, task: TaskProfile, usable: number, 
   if (ENSEMBLE_KINDS.has(task.kind) || text.length > 600 || (task.kind === 'writing' && text.length > 200)) {
     return { mode: 'ensemble', reason: `A ${TASK_LABEL[task.kind]} task: specialists draft independently, then the strongest model checks them and writes the answer.` };
   }
-  return { mode: 'direct', reason: 'A simple message: the best model answers directly.' };
+  return { mode: 'ensemble', drafts: 1, reason: 'A simple message: one model drafts, and a second, stronger model checks it and writes the answer.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +274,32 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       id: string, role: AgentStep['role'], list: RankedCandidate[], overrides: Partial<AttemptContext>, extra: Partial<AgentStep> = {},
     ): Promise<Draft | undefined> => {
       const started = Date.now();
+      // The model's output and reasoning stream to the user as it writes, in pieces, not per token.
+      let reasoning = '';
+      const pending: Record<'text' | 'reasoning', string> = { text: '', reasoning: '' };
+      let timer: NodeJS.Timeout | undefined;
+      const flush = () => {
+        clearTimeout(timer);
+        timer = undefined;
+        for (const channel of ['reasoning', 'text'] as const) {
+          if (pending[channel]) { emit({ type: 'agent_output', id, channel, text: pending[channel] }); pending[channel] = ''; }
+        }
+      };
+      const live = (channel: 'text' | 'reasoning', piece: string) => {
+        pending[channel] += piece;
+        timer ??= setTimeout(flush, AGENT_LIMITS.outputFlushMs);
+      };
       try {
         const result = await tryInOrder(list, context(overrides), {
           trying: (entry, attempt, previous) => step({ id, role, status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: attempt === 1 ? describe(entry) : `After ${previous} failed: ${describe(entry)}`, ...extra }),
           failed: (entry, _attempt, error) => step({ id, role, status: 'failed', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: error.message, ...extra }),
-          event: event => { if (event.type === 'quota') emit(event); },
+          event: event => {
+            if (event.type === 'quota') emit(event);
+            else if (event.type === 'delta') live('text', event.text);
+            else if (event.type === 'reasoning') { reasoning += event.text; live('reasoning', event.text); }
+          },
         });
+        flush();
         calls += result.attempts;
         if (!result.ok) {
           step({ id, role, status: 'failed', reason: result.last ? `No model could do this step (last: ${result.last.message})` : 'No model was available for this step.', ...extra });
@@ -279,9 +307,10 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
         }
         usages.push(result.done.usage);
         const { candidate } = result.ranked;
-        step({ id, role, status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: describe(result.ranked), text: clip(result.text), durationMs: Date.now() - started, ...extra });
+        step({ id, role, status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: describe(result.ranked), text: clip(result.text), ...(reasoning ? { reasoning: clip(reasoning) } : {}), durationMs: Date.now() - started, ...extra });
         return { entry: result.ranked, text: result.text, ...(extra.task ? { task: extra.task } : {}) };
       } catch (error) {
+        flush();
         if (signal.aborted) throw error;
         // A failure after output, or a refusal: the step is lost, the run goes on.
         step({ id, role, status: 'failed', reason: error instanceof ProviderFailure ? error.error.message : 'The step failed.', ...extra });
@@ -290,7 +319,8 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     };
     const strategyStep = () => step({ id: 'strategy', role: 'strategy', status: 'done', mode, reason: [reason, ...notes].join(' ') });
 
-    let { mode, reason } = chooseStrategy(text, task, own.length, config.behavior);
+    const decision = chooseStrategy(text, task, own.length, config.behavior);
+    let { mode, reason } = decision;
     // The writer the drafts are built around: the user's choice, or the top model for this kind of task.
     const writerChoice = withChoice(own, config.writer, 'writer');
     if (writerChoice.note) notes.push(writerChoice.note);
@@ -333,7 +363,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
 
     if (mode === 'ensemble') {
       strategyStep();
-      const count = config.drafts ?? AGENT_LIMITS.drafters;
+      const count = config.drafts ?? decision.drafts ?? AGENT_LIMITS.drafters;
       // The user's drafters first, in their order, then the ranking fills any remaining places.
       const chosen = (config.drafters ?? []).map(choice => own.find(entry => sameModel(entry.candidate, choice)))
         .filter((entry): entry is RankedCandidate => !!entry && !isEntry(entry, writer)).slice(0, count);
@@ -375,7 +405,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       // No writer could answer. A draft is still an answer: show the first one rather than nothing.
       const fallback = drafts.find(draft => draft.text.trim());
       if (!fallback || answered) throw noneLeft({ ranked: writers, excluded: {} }, result.attempts, health.now(), result.last as ProviderError | undefined);
-      // The chat does not name models; the draft's step (and Run history) does.
+      // The draft's own step names the model that wrote it.
       emit({ type: 'status', message: 'No model could check and rewrite the drafts, so this is one unchecked draft.' });
       emit({ type: 'delta', text: fallback.text });
       const outcome: AgentOutcome = { mode, task: task.kind, calls, writer: { connectionId: fallback.entry.candidate.connectionId, model: fallback.entry.candidate.model } };

@@ -32,10 +32,10 @@ Code: `backend/src/runtime/agent.ts` (server), `frontend/src/workspace/AgentActi
 | | **Free Router** | **Free Agent** | **`openrouter/free`** |
 | --- | --- | --- | --- |
 | Whose | Nerdplexity | Nerdplexity | OpenRouter |
-| Models per message | One (plus fallbacks) | One for simple messages; for harder ones, up to three drafters or specialists (plus a planner) and a writer, usually different models | One, picked by OpenRouter |
+| Models per message | One (plus fallbacks) | At least two: for a simple message one drafts and another checks; for harder ones, up to three drafters or specialists (plus a planner) and a writer. One alone only with tools, a single usable model, or the Quick setting | One, picked by OpenRouter |
 | Chooses among | Free models on all your connections | Free models on all your connections | OpenRouter's free models |
 | Best for | Everyday chat, speed, saving quota | Harder questions: math, code, reasoning, multi-part requests | A single OpenRouter key |
-| Requests per message | 1 normally, up to 4 on failures | 1 for simple messages, usually 3–4; each step has its own limit on attempts (section 9) | 1 |
+| Requests per message | 1 normally, up to 4 on failures | 2 for simple messages, usually 3–4 for harder ones; each step has its own limit on attempts (section 9) | 1 |
 | In the model picker | **Free Router**, second row | **Free Agent**, first row, the default | An ordinary model |
 
 The Free Agent is built on the Free Router: it uses the same free-model pool, the same ranking, the same health and cooldowns, and the same fallback rules (`tryInOrder`) for every model it asks. Read the Free Router page for those; this page covers what the agent adds.
@@ -50,20 +50,20 @@ It assigns work only to models the Free Router can rank. OpenRouter's own router
 4. Optional: under **Models → Let Nerdplexity choose**, choose how the agent works and which model does which part (section 9).
 5. For the best automatic choices, run [Bench](bench.md) on your models. The **Specialists** table on the Bench page shows who the agent would ask for each kind of task and why.
 
-The chat speaks as Nerdplexity: an answer from the Free Agent does not name the models behind it. The **Free Agent** panel above it shows the strategy, each step by role (Plan, Draft 1, Part 2 · writing, Final answer), how long each took, and what each step wrote. **Run history** names every model (section 11).
+The answer is credited to Nerdplexity, since no single model wrote it. The **Free Agent** panel above it names every model and its role, and while the agent works it opens by itself and streams what each model is thinking and writing, and what is passed from one model to the next (section 11).
 
 ## 3. The three strategies
 
 For every message the agent picks one strategy (section 5):
 
-**Direct**: one model answers. Used for simple messages, when tools are on, or when only one free model can take the message. Costs one request, like the Free Router.
+**Direct**: one model answers alone. Used only when tools are on, when only one free model can take the message, or with the Quick setting. Costs one request, like the Free Router.
 
 ```mermaid
 flowchart LR
     M[Message] --> W[Best model for the task] --> A[Answer]
 ```
 
-**Ensemble**: specialists (two by default, one to three in the settings) draft independently; the strongest model checks the drafts and writes the answer. Used for code, math, reasoning, structured output, long requests, and longer writing.
+**Ensemble**: specialists draft independently; the strongest model checks the drafts and writes the answer. A simple message gets one draft and a check by a second model; code, math, reasoning, structured output, long requests, and longer writing get two drafts (one to three in the settings).
 
 ```mermaid
 flowchart LR
@@ -115,7 +115,7 @@ The agent uses these rankings to choose the writer (the top model for the messag
 | 4 | Behavior is **Thorough**: plan if the message looks multi-part (no images), otherwise ensemble | plan or ensemble |
 | 5 | No images, and the message looks multi-part (below) | plan |
 | 6 | The task is code, math, reasoning, or structured output; or the message is over 600 characters; or it is writing over 200 characters | ensemble |
-| 7 | Anything else | direct |
+| 7 | Anything else | ensemble with one draft: one model drafts, a second checks and writes |
 
 Rules 3 and 4 apply only when you chose that behavior; **Automatic** (the default) skips them.
 
@@ -131,9 +131,9 @@ Examples, computed by the code with three usable models and the Automatic behavi
 
 | Message | Kind | Multi-part | Strategy |
 | --- | --- | --- | --- |
-| "Hi!" | general | no | direct |
-| "Tell me a fun fact about octopuses." | general | no | direct |
-| "Write a short email to my landlord" | writing | no | direct |
+| "Hi!" | general | no | ensemble, one draft |
+| "Tell me a fun fact about octopuses." | general | no | ensemble, one draft |
+| "Write a short email to my landlord" | writing | no | ensemble, one draft |
 | "Solve 12 * 7" | math | no | ensemble |
 | "Why is the sky blue?" | reasoning | no | ensemble |
 | "Fix this bug in my Python function" | code | no | ensemble |
@@ -141,7 +141,7 @@ Examples, computed by the code with three usable models and the Automatic behavi
 | "What is the capital of France? And why did it become the capital?" | reasoning | yes | plan |
 | "Write a Python function to parse dates. Then write a short email announcing it to the team." | code | yes | plan |
 | "Please do these: 1. Explain TCP vs UDP 2. Give a haiku about networks" | reasoning | yes | plan |
-| "Summarize this: - apples - oranges" | writing | no (a list of data, not requests) | direct |
+| "Summarize this: - apples - oranges" | writing | no (a list of data, not requests) | ensemble, one draft |
 
 ## 6. Ensemble: drafts, then a checked answer
 
@@ -253,14 +253,15 @@ Requests per message:
 
 | Strategy | Usual | Most, when models keep failing |
 | --- | ---: | ---: |
-| direct | 1 | 4 |
+| direct (tools, one usable model, or Quick) | 1 | 4 |
+| ensemble, 1 draft (a simple message) | 2 | 1 × 2 + 4 = 6 |
 | ensemble, 2 drafts | 3 | 2 × 2 + 4 = 8 |
 | ensemble, 3 drafts | 4 | 3 × 2 + 4 = 10 |
 | plan, 3 parts | 5 | 2 + 3 × 2 + 4 = 12 |
 
 The worst cases need models that fail before answering, which put them in cooldown, so the next message skips them. An account-wide limit or bad key skips every model on that account at once (section 10).
 
-What this means for free quotas: OpenRouter's free accounts allow 50 free-model requests a day, so an OpenRouter-only Free Agent answers roughly 15 harder questions a day with the default two drafts, against about 50 with the Free Router. **Quick** keeps every message at one request, and fewer drafts cost less. Connecting more providers (Groq, Gemini, Cerebras, Mistral, SambaNova, models on your machine) spreads the load, because drafts and parts are assigned to different models and accounts where possible. A simple message still costs one request.
+What this means for free quotas: OpenRouter's free accounts allow 50 free-model requests a day, so an OpenRouter-only Free Agent answers about 25 simple messages or roughly 15 harder questions a day, against about 50 with the Free Router. **Quick** keeps every message at one request, and fewer drafts cost less. Connecting more providers (Groq, Gemini, Cerebras, Mistral, SambaNova, models on your machine) spreads the load, because drafts and parts are assigned to different models and accounts where possible.
 
 ## 10. When things fail
 
@@ -282,11 +283,19 @@ Rate limits and failures update the shared health, so the next message avoids mo
 
 ## 11. What the user sees
 
-**In the chat, answers speak as Nerdplexity.** An answer from the Free Agent does not name the models behind it: the answer header shows the Nerdplexity name and mark, there is no model credit line, and the status lines say what is happening without naming models ("Choosing how to answer", "Planning the parts", "Drafting", "Answering each part", "Checking and writing the answer"). The toolbar shows **Free Agent**; to use one model, choose it in the model picker or on the Models page.
+**The answer is credited to Nerdplexity.** It is a checked answer from several models, so the answer header shows the Nerdplexity name and mark rather than one model, and there is no single-model credit line. The toolbar shows **Free Agent**; to use one model, choose it in the model picker or on the Models page.
 
-**The Free Agent panel** above the answer (and in the Thinking drawer while it works) shows the strategy ("Two drafts, checked and combined", "One draft, checked and rewritten", "Split into parts for specialists", "Answered directly") with the reason, including any note about your settings; the number of requests; and every step by role (Plan, Draft 1, Part 2 · writing, Final answer), with its time or failure reason and **Read the draft / Read this part / Read the plan** to see what it wrote. Model names and the reasons each model was chosen are left out in the chat.
+**The Free Agent panel, live.** While the agent works, the panel above the answer opens by itself and shows, as it happens:
 
-**Run history names every model.** A run shows "*writer* via Free Agent · *N* requests", and its details show the same panel with each step's model, connection, and the reason it was chosen. If the writer was `openrouter/free`, the record names the concrete model OpenRouter picked.
+- the strategy and why ("A math task: specialists draft independently…"), including any note about your settings;
+- a flow line of who works with whom: *Plan* model → *Drafts* or *Parts* models → the model that *Checks and writes*;
+- a card per step: its role (Plan, Draft 1, Part 2 · writing, Final answer), the model's logo, ID, and connection, why it was chosen, and its time or failure reason;
+- each model's **thinking** (when it reports reasoning) and its **output**, streaming as it writes;
+- the hand-offs: a part's task "From the plan", a draft "Sent to *writer* to check", and the writer's "Received Draft 1 from …, Draft 2 from … to check and combine"; the final writer's own thinking streams in its card.
+
+The status line names the models at work ("Qwen3 32B and Gemma 3 12B are drafting", "Llama 3.3 70B is checking and writing the answer"). When the run ends, the panel folds to one line (strategy, the models' logos, "3 models · 3 requests") and each card keeps **Show its thinking** and **Read the draft / Read this part / Read the plan**.
+
+**Run history** shows "*writer* via Free Agent · *N* requests" and the same panel in the run details. If the writer was `openrouter/free`, the record names the concrete model OpenRouter picked.
 
 **Saved data.** The steps are saved in the message's `metadata.agent` (`{ steps, mode, calls, task }`), and in the run record as `agent` (steps) and `agentOutcome`. The message's provenance still records the writer's model, for Run history and exports.
 
@@ -325,7 +334,8 @@ Every field of `agent` is optional. `agentSettings` keeps `behavior` when it is 
 
 | Event | Fields | Meaning |
 | --- | --- | --- |
-| `agent` | `id`, `role` (`strategy` / `planner` / `drafter` / `specialist` / `writer`), `status` (`running` / `done` / `failed`), `reason`, `connectionId`, `model`, `mode`, `task`, `kind`, `text`, `durationMs` | A step started, switched model, finished, or failed. Updates to one step share its `id` (`strategy`, `planner`, `draft-1`, `draft-2`, `part-1`…`part-3`, `writer`). `text` holds a draft or part answer, shortened. |
+| `agent` | `id`, `role` (`strategy` / `planner` / `drafter` / `specialist` / `writer`), `status` (`running` / `done` / `failed`), `reason`, `connectionId`, `model`, `mode`, `task`, `kind`, `text`, `reasoning`, `durationMs` | A step started, switched model, finished, or failed. Updates to one step share its `id` (`strategy`, `planner`, `draft-1`…`draft-3`, `part-1`…`part-3`, `writer`). On `done`, `text` holds the draft, plan, or part answer and `reasoning` the model's reasoning, each shortened to 6,000 characters. |
+| `agent_output` | `id`, `channel` (`text` / `reasoning`), `text` | A piece of a step's output or reasoning as the model writes it, sent at most every 150 ms per step. Append it to the step with that `id`; the step's `done` event replaces it with the full (shortened) text. The writer's output is the answer itself, so it streams as `delta` and `reasoning` instead. |
 | `completed` | `agent: { mode, task, calls, writer: { connectionId, model } }` | How the run went and who wrote the answer |
 
 **Specialists.** `POST /v1/agent/specialists` with `{ "route": { "connections": […], "models": […] } }` (validated like a route; `strategy` is not needed) returns the top three models for each kind:
@@ -361,13 +371,14 @@ The ranking assumes a text-only request of about 2,000 tokens without tools, and
 - **No model judges another's score.** The writer rewrites; it does not pick a winner by score. That keeps it to one extra request instead of a judging round, and the result is an answer the user can read, not a verdict.
 - **Rule-based strategy.** The strategy is chosen by the same kind of predictable wording checks as the Free Router. An LLM classifier would cost a request on every message, including "Hi".
 - **Limits per step, not per message.** A single ceiling shared by every step meant a busy drafter could leave the writer with one try. Each step now has its own limit, so the final answer gets the same four tries as the Free Router, and cooldowns keep repeated failures rare. Users who want a predictable cost choose Quick or fewer drafts.
-- **The chat speaks as one assistant.** The answer is one checked answer, not any single model's, so the chat names Nerdplexity rather than whichever model happened to write last. Run history keeps every model for anyone who wants to check.
+- **Always more than one model.** A second model checking the first catches mistakes one model makes alone, even on simple messages, for one extra request. Quick remains for anyone who prefers speed and quota.
+- **Credit to the team, models in view.** The answer is one checked answer, not any single model's, so it is credited to Nerdplexity; the panel shows every model, what it did, and what it passed on, live.
 - **User choices first, ranking as the safety net.** A chosen model that is cooling down or cannot take the message is replaced for that message instead of failing it.
 
 ## 15. Limitations
 
 - **Keyword-based decisions.** Strategy and task kind come from wording. A cover letter that mentions "SQL" counts as code; "and in Rust?" after a code question is general and answered directly.
-- **More requests and more time.** An ensemble answer takes about one draft's time plus the writer's, and three requests with the default two drafts. Drafts are not streamed to the user.
+- **More requests and more time.** A simple message takes two requests; an ensemble answer takes about one draft's time plus the writer's, and three requests with the default two drafts. Drafts stream in the panel; only the writer's text is the answer.
 - **Settings are per user, not per thread.** They apply to every Free Agent message in every thread.
 - **The writer is only as good as the strongest free model you have.** It can combine and correct drafts, but it cannot know what none of the models know.
 - **No tools in ensemble or plan.** Tool runs use direct mode.
@@ -392,11 +403,11 @@ When changing the agent, update this page and `backend/src/runtime/agent.test.ts
 | `backend/src/routes/agent.ts` | `POST /v1/agent/specialists` |
 | `frontend/src/lib/router.ts` | The agent's identity (`nerdplexity-router` / `agent`), names, strategy, `chooseAgentByDefault` |
 | `frontend/src/workspace/useRun.ts` | Sending the settings, recording steps, status lines, crediting the writer |
-| `frontend/src/workspace/AgentActivity.tsx` | The steps panel (`showModels` is off in the chat, on in Run history) |
+| `frontend/src/workspace/AgentActivity.tsx` | The live panel: flow line, a card per step with its model, thinking, output, and hand-offs |
 | `frontend/src/workspace/AgentSettings.tsx` | Let Nerdplexity choose: the two cards and the agent settings |
 | `frontend/src/workspace/ChatWorkspace.tsx` | Answers without model names for the Free Agent and Free Router |
 | `frontend/src/workspace/Bench.tsx` | The Specialists table |
 | `backend/src/runtime/agent.test.ts` | Strategy, multi-part detection, families, plan parsing, specialists, every mode, failures, limits, settings |
 | `backend/src/routes/bench.test.ts` | The specialists endpoint with real Bench results over HTTP |
-| `tests/browser/agent.spec.ts` | Ensemble with draft inspection, no model names in the chat, Run history naming the writer; plan with parts; direct for greetings; the Specialists table; settings (Quick, drafts, a chosen writer, reset) |
+| `tests/browser/agent.spec.ts` | Ensemble with the models and hand-offs in the panel and Run history; plan with parts; two models for a greeting; the panel streaming drafts and thinking live; the Specialists table; settings (Quick, drafts, a chosen writer, reset) |
 | `tests/browser/connections.spec.ts` | The Free Agent becomes the default and never replaces a chosen model |

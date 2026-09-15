@@ -10,6 +10,7 @@ import { isRouter, routerName, routeStrategy } from '../lib/router';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 import { autoWebSearch, searchKey } from '../lib/searchKey';
+import { formatModelName } from './ModelLogo';
 
 export interface RunError {
   message: string;
@@ -65,15 +66,19 @@ const lastWriter = (steps: AgentStep[] | undefined) => {
   return writer ? { connectionId: writer.connectionId!, model: writer.model! } : undefined;
 };
 
-/** The status line while a Free Agent step runs. Chat shows what is happening, not model names. */
-function agentPhase(step: AgentStep) {
-  switch (step.role) {
-    case 'planner': return 'Planning the parts';
-    case 'drafter': return 'Drafting';
-    case 'specialist': return 'Answering each part';
-    case 'writer': return 'Checking and writing the answer';
-    default: return 'Choosing how to answer';
-  }
+const modelName = (model?: string) => model ? formatModelName(undefined, model) : 'A model';
+const both = (names: string[]) => names.length > 2 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join(' and ');
+
+/** The status line while the Free Agent works: which models are doing what right now. */
+function agentPhase(steps: AgentStep[]) {
+  const running = steps.filter(step => step.status === 'running');
+  const writer = running.find(step => step.role === 'writer');
+  if (writer) return `${modelName(writer.model)} is checking and writing the answer`;
+  if (!running.length) return 'Choosing how to answer';
+  const names = both(running.map(step => modelName(step.model)));
+  const are = running.length > 1 ? 'are' : 'is';
+  const role = running[0].role;
+  return role === 'planner' ? `${names} is planning the parts` : role === 'specialist' ? `${names} ${are} answering the parts` : `${names} ${are} drafting`;
 }
 
 /** Which model a routed run was last sent to: the one behind any partial answer. */
@@ -221,7 +226,14 @@ export function useRun() {
             const index = steps.findIndex(existing => existing.id === step.id);
             record.agent = index >= 0 ? steps.map((existing, i) => i === index ? step : existing) : [...steps, step];
             setAgent(record.agent);
-            if (step.status === 'running') setPhase(agentPhase(step));
+            setPhase(agentPhase(record.agent));
+            break;
+          }
+          case 'agent_output': {
+            // A step's draft or reasoning as the model writes it; the finished step replaces it.
+            const { id, channel, text } = event;
+            record.agent = (record.agent ?? []).map(step => step.id === id ? { ...step, [channel]: (step[channel] ?? '') + text } : step);
+            setAgent(record.agent);
             break;
           }
           case 'route': {

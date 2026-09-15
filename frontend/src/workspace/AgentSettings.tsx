@@ -7,8 +7,8 @@ import useConnections, { currentRouterPool } from '../state/connections';
 import { RouterMark } from './RouterMark';
 
 const BEHAVIOR: { value: AgentBehavior; label: string; detail: string }[] = [
-  { value: 'auto', label: 'Automatic (recommended)', detail: 'Decides for each message: one model for simple messages, drafts checked by the strongest model for harder ones, and parts for specialists when a message asks for several things.' },
-  { value: 'quick', label: 'Quick', detail: 'Always one model. Fastest, and one request per message unless a model is busy.' },
+  { value: 'auto', label: 'Automatic (recommended)', detail: 'Always at least two models: a simple message gets one draft checked by a second model; harder ones get more drafts, or parts for specialists, all checked by the strongest.' },
+  { value: 'quick', label: 'Quick', detail: 'One model answers alone. Fastest, and one request per message unless a model is busy.' },
   { value: 'thorough', label: 'Thorough', detail: 'Always drafts (or parts) checked by the strongest model. Best answers, more requests per message.' },
 ];
 

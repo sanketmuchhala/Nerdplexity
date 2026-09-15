@@ -161,6 +161,8 @@ export interface AgentStep {
   kind?: TaskKind;
   /** A draft or part answer, shortened, for the user to inspect. The final answer streams as deltas. */
   text?: string;
+  /** The model's reasoning for this step, when it reports any, shortened. */
+  reasoning?: string;
   durationMs?: number;
 }
 
@@ -206,6 +208,8 @@ export type RunEventPayload =
   | ({ type: 'tool' } & ToolTrace)
   | ({ type: 'route' } & RouteStep)
   | ({ type: 'agent' } & AgentStep)
+  /** Live output of a Free Agent step (a draft, a plan, a part answer) as the model writes it; appended to the step with that id. */
+  | { type: 'agent_output'; id: string; channel: 'text' | 'reasoning'; text: string }
   /** A Bench job graded one item (result), or skipped planned requests after a limit; done of total requests. */
   | { type: 'bench'; result?: BenchResult; skipped?: number; done: number; total: number }
   /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */

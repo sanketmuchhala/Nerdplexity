@@ -356,7 +356,8 @@ Errors:
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
 | `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
 | `model` | model, provider | The concrete model answering, reported by OpenRouter's stream (for `openrouter/free`, the model its router picked) |
-| `agent` | id, role, status, reason, connectionId, model, mode, task, kind, text, durationMs | A Free Agent step started, switched model, finished, or failed ([Free Agent, section 12](free-agent.md#12-api-contract)) |
+| `agent` | id, role, status, reason, connectionId, model, mode, task, kind, text, reasoning, durationMs | A Free Agent step started, switched model, finished, or failed ([Free Agent, section 12](free-agent.md#12-api-contract)) |
+| `agent_output` | id, channel (`text` or `reasoning`), text | Part of a Free Agent step's output or reasoning, live; appended to the step with that id |
 | `completed` | usage/finishReason/loadMs/route/agent/timing | Successful terminal event; `route` names the model that answered a routed run, `agent` how a Free Agent run went and who wrote the answer |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |

@@ -1,4 +1,8 @@
-import { expect, Page, test } from './fixtures';
+import { expect as baseExpect, Page, test } from './fixtures';
+
+// The fake models count as "on this machine", and those share one queue with every other test
+// running in parallel, so an answer can wait its turn.
+const expect = baseExpect.configure({ timeout: 15_000 });
 
 const fake = `http://127.0.0.1:${Number(process.env.FAKE_PROVIDER_PORT) || 5299}`;
 // The suffix keeps prompts unique without looking like arithmetic.
@@ -40,7 +44,7 @@ test('the Free Agent drafts with two models, has the strongest check and write t
   await send(page, text);
 
   await expect(page.getByText('Checked final answer from agent-model-70b.')).toBeVisible();
-  // The chat speaks as Nerdplexity: no model names on the answer or in its steps.
+  // The answer is credited to Nerdplexity; the Free Agent panel names every model and its role.
   await expect(page.locator('.np-provenance')).toHaveCount(0);
   const panel = page.getByLabel('Free Agent steps').last();
   await expect(panel).toContainText('Two drafts, checked and combined');
@@ -49,8 +53,11 @@ test('the Free Agent drafts with two models, has the strongest check and write t
   await expect(panel).toContainText('Draft 1');
   await expect(panel).toContainText('Draft 2');
   await expect(panel).toContainText('Final answer');
-  await expect(panel.locator('.np-route-steps small').first()).not.toContainText('agent-model');
-  await expect(panel).not.toContainText('Fake agent');
+  await expect(panel).toContainText('3 models');
+  await expect(panel.getByLabel('How the models worked together')).toContainText('Checks and writes');
+  await expect(panel.locator('.np-agent-step').last()).toContainText('agent-model-70b');
+  await expect(panel.locator('.np-agent-step').last()).toContainText('Fake agent');
+  await expect(panel.locator('.np-agent-step').last()).toContainText('Received Draft 1 from');
   await panel.getByText('Read the draft').first().click();
   await expect(panel).toContainText('Draft from agent-model-30b.');
 
@@ -64,7 +71,7 @@ test('the Free Agent drafts with two models, has the strongest check and write t
   await expect(page.locator('.np-run-row').first()).toContainText('agent-model-70b via Free Agent · 3 requests');
 });
 
-test('the Free Agent splits a message with several parts between specialists, answers greetings directly, and lists its specialists', async ({ page }) => {
+test('the Free Agent splits a message with several parts between specialists, uses two models for a greeting, and lists its specialists', async ({ page }) => {
   await connectAgentModels(page);
   await chooseAgent(page);
   const multi = prompt('What is an API? Can you also write a haiku about APIs?');
@@ -79,11 +86,14 @@ test('the Free Agent splits a message with several parts between specialists, an
   await expect(panel).toContainText('Part 2 · writing');
   expect(await upstream(page, multi)).toHaveLength(2);
 
+  // Even a greeting uses two models: one drafts, another checks and writes.
   const hello = prompt('Hi there');
   await send(page, hello);
-  await expect(page.getByText('Draft from agent-model-70b.', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Free Agent steps').last()).toContainText('Answered directly');
-  expect(await upstream(page, hello)).toHaveLength(1);
+  await expect(page.getByText('Checked final answer from agent-model-70b.')).toHaveCount(2);
+  await expect(page.getByLabel('Free Agent steps').last()).toContainText('One draft, checked and rewritten');
+  const helloCalls = await upstream(page, hello);
+  expect(helloCalls).toHaveLength(2);
+  expect(new Set(helloCalls.map(call => call.model)).size).toBe(2);
 
   await nav(page, 'Bench').click();
   const table = page.getByLabel('Specialists');
@@ -125,4 +135,21 @@ test('agent settings choose how the Free Agent behaves and which model does each
   await settings.getByRole('button', { name: 'Reset to automatic' }).click();
   await expect(settings.getByLabel('Final answer')).toHaveValue('');
   await expect(settings.getByLabel('Drafts per answer')).toHaveValue('2');
+});
+
+test('while it works, the panel is open and shows each model drafting and thinking, live', async ({ page }) => {
+  await connectAgentModels(page);
+  await chooseAgent(page);
+  await send(page, prompt('Solve 12 * 7 slowly and show your work'));
+  // The live panel opens by itself, and the status line names the models drafting.
+  const panel = page.getByLabel('Free Agent steps').last();
+  const draft = panel.locator('.np-agent-step').filter({ hasText: 'Draft 1' });
+  await expect(draft.locator('.np-agent-stream.thinking')).toContainText('Considering it as agent-model');
+  await expect(draft.locator('.np-agent-stream').filter({ hasText: 'Writing' })).toContainText('Draft from');
+  await expect(page.locator('.np-reasoning-status')).toContainText('drafting');
+  // When the run ends, the drafts fold away and stay readable. Models on this machine take turns, so this takes a while.
+  await expect(page.getByText('Checked final answer from agent-model-70b.')).toBeVisible({ timeout: 25_000 });
+  const saved = page.getByLabel('Free Agent steps').last();
+  await saved.locator('summary').first().click();
+  await expect(saved.getByText('Show its thinking').first()).toBeVisible();
 });
