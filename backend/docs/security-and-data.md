@@ -10,19 +10,20 @@ This page documents implemented controls and known limits. It is not a claim tha
 flowchart TB
     subgraph UserDevice[User-controlled device]
         Browser[Browser UI]
-        DB[(Browser IndexedDB)]
+        Keys[(Browser credential store)]
+        DB[(PGlite or Postgres)]
         LocalAPI[Local Nerdplexity backend]
         Runtime[Local model runtime]
-        Browser <--> DB
+        Browser <--> Keys
         Browser --> LocalAPI
         LocalAPI --> Runtime
+        LocalAPI <--> DB
     end
 
     LocalAPI -->|messages + provider key| Provider[Selected hosted model provider]
     LocalAPI -->|query + Exa key| Exa[Exa search]
     Provider -->|untrusted model output| LocalAPI
     Exa -->|untrusted web excerpts| LocalAPI
-    DB -->|workspace docs| Browser
 ```
 
 The browser, backend, provider, local runtime, and search provider are separate trust domains. "Local-first" does not mean every request remains local: selecting an online connection sends content to that provider, and enabling web search sends a query to Exa.
@@ -57,7 +58,7 @@ Implemented properties:
 - Exact key strings are removed from provider/search detail shown to users.
 - Generic error middleware does not log raw error objects or request bodies.
 - Run events, tool traces, health responses, and model descriptors do not contain credential fields.
-- The backend has no credential database.
+- The backend database stores connection metadata but strips credential-shaped fields; it has no provider-key store.
 
 Important limits:
 
@@ -84,7 +85,7 @@ Example:
 ALLOWED_ORIGINS=https://nerdplexity.example,https://preview.example
 ```
 
-Requests without an `Origin` header are permitted so command-line and native clients work. Consequently, CORS/origin checks are **not authentication** and do not prevent direct scripted use of a publicly reachable server.
+Requests without an `Origin` header are permitted so command-line and native clients work. CORS/origin checks are not authentication. In hosted mode, protected routes additionally require a Better Auth bearer session; in local mode, anyone who can reach the server acts as the local owner.
 
 Health routes are deliberately cross-origin readable and state whether the asking origin would be accepted for protected API routes.
 
@@ -125,8 +126,10 @@ This reduces server-side request forgery against the hosting environment. Curren
 | Ollama pull/delete | Enabled | Not mounted |
 | Hosted providers | Allowed with user key | Allowed with user key |
 | Extra frontend origins | Optional | Usually required |
+| Account authentication | Built-in local owner | Better Auth bearer session required |
+| Durable data | PGlite in `backend/data` by default | Postgres through `DATABASE_URL` |
 
-Setting `HOST` can override the bind address. Exposing local mode on a LAN or public interface broadens access without adding authentication; do so only with an appropriate network boundary.
+Setting `HOST` can override the bind address. Exposing local mode on a LAN or public interface gives reachable clients the built-in local owner's authority; do so only with an appropriate network boundary.
 
 ## 6. Message, image, and body limits
 
@@ -143,7 +146,7 @@ Image validation checks the allowed MIME label and base64-shaped text. The backe
 
 ## 7. Documents
 
-Durable documents remain in browser IndexedDB. For one run:
+Durable documents are stored in the server database under their owner. For one run:
 
 - the frontend includes its workspace documents only when document tools are enabled;
 - the backend drops supplied documents when no document tool is enabled;
@@ -152,9 +155,11 @@ Durable documents remain in browser IndexedDB. For one run:
 - document text reaches the model in search/read results;
 - text is explicitly described as untrusted data, not instructions.
 
-Current limits are 20 documents, 100,000 characters each, and 400,000 total characters.
+Current run limits are 20 documents, 2 MB of UTF-8 text each, and 4 MB of UTF-8 text total.
 
 This prevents documents from being sent to hosted model targets through the supported run route. The browser still sends the workspace documents to the local Express process for that tool-enabled run, and a local model receives the inventory and tool-returned passages. A compromised local server/runtime can access that traffic.
+
+Chat attachments are separate from workspace document tools. The browser extracts text from supported documents, saves that text with the thread, and sends it or selected excerpts to the model the user chooses, including online providers. PDF and archive parsers load on demand; archive extraction has entry and expanded-size limits. HTML scripts and styles, RTF embedded objects, and document markup are excluded from extracted text. See [Document inputs](../../README.md#document-inputs) for formats and import limits.
 
 ## 8. Tools and prompt injection
 
@@ -182,7 +187,7 @@ Provider and tool output is untrusted application data. The backend:
 - prevents output after a run becomes terminal;
 - preserves partial output instead of treating it as a clean success.
 
-Frontend rendering is a separate boundary and must continue to sanitize/render Markdown safely.
+The frontend renders CommonMark/GFM through `react-markdown`, ignores raw HTML, sanitizes the syntax tree, blocks unsafe link protocols, and does not load model-authored remote images.
 
 ## 10. Server data retention
 
@@ -194,23 +199,22 @@ The `RunRegistry` keeps only active and recent run events in memory:
 - no-client cancellation: 60 seconds;
 - hard run limit: 10 minutes.
 
-There is no server disk persistence. Restarting the process clears events and idempotency mappings. Browser IndexedDB independently preserves local run input, partial/final output, tool traces, timing, and status.
+Restarting the process clears live events and idempotency mappings. PGlite/Postgres independently preserves saved run input, periodic partial output, final output, tool/activity traces, timing, and status. A restart can retain the partial record but cannot resume provider generation.
 
 ## 11. Public-hosting gaps
 
 Before sharing a backend widely, address at least:
 
-- authentication and per-user run ownership;
 - request and concurrency rate limits;
 - abuse/cost controls;
 - durable or distributed run/event ownership;
 - DNS rebinding/private-resolution validation for custom destinations;
 - reverse-proxy body, stream, timeout, and buffering configuration;
 - logging/monitoring policies that exclude prompts, documents, and credentials;
-- CSRF assumptions if cookie-based authentication is introduced;
+- session/revocation and account-recovery review for the selected Better Auth deployment;
 - dependency and deployment review.
 
-Anyone who can reach the current API can send requests using their own keys. Origin checks mainly protect browsers from unrelated sites; they do not make the server multi-tenant safe.
+Hosted data and runs are user-scoped and require authentication. The run executor and replay registry are still single-process; abuse controls and distributed ownership remain deployment gaps.
 
 ## 12. Security review checklist for a change
 

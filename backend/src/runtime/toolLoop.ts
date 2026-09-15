@@ -1,4 +1,4 @@
-import type { ToolName, ToolTrace, Usage } from '@app/types';
+import type { ActivityTrace, ToolName, ToolTrace, Usage } from '@app/types';
 import { AdapterEvent, ModelMessage, ModelRequest, streamModel } from './adapters.js';
 import { executeTool, toolInstructions, toolSource, toolSpecs, WorkspaceDocument } from './tools.js';
 
@@ -6,7 +6,7 @@ type FetchFn = typeof fetch;
 
 export const TOOL_LIMITS = { steps: 6, calls: 12 } as const;
 
-export type ToolLoopEvent = AdapterEvent | ({ type: 'tool' } & ToolTrace);
+export type ToolLoopEvent = AdapterEvent | ({ type: 'tool' } & ToolTrace) | ({ type: 'activity' } & ActivityTrace);
 
 function parsedOrRaw(json: string): unknown {
   try { return JSON.parse(json); } catch { return json; }
@@ -28,7 +28,6 @@ export async function* runWithTools(
   let usage: Usage | undefined = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
   let loadMs: number | undefined;
   let callsUsed = 0;
-  let wroteText = false;
 
   for (let step = 1; step <= TOOL_LIMITS.steps; step++) {
     signal.throwIfAborted();
@@ -38,10 +37,10 @@ export async function* runWithTools(
     for await (const event of streamModel({ ...req, messages, tools: specs }, signal, fetchImpl)) {
       if (event.type === 'done') { done = event; continue; }
       if (event.type === 'delta') {
-        // Keep text from separate steps from running together in the saved answer.
-        if (!text && wroteText) yield { type: 'delta', text: '\n\n' };
         text += event.text;
-        wroteText = true;
+        // Until the provider finishes this step we cannot know whether its text
+        // is a final answer or narration before a tool call, so keep it buffered.
+        continue;
       }
       yield event;
     }
@@ -54,6 +53,7 @@ export async function* runWithTools(
     loadMs ??= done.loadMs;
 
     if (!done.toolCalls?.length) {
+      if (text) yield { type: 'delta', text };
       yield { type: 'done', ...(usage ? { usage } : {}), finishReason: done.finishReason, ...(loadMs !== undefined ? { loadMs } : {}) };
       return;
     }
@@ -62,6 +62,7 @@ export async function* runWithTools(
     }
     // Generated IDs restart each step; make them unique within the run so results match their calls.
     const calls = done.toolCalls.map((call, i) => call.generatedId ? { ...call, id: `call_${step}_${i + 1}` } : call);
+    if (text.trim()) yield { type: 'activity', id: `preparation_${step}`, step, kind: 'preparation', status: 'completed', text };
     messages.push({ role: 'assistant', content: text, toolCalls: calls });
     for (const call of calls) {
       signal.throwIfAborted();

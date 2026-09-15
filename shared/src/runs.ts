@@ -69,6 +69,15 @@ export interface ToolTrace {
   source?: 'computed' | 'retrieved' | 'web';
 }
 
+/** Model text produced while preparing a tool call. It is activity, not part of the final answer. */
+export interface ActivityTrace {
+  id: string;
+  step: number;
+  kind: 'preparation';
+  status: 'completed';
+  text: string;
+}
+
 /** What a routed request asks for, as the router classified it. */
 export type TaskKind = 'code' | 'math' | 'reasoning' | 'writing' | 'extraction' | 'general';
 
@@ -117,6 +126,7 @@ export type RunEventPayload =
   | { type: 'model'; model: string; provider?: string }
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
+  | ({ type: 'activity' } & ActivityTrace)
   /** connectionId: set on routed runs, whose quota may come from several connections. */
   | { type: 'quota'; quota: RateLimitState; connectionId?: string }
   | ({ type: 'tool' } & ToolTrace)
@@ -151,6 +161,8 @@ export type RunContentPart =
 interface RunStartBase {
   /** Client-generated; repeating a start with the same key returns the same run. */
   idempotencyKey: string;
+  /** Omission is free-only. Paid single-model requests must explicitly use 'any'. Routes remain free-only. */
+  costPolicy?: 'free-only' | 'any';
   messages: RunMessage[];
   settings?: { temperature?: number; maxTokens?: number; numCtx?: number };
   /** Tools the model may call. Document tools require `documents` and a model on this machine. */

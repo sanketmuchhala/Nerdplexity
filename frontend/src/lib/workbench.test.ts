@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Connection, ModelDescriptor } from '@app/types';
 import type { Conversation } from './db';
 import {
+  ASSISTANT_INSTRUCTIONS_VERSION,
   attachmentFromFile,
   buildContext,
   exportConversation,
@@ -20,25 +21,27 @@ const history = [
 const settings = workbenchSettings();
 
 describe('explicit request context', () => {
-  it('keeps literal contents and never silently truncates over-budget history', () => {
+  it('automatically omits whole oldest turns while preserving instructions and the current prompt', () => {
     const input = [
       ...history,
       {
         role: 'user' as const,
-        content: 'literal \\n\n```ts\n' + 'x'.repeat(8000),
+        content: 'literal \\n\n```ts\n' + 'x'.repeat(20_000),
       },
     ];
     const before = structuredClone(input);
     const preview = buildContext(input, 'Next', {
       ...settings,
-      contextBudget: 1024,
+      contextBudget: 4096,
+      maxTokens: 512,
     });
-    expect(preview.messages).toEqual([
-      ...input,
-      { role: 'user', content: 'Next' },
-    ]);
-    expect(preview.omittedMessages).toBe(0);
-    expect(preview.warnings.join(' ')).toContain('exceeds the context budget');
+    expect(preview.messages[0]).toEqual({ role: 'system', content: expect.stringContaining(ASSISTANT_INSTRUCTIONS_VERSION) });
+    expect(preview.messages).toContainEqual({ role: 'system', content: 'Imported instruction' });
+    expect(preview.messages.at(-1)).toEqual({ role: 'user', content: 'Next' });
+    expect(preview.messages.some(message => typeof message.content === 'string' && message.content.includes('x'.repeat(1000)))).toBe(false);
+    expect(preview.omittedMessages).toBeGreaterThan(0);
+    expect(preview.warnings).toEqual([]);
+    expect(preview.notices.join(' ')).toContain('older messages');
     expect(input).toEqual(before);
   });
 
@@ -50,8 +53,9 @@ describe('explicit request context', () => {
       systemPrompt: 'Be brief',
     });
     expect(preview.messages.map((m) => m.content)).toEqual([
+      expect.stringContaining(ASSISTANT_INSTRUCTIONS_VERSION),
       'Imported instruction',
-      'Be brief',
+      'User-provided instructions for this thread:\n\nBe brief',
       'Second question',
       'Second answer',
       'Next',
@@ -79,7 +83,8 @@ describe('explicit request context', () => {
     expect(known.limitKnown).toBe(true);
     expect(known.budget).toBe(4096);
     expect(known.effective.numCtx).toBe(4096);
-    expect(known.warnings.join(' ')).toContain('maximum output');
+    expect(known.effective.maxTokens).toBe(1000);
+    expect(known.notices.join(' ')).toContain('reduced to 1,000');
     expect(known.warnings.join(' ')).toContain('does not accept temperature');
   });
 
@@ -87,11 +92,12 @@ describe('explicit request context', () => {
     const attachment = await attachmentFromFile(new File(['const value = 42;'], 'example.ts', { type: 'text/typescript' }), []);
     const preview = buildContext([], 'Explain it', settings, undefined, undefined, [attachment]);
     expect(preview.messages).toEqual([
+      { role: 'system', content: expect.stringContaining(ASSISTANT_INSTRUCTIONS_VERSION) },
       { role: 'system', content: expect.stringContaining('--- BEGIN FILE: example.ts ---') },
       { role: 'user', content: 'Explain it' },
     ]);
-    expect(preview.messages[0].content).toContain('const value = 42;');
-    await expect(attachmentFromFile(new File(['x'.repeat(100_001)], 'large.txt'), [])).rejects.toThrow('100 KB');
+    expect(preview.messages[1].content).toContain('const value = 42;');
+    await expect(attachmentFromFile(new File(['x'.repeat(2_000_001)], 'large.txt'), [])).rejects.toThrow('2 MB');
     await expect(attachmentFromFile(new File(['x'], 'archive.zip', { type: 'application/zip' }), [])).rejects.toThrow('supported');
     const image = await attachmentFromFile(new File(['image-bytes'], 'image.png', { type: 'image/png' }), []);
     const blocked = buildContext([], 'Describe it', settings, { capabilities: { vision: false } } as ModelDescriptor, undefined, [image]);
@@ -128,7 +134,7 @@ describe('portable thread imports', () => {
         content: 'Literal \\n and <script>plain text</script>',
         createdAt: 1,
         provenance: { connectionId: 'old-connection', modelId: 'old-model' },
-        metadata: { reasoning: 'A reason' },
+        metadata: { reasoning: 'A reason', activities: [{ id: 'preparation_1', step: 1, kind: 'preparation', status: 'completed', text: 'Checking the source.' }] },
         runId: 'private-run',
       },
     ],
@@ -144,7 +150,7 @@ describe('portable thread imports', () => {
     expect(parsed.messages[0]).toMatchObject({
       content: conversation.messages[0].content,
       provenance: conversation.messages[0].provenance,
-      metadata: { reasoning: 'A reason' },
+      metadata: { reasoning: 'A reason', activities: [{ id: 'preparation_1', step: 1, kind: 'preparation', status: 'completed', text: 'Checking the source.' }] },
     });
     expect(parsed.messages[0].id).not.toBe('m1');
     expect(parsed.messages[0].id).not.toBe(
@@ -178,6 +184,6 @@ describe('portable thread imports', () => {
         JSON.stringify({ ...data, messages: [{ role: 'tool', content: 'x' }] }),
       ),
     ).toThrow('invalid');
-    expect(() => parseConversation('x'.repeat(8_000_001))).toThrow('8 MB');
+    expect(() => parseConversation('x'.repeat(25_000_001))).toThrow('25 MB');
   });
 });

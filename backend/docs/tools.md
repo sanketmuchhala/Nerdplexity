@@ -26,8 +26,8 @@ sequenceDiagram
 
     Registry->>Loop: request + enabled tools + signal
     Loop->>Model: messages + tool schemas + safety instruction
-    Model-->>Loop: streamed text/reasoning + tool calls
-    Loop-->>Registry: visible model events
+    Model-->>Loop: text/reasoning + tool calls
+    Loop-->>Registry: preparatory text as typed activity
     loop for each requested call
         Loop-->>Registry: tool status=running
         Loop->>Tool: validated arguments + scoped context
@@ -40,7 +40,7 @@ sequenceDiagram
     Loop-->>Registry: aggregated done metadata
 ```
 
-The loop supports at most six model steps and twelve tool calls across a run. Calls within one model step execute sequentially. If the model asks for a batch that would cross the total call limit, none of that batch executes.
+The loop supports at most six model steps and twelve tool calls across a run. Calls within one model step execute sequentially. If the model asks for a batch that would cross the total call limit, none of that batch executes. Text is buffered until a step ends: when the step calls a tool it is emitted and saved as `activity`; when the step is terminal it becomes answer `delta` text. This keeps tool narration out of the final answer without losing it.
 
 ## 3. System instruction and schemas
 
@@ -81,18 +81,21 @@ Names come from `Map` instances rather than prototype-bearing objects. Unknown s
 
 ## 6. Document tools
 
-Documents live in browser IndexedDB. The current frontend attaches the workspace documents to a run request only when a document tool is enabled. The route enforces:
+Documents live in the owner-scoped server database. The frontend attaches the workspace documents to a run request only when a document tool is enabled. The route enforces:
 
 - at most 20 documents;
-- at most 100,000 characters per document;
-- at most 400,000 total characters;
+- at most 2 MB of UTF-8 text per document;
+- at most 4 MB of UTF-8 text total;
 - local model execution only.
 
 The tool-loop system prompt receives document IDs and titles, not full content. Content reaches the model only inside results of `search_documents` or `read_document`.
 
+Workspace imports and chat attachments share the browser document reader: PDF, DOCX/XLSX/PPTX, ODT/ODS/ODP, EPUB, RTF, HTML, and text/data/code files. The browser extracts text from files up to 20 MB before saving it. PDFs are limited to 500 pages; image-only scans need OCR. Legacy Office and Apple iWork formats need export first. Chat attachments are a separate path: their text or selected excerpts go to the chosen model, including online providers. See [Document inputs](../../README.md#document-inputs) for all import limits.
+
 ```mermaid
 flowchart LR
-    DB[(Browser documents)] -->|tool-enabled run only| Route[Run validation]
+    DB[(Owner-scoped documents)] -->|tool-enabled run only| Browser[Frontend]
+    Browser --> Route[Run validation]
     Route -->|IDs and titles| Prompt[Tool system prompt]
     Route -->|full text kept in tool context| Search[search_documents]
     Route --> Read[read_document]

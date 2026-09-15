@@ -155,7 +155,10 @@ http
       const expression = /\[\[(.+?)\]\]/.exec(prompt)?.[1];
       const last = results.at(-1);
       if (!body.tools?.length) say('No tools were enabled.');
-      else if (expression && !results.length) call('calculator', JSON.stringify({ expression }));
+      else if (expression && !results.length) {
+        res.write(delta('I will calculate this exactly.'));
+        call('calculator', JSON.stringify({ expression }));
+      }
       else if (/malformed/.test(prompt) && !results.length) call('calculator', '{"expression":');
       else if (/search the web/.test(prompt) && !results.length) call('web_search', JSON.stringify({ query: 'nerdplexity release' }));
       else if (/search the web/.test(prompt)) say(last.error ? `Search failed: ${last.error}` : `Found ${last.results.length} page: ${last.results[0].title} (${last.results[0].url}).`);

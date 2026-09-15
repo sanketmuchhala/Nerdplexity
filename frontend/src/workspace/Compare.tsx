@@ -10,7 +10,7 @@ import * as store from '../lib/store';
 import { buildContext, workbenchSettings } from '../lib/workbench';
 import { cancelRun, followRun, startRun } from './runClient';
 import { exportText } from './api';
-import { policyBlock } from './useRun';
+import { policyBlock, runCostPolicy } from './useRun';
 
 type Choice = { ref: ModelRef; label: string; descriptor: ModelDescriptor };
 
@@ -67,7 +67,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
     side.runRecordId = record.id;
     await store.runs.put(record);
     try {
-      const started = await startRun({ idempotencyKey: record.idempotencyKey!, target: targetFor(connection), model: side.modelId, messages: comparison.input.messages, settings: comparison.input.settings }, controller.signal);
+      const started = await startRun({ idempotencyKey: record.idempotencyKey!, costPolicy: runCostPolicy(comparison.sourceConversationId), target: targetFor(connection), model: side.modelId, messages: comparison.input.messages, settings: comparison.input.settings }, controller.signal);
       side.runId = started.runId; record.runId = started.runId; await store.runs.patch(record.id, { runId: started.runId });
       const terminal = await followRun(started.runId, 0, (envelope: RunEnvelope) => {
         record.lastSeq = envelope.seq;
@@ -115,7 +115,7 @@ export function Compare({ onChat }: { onChat: () => void }) {
     const now = Date.now();
     const comparison: ComparisonRecord = {
       id: uuidv4(), prompt: prompt.trim(), createdAt: now, updatedAt: now, sourceConversationId: activeConversation?.id,
-      input: { messages: context.messages, settings: context.effective, configured, context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown }, documents: [], attachments: (activeConversation?.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })) },
+      input: { messages: context.messages, settings: context.effective, configured, context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown, notices: context.notices }, documents: [], attachments: (activeConversation?.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })) },
       sides: selected.map(choice => ({ connectionId: choice.ref.connectionId, modelId: choice.ref.modelId, status: 'running', output: '' })) as [ComparisonSide, ComparisonSide],
     };
     await persist(comparison); show(comparison); setRecords(items => [structuredClone(comparison), ...items]);

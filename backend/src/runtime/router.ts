@@ -325,7 +325,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       const lead = attempts === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;
       emit({ type: 'route', attempt: attempts, connectionId: candidate.connectionId, model: candidate.model, status: 'trying', reason: why.length ? `${lead}: ${why.join(', ')}.` : `${lead}.` });
 
-      const request: ModelRequest = { ...run.request, target: candidate.target, model: candidate.model, messages: run.messages as ModelMessage[], waitOnRateLimit: false };
+      const request: ModelRequest = { ...run.request, target: candidate.target, model: candidate.model, messages: run.messages as ModelMessage[], waitOnRateLimit: false, freeOnly: true };
       const sentAt = Date.now();
       let answeredAt: number | undefined;
       const attempt = async () => {
@@ -335,7 +335,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
         for await (const event of events) {
           if (event.type === 'done') return event;
           if (event.type === 'quota') { emit({ ...event, connectionId: candidate.connectionId }); continue; }
-          if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool') answeredAt ??= Date.now();
+          if (event.type === 'delta' || event.type === 'reasoning' || event.type === 'activity' || event.type === 'tool') answeredAt ??= Date.now();
           emit(event);
         }
         throw new Error('The model stream ended without a result.');

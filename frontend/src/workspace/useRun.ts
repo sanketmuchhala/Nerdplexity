@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { DiscoveryResult, ModelRef, ProviderErrorCategory, RouteStep, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
+import type { ActivityTrace, DiscoveryResult, ModelRef, ProviderErrorCategory, RouteStep, RunMessage, TerminalPayload, ToolName, ToolTrace } from '@app/types';
 import useChat from '../state/chatStore';
 import type { RunRecord, WorkspaceDocument } from '../lib/db';
 import * as store from '../lib/store';
@@ -46,13 +46,17 @@ function costOf(ref: ModelRef) {
   return costStatus(connections.find(c => c.id === ref.connectionId), result?.ok ? result.models.find(m => m.id === ref.modelId) : undefined, result?.ok ? result.execution : undefined);
 }
 
+/** Read permission at dispatch time, including retries and explicit per-thread permission. */
+export function runCostPolicy(conversationId?: string): 'free-only' | 'any' {
+  const chat = useChat.getState();
+  return chat.settings?.costPolicy === 'any' || (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) ? 'any' : 'free-only';
+}
+
 /** Why Free only blocks this model in this thread, or null when it may run. */
 export function policyBlock(ref: ModelRef, conversationId?: string): string | null {
   // The Free Router only ever uses models verified as free.
   if (isRouter(ref)) return null;
-  const chat = useChat.getState();
-  if (chat.settings?.costPolicy !== 'free-only') return null;
-  if (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) return null;
+  if (runCostPolicy(conversationId) === 'any') return null;
   const status = costOf(ref);
   return status.free ? null : `Free only is on. ${status.detail}`;
 }
@@ -74,6 +78,7 @@ export function useRun() {
   const [phase, setPhase] = useState('');
   const [error, setError] = useState<RunError | null>(null);
   const [tools, setTools] = useState<ToolTrace[]>([]);
+  const [activities, setActivities] = useState<ActivityTrace[]>([]);
   const [route, setRoute] = useState<RouteStep[]>([]);
   const [runConversationId, setRunConversationId] = useState<string | null>(null);
   const [canRetry, setCanRetry] = useState(false);
@@ -83,7 +88,7 @@ export function useRun() {
   const lastAttempt = useRef<(Attempt & { recordId: string }) | null>(null);
 
   const showRunning = (record: RunRecord, phaseText: string) => {
-    setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools); setRoute(record.route ?? []);
+    setRunning(true); setPartial(record.output); setReasoning(record.reasoning || ''); setTools(record.tools); setActivities(record.activities ?? []); setRoute(record.route ?? []);
     setSelectedModel(record.routedModel); setSelectedProvider(record.routedProvider);
     setError(null); setCanRetry(false); setPhase(phaseText); setRunConversationId(record.conversationId);
   };
@@ -112,7 +117,7 @@ export function useRun() {
         // choice, and within it the concrete model OpenRouter's own router picked, when reported.
         const answered = routedTo ?? lastTried(record.route);
         const metadata = {
-          ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
+          ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.activities?.length ? { activities: record.activities } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
           ...(record.route?.length ? { route: { steps: record.route, ...(routedTo ? { task: routedTo.task } : {}) } } : {}),
         };
         const provenance = answered ? { connectionId: answered.connectionId, modelId: record.routedModel || answered.model }
@@ -130,7 +135,7 @@ export function useRun() {
       setError({ message: 'The answer could not be saved to the server. Copy the visible answer before leaving.', retryable: false });
     }
     if (active.current?.record.id === record.id) active.current = null;
-    setRunning(false); setPartial(''); setReasoning(''); setSelectedModel(undefined); setSelectedProvider(undefined);
+    setRunning(false); setPartial(''); setReasoning(''); setActivities([]); setSelectedModel(undefined); setSelectedProvider(undefined);
     setPhase(status === 'canceled' ? 'Stopped' : '');
     if (outcome.type === 'failed') {
       const ref = { connectionId: record.connectionId || '', modelId: record.model };
@@ -159,7 +164,7 @@ export function useRun() {
     const persist = setInterval(() => {
       if (!dirty) return;
       dirty = false;
-      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
+      void store.runs.patch(record.id, { output: record.output, reasoning: record.reasoning, activities: record.activities, routedModel: record.routedModel, routedProvider: record.routedProvider, lastSeq: record.lastSeq, tools: record.tools, notices: record.notices }).catch(() => undefined);
     }, PERSIST_MS);
     try {
       const terminal = await followRun(record.runId!, record.lastSeq ?? 0, ({ seq, event }) => {
@@ -171,6 +176,13 @@ export function useRun() {
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
           case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); setPhase(`Using ${event.model}`); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
+          case 'activity': {
+            const { type: _type, ...activity } = event;
+            record.activities = [...(record.activities ?? []), activity];
+            setActivities(record.activities);
+            setPhase('Using tools');
+            break;
+          }
           case 'delta': record.output += event.text; setPhase('Generating'); break;
           case 'tool': {
             const { type: _type, ...trace } = event;
@@ -229,8 +241,8 @@ export function useRun() {
     const record: RunRecord = {
       id: uuidv4(), conversationId: attempt.conversationId, connectionId: attempt.connectionId, provider: connection?.name ?? ROUTER_NAME, model: attempt.model,
       prompt: attempt.prompt, startedAt: Date.now(), durationMs: 0, status: 'running', mode: attempt.tools.length ? 'agent' : 'chat',
-      input: structuredClone(attempt.input), notices: [],
-      output: '', reasoning: '', tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
+      input: structuredClone(attempt.input), notices: [...(attempt.input.context.notices ?? [])],
+      output: '', reasoning: '', activities: [], tools: [], idempotencyKey: uuidv4(), lastSeq: 0, ...(retryOf ? { retryOf } : {}),
       ...(pricing ? { pricing } : {}),
     };
     active.current = { record, controller, cancelRequested: false };
@@ -242,6 +254,7 @@ export function useRun() {
       const choice = pool?.route ? { route: pool.route } : { target: targetFor(connection!), model: attempt.model };
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
+        costPolicy: routed ? 'free-only' : runCostPolicy(attempt.conversationId),
         settings: attempt.input.settings,
         ...(attempt.tools.length ? { tools: attempt.tools } : {}),
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
@@ -295,7 +308,7 @@ export function useRun() {
       setError({ message: context.warnings[0] || toolProblem!, retryable: false }); return;
     }
     const input: InputSnapshot = { messages: context.messages, settings: context.effective, configured,
-      context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown },
+      context: { estimatedTokens: context.estimatedTokens, budget: context.budget, omittedMessages: context.omittedMessages, limitKnown: context.limitKnown, notices: context.notices },
       documents: documentTools ? documents.map(({ id, title, content }) => ({ id, title, content })) : [],
       tools,
       attachments: (conversation.attachments ?? []).map(({ id, name, mimeType, size, content, kind }) => ({ id, name, mimeType, size, content, kind })),
@@ -378,7 +391,7 @@ export function useRun() {
   useEffect(() => () => { if (active.current && !active.current.cancelRequested) active.current.controller.abort(); }, []);
 
   return {
-    send, retry, stop, running, partial, reasoning, selectedModel, selectedProvider, phase, error, tools, route, runConversationId, streamRunId,
+    send, retry, stop, running, partial, reasoning, activities, selectedModel, selectedProvider, phase, error, tools, route, runConversationId, streamRunId,
     canRetry: canRetry && !!lastAttempt.current && !running,
     clearError: () => setError(null),
   };

@@ -282,7 +282,7 @@ export function RunSettings({
           <div className="np-context-summary">
             <strong>
               ~{preview.estimatedTokens.toLocaleString()} input +{' '}
-              {draft.maxTokens.toLocaleString()} output reserved
+              {(preview.effective.maxTokens ?? draft.maxTokens).toLocaleString()} output reserved
             </strong>
             <p>
               {preview.omittedMessages} earlier messages omitted from this
@@ -310,6 +310,9 @@ export function RunSettings({
             <p key={w} className="np-error">
               {w}
             </p>
+          ))}
+          {preview.notices.map((message) => (
+            <p key={message} className="np-success">{message}</p>
           ))}
         </section>
         <section>

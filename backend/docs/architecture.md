@@ -6,30 +6,31 @@
 
 Nerdplexity is a pnpm workspace with three code packages:
 
-- `frontend/`: React UI, browser persistence, context construction, and the run client.
-- `backend/`: Express API, run harness, providers, discovery, tools, and local model management.
+- `frontend/`: React UI, browser credential storage, context construction, and the run client.
+- `backend/`: Express API, database, accounts, run harness, providers, discovery, tools, and local model management.
 - `shared/`: type-only contracts imported by both sides as `@app/types`.
 
-The browser owns durable user data. The backend owns temporary execution state and provider communication.
+The backend database owns durable user data. The browser owns provider credentials. The backend also owns temporary execution state and provider communication.
 
 ```mermaid
 flowchart TB
     subgraph Browser[Browser process]
         UI[React workbench]
         Client[Run client]
-        IDB[(IndexedDB)]
+        Keys[(Session or device key store)]
         UI --> Client
-        UI <--> IDB
-        Client <--> IDB
+        UI <--> Keys
     end
 
     subgraph Server[Node.js backend process]
         Express[Express app]
         Routes[HTTP routes]
         Registry[In-memory RunRegistry]
+        DB[(PGlite or Postgres)]
         Adapters[Provider adapters]
         Tools[Tool registry]
         Express --> Routes
+        Routes <--> DB
         Routes --> Registry
         Registry --> Adapters
         Adapters <--> Tools
@@ -45,9 +46,9 @@ flowchart TB
     Shared -. compile-time .-> Routes
 ```
 
-### Why browser persistence and server execution are separate
+### Why durable data and live execution are separate
 
-The browser is the user's workspace: it saves threads, documents, credentials according to the selected storage mode, input snapshots, partial output, and finished run history. The server receives only what a request needs. This avoids creating a server-side user database, but it also means a new browser profile does not share data and the server cannot restore a run after restarting.
+The server database saves threads, documents, connection metadata, input snapshots, partial/final output, and finished run history. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume.
 
 ## 2. Startup and middleware order
 
@@ -67,7 +68,7 @@ sequenceDiagram
     App->>Express: CORS policy
     App->>Express: origin guard
     App->>Express: JSON parser, 10 MB
-    App->>Express: run routes
+    App->>Express: auth, user ownership, run and saved-data routes
     App->>Express: local model routes if not hosted
     App->>Express: discovery route
     App->>Express: API 404 and error handler
@@ -81,11 +82,12 @@ Middleware order matters:
 2. `/health` and `/v1/health` are intentionally readable cross-origin so a separate frontend can diagnose an origin-policy failure.
 3. CORS headers are added only for loopback or configured browser origins.
 4. `originGuard` returns `403` before an untrusted browser page can reach a runtime or provider.
-5. JSON bodies are limited to 10 MB.
-6. API routes run.
-7. Unknown `/v1/*` routes return JSON `404` instead of the React app.
-8. The safe error handler avoids logging raw bodies that may contain API keys.
-9. Production static files and the React Router fallback are last.
+5. Hosted account routes and authenticated ownership are applied; local mode uses the built-in local owner.
+6. Route-specific JSON limits are applied (50 MB import, 25 MB saved data, 10 MB runs, 1 MB discovery/Bench/model management).
+7. API routes run.
+8. Unknown `/v1/*` routes return JSON `404` instead of the React app.
+9. The safe error handler avoids logging raw bodies that may contain API keys.
+10. Production static files and the React Router fallback are last.
 
 ## 3. Internal module dependency map
 
@@ -170,23 +172,23 @@ flowchart LR
     Evil[Unlisted browser origin] -- 403 --> HostedAPI
 ```
 
-Hosted mode is a network safety policy, not user authentication. See [Security and data](security-and-data.md).
+Hosted mode includes both a network safety policy and required Better Auth accounts. See [Security and data](security-and-data.md).
 
 ## 5. State ownership and lifetime
 
 | Data | Owner | Lifetime |
 | --- | --- | --- |
-| Threads and messages | Browser IndexedDB | Durable in that browser profile |
-| Connections | Browser IndexedDB | Durable in that browser profile |
+| Threads and messages | Server database, scoped to owner | Durable |
+| Connections without keys | Server database, scoped to owner | Durable |
 | API keys | Browser session memory or optional device storage | Depends on user choice |
-| Documents and attachments | Browser IndexedDB | Durable in that browser profile |
-| Run input/output/history | Browser IndexedDB | Durable in that browser profile |
+| Documents and attachments | Server database, scoped to owner | Durable |
+| Run input/output/history | Server database, scoped to owner | Durable |
 | Active run controller | Backend `RunRegistry` | Until terminal state or process restart |
 | Ordered event replay buffer | Backend `RunRegistry` | In memory; bounded and temporary |
 | Provider request/key | Active backend call closure | One discovery or run request |
 | Local queue | Backend singleton | Process lifetime |
 
-There is no backend database and no worker process. Horizontal scaling would break reconnect semantics unless run ownership and event storage were externalized or requests were pinned to one process.
+There is no worker process or shared live-event store. Horizontal scaling would break reconnect semantics unless run ownership and event storage were externalized or requests were pinned to one process.
 
 ## 6. Shared contracts
 
