@@ -73,22 +73,27 @@ export function Message({ message, animate = true, model, streaming = false, sta
 
         {/* Reasoning and Loading Orb are unified. Always show when streaming or when reasoning or children are present. */}
         {(streaming || reasoning || children) && (
-          <div className="np-meta-chips" aria-label="Thinking process">
+          <div className="np-meta-chips">
             {children}
             {(streaming || reasoning) && (
               <details
                 className={`np-meta-chip np-reasoning-chip ${streaming ? 'live' : 'complete'}`}
                 open={showReasoning}
                 onToggle={(e) => setShowReasoning((e.target as HTMLDetailsElement).open)}
+                role="region"
+                aria-label={streaming ? 'Thinking live' : 'Thought process'}
               >
-                <summary style={{ cursor: reasoning ? 'pointer' : 'default', pointerEvents: reasoning ? 'auto' : 'none' }}>
+                <summary aria-expanded={showReasoning} style={{ cursor: reasoning ? 'pointer' : 'default', pointerEvents: reasoning ? 'auto' : 'none' }}>
                   {streaming ? (
                     <div className="np-inline-orb"></div>
                   ) : (
                     <Brain size={13} />
                   )}
                   {streaming ? (
-                    <strong>{status || 'Thinking...'}</strong>
+                    <>
+                      <strong>Thinking...</strong>
+                      {status && <span className="np-reasoning-status" role="status">{status}</span>}
+                    </>
                   ) : (
                     <>
                       <strong>Thought process</strong>
@@ -98,7 +103,7 @@ export function Message({ message, animate = true, model, streaming = false, sta
                 </summary>
                 
                 {reasoning && (
-                  <div id={`reasoning-${message.id}`} className="np-tool-body">
+                  <div id={`reasoning-${message.id}`} className="np-tool-body np-reasoning-body">
                     {formatContent(reasoning)}
                   </div>
                 )}

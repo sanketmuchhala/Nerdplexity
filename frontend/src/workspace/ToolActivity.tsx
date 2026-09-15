@@ -23,6 +23,21 @@ function icon(name: string, status: Status) {
 const field = (value: unknown, key: string) => value && typeof value === 'object' && key in value ? (value as Record<string, unknown>)[key] : undefined;
 
 /** One-line summary of what the call did. */
+function summary(tool: ToolTrace, status: Status) {
+  if (status === 'running') return 'Running…';
+  if (status !== 'completed') return tool.error ?? 'Failed';
+  if (tool.name === 'calculator') return `${String(field(tool.input, 'expression'))} = ${String(field(tool.output, 'result'))}`;
+  if (tool.name === 'search_documents') {
+    const count = Array.isArray(tool.output) ? tool.output.length : 0;
+    return `“${String(field(tool.input, 'query'))}” · ${count} ${count === 1 ? 'match' : 'matches'}`;
+  }
+  if (tool.name === 'read_document') return String(field(tool.output, 'title') ?? '');
+  if (tool.name === 'web_search') {
+    const count = webResults(tool).length;
+    return `“${String(field(tool.input, 'query'))}” · ${count} ${count === 1 ? 'result' : 'results'}`;
+  }
+  return '';
+}
 
 const hostname = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
 
@@ -56,10 +71,11 @@ export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; a
   return (
     <>
       {activities.map(activity => (
-        <details key={activity.id} className="np-meta-chip np-tool-completed">
+        <details key={activity.id} className="np-meta-chip np-tool np-tool-completed">
           <summary>
             <Wrench size={13} aria-hidden />
             <strong>Prepared tool step</strong>
+            <span className="np-tool-summary">Model-provided activity</span>
             <span className="np-tool-meta">Step {activity.step}</span>
           </summary>
           <div className="np-tool-body"><p>{activity.text}</p></div>
@@ -69,10 +85,11 @@ export function ToolActivity({ tools, activities = [] }: { tools: ToolTrace[]; a
         const status: Status = tool.status ?? 'completed';
         const Icon = icon(tool.name, status);
         return (
-          <details key={`${tool.step}-${tool.id ?? index}`} className={`np-meta-chip np-tool-${status}`}>
+          <details key={`${tool.step}-${tool.id ?? index}`} className={`np-meta-chip np-tool np-tool-${status}`}>
             <summary>
               <Icon size={13} className={status === 'running' ? 'np-spin' : undefined} aria-hidden />
               <strong>{label(tool.name)}</strong>
+              <span className="np-tool-summary">{summary(tool, status)}</span>
               <span className="np-tool-meta">{tool.step === 0 ? 'Automatic' : `Step ${tool.step}`}{tool.durationMs !== undefined ? ` · ${tool.durationMs} ms` : ''}</span>
             </summary>
             <div className="np-tool-body">
