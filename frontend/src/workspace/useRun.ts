@@ -6,7 +6,7 @@ import type { RunRecord, WorkspaceDocument } from '../lib/db';
 import * as store from '../lib/store';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { currentRouterPool, isLocal, latestResult, targetFor } from '../state/connections';
-import { isRouter, routerName, routeStrategy } from '../lib/router';
+import { isAgent, isRouter, routerName, routeStrategy } from '../lib/router';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 import { autoWebSearch, searchKey } from '../lib/searchKey';
@@ -75,17 +75,28 @@ const both = (names: string[]) => names.length > 2 ? `${names.slice(0, -1).join(
 
 /** The status line while the Free Agent works: which models are doing what right now. */
 function agentPhase(steps: AgentStep[]) {
+  const research = steps.some(step => step.role === 'strategy' && step.mode === 'research');
   const running = steps.filter(step => step.status === 'running');
   const writer = running.find(step => step.role === 'writer');
-  if (writer) return `${modelName(writer.model)} is checking and writing the answer`;
-  if (!running.length) return 'Choosing how to answer';
-  const names = both(running.map(step => modelName(step.model)));
+  if (writer) return `${modelName(writer.model)} is ${research ? 'writing the report' : 'checking and writing the answer'}`;
+  if (!running.length) return research ? 'Researching' : 'Choosing how to answer';
+  const searching = running.filter(step => step.role === 'searcher');
+  if (searching.length) return `Searching the web (${searching.length} search${searching.length === 1 ? '' : 'es'} at once)`;
+  const names = both([...new Set(running.map(step => modelName(step.model)))]);
   const are = running.length > 1 ? 'are' : 'is';
   const role = running[0].role;
-  return role === 'planner' ? `${names} is planning the parts` : role === 'specialist' ? `${names} ${are} answering the parts` : `${names} ${are} drafting`;
+  if (role === 'reader') {
+    const readers = steps.filter(step => step.role === 'reader');
+    return `${names} ${are} reading sources (${readers.filter(step => step.status !== 'running').length} of ${readers.length} done)`;
+  }
+  return role === 'planner' ? `${names} is planning ${research ? 'the research' : 'the parts'}`
+    : role === 'outliner' ? `${names} is outlining the report`
+      : role === 'specialist' ? `${names} ${are} answering the parts` : `${names} ${are} drafting`;
 }
 
 /** Which model a routed run was last sent to: the one behind any partial answer. */
+const hostOf = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+
 const lastTried = (steps: RouteStep[] | undefined) => [...(steps ?? [])].reverse().find(step => step.status === 'trying');
 
 const historyOf = (conversationId: string): RunMessage[] =>
@@ -145,6 +156,10 @@ export function useRun() {
           ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.activities?.length ? { activities: record.activities } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
           ...(record.route?.length ? { route: { steps: record.route, ...(routedTo ? { task: routedTo.task } : {}) } } : {}),
           ...(record.agent?.length ? { agent: { steps: record.agent, ...(agentOutcome ? { mode: agentOutcome.mode, calls: agentOutcome.calls, task: agentOutcome.task } : {}) } } : {}),
+          // A Deep Research report cites [n]; its sources are shown in the same order, numbered.
+          ...(agentOutcome?.sources?.length ? { webSearchResults: agentOutcome.sources.map(source => ({
+            title: source.title, url: source.url, snippet: '', source: hostOf(source.url), ...(source.published ? { publishDate: source.published } : {}),
+          })) } : {}),
         };
         const provenance = answered ? { connectionId: answered.connectionId, modelId: record.routedModel || answered.model }
           : record.connectionId && !isRouter(record) ? { connectionId: record.connectionId, modelId: record.routedModel || record.model } : undefined;
@@ -294,9 +309,14 @@ export function useRun() {
       // Durable before contacting the model, so a reload can find this run.
       await store.runs.put(record);
       const agentSettings = useChat.getState().settings?.agent;
+      // Deep Research is the Free Agent with the thread's Deep research tool on.
+      const research = isAgent(attempt) && !!attempt.input.configured?.tools?.includes('research');
+      if (research && !searchKey()) throw new Error('Deep research needs an Exa API key. Add one in Connections.');
+      const strategy = research ? 'research' as const : routeStrategy(attempt);
       const choice = pool?.route
-        ? { route: { ...pool.route, strategy: routeStrategy(attempt), ...(routeStrategy(attempt) === 'agent' && agentSettings ? { agent: agentSettings } : {}) } }
+        ? { route: { ...pool.route, strategy, ...(strategy !== 'free' && agentSettings ? { agent: agentSettings } : {}) } }
         : { target: targetFor(connection!), model: attempt.model };
+      const webAuto = autoWebSearch(useChat.getState().settings?.webSearch);
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
         costPolicy: routed ? 'free-only' : runCostPolicy(attempt.conversationId),
@@ -305,7 +325,7 @@ export function useRun() {
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
         // Read at send time so the key never enters the saved run snapshot.
         // With automatic web search, the server searches first when the message needs current information.
-        ...(autoWebSearch(useChat.getState().settings?.webSearch) ? { search: { provider: 'exa' as const, apiKey: searchKey(), auto: true } } : {}),
+        ...(webAuto || research ? { search: { provider: 'exa' as const, apiKey: searchKey(), auto: webAuto && !research } } : {}),
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);

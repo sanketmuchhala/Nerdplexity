@@ -39,11 +39,11 @@ export const AGENT_LIMITS = {
 const TASK_KINDS: readonly TaskKind[] = ['code', 'math', 'reasoning', 'writing', 'extraction', 'general'];
 
 const textOf = (content: RunMessage['content']) => typeof content === 'string' ? content : content.map(part => part.type === 'text' ? part.text : '').join('\n');
-const lastUserText = (messages: RunMessage[]) => {
+export const lastUserText = (messages: RunMessage[]) => {
   const last = [...messages].reverse().find(message => message.role === 'user');
   return last ? textOf(last.content) : '';
 };
-const clip = (text: string, max = AGENT_LIMITS.draftChars) => text.length <= max ? text : `${text.slice(0, max)}\n[… shortened]`;
+export const clip = (text: string, max: number = AGENT_LIMITS.draftChars) => text.length <= max ? text : `${text.slice(0, max)}\n[… shortened]`;
 
 // ---------------------------------------------------------------------------
 // Specialists: which model is best at what.
@@ -152,7 +152,7 @@ const WRITER_PLAN = [
 ].join('\n');
 
 /** Add a system note after any leading system messages, where every provider accepts it. */
-function withNote(messages: RunMessage[], note: string): RunMessage[] {
+export function withNote(messages: RunMessage[], note: string): RunMessage[] {
   const firstTurn = messages.findIndex(message => message.role !== 'system');
   const at = firstTurn === -1 ? messages.length : firstTurn;
   return [...messages.slice(0, at), { role: 'system', content: note }, ...messages.slice(at)];
@@ -184,7 +184,7 @@ export function parsePlan(reply: string): { task: string; kind: TaskKind }[] | u
 // ---------------------------------------------------------------------------
 // Execution
 
-const sumUsage = (usages: (Usage | undefined)[]): Usage | undefined => {
+export const sumUsage = (usages: (Usage | undefined)[]): Usage | undefined => {
   if (!usages.length || usages.some(usage => !usage)) return undefined;
   return usages.reduce<Usage>((total, usage) => ({
     prompt_tokens: total.prompt_tokens + usage!.prompt_tokens,
@@ -193,16 +193,16 @@ const sumUsage = (usages: (Usage | undefined)[]): Usage | undefined => {
   }), { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
 };
 
-const describe = (entry: RankedCandidate) => entry.why.length ? entry.why.join(', ') : 'next in the ranking';
+export const describe = (entry: RankedCandidate) => entry.why.length ? entry.why.join(', ') : 'next in the ranking';
 
 /**
  * The models the agent assigns work to: the Free Router's ranking without provider-side routers
  * (openrouter/free, openrouter/auto), whose actual model is unknown and cannot be ranked. They stay
  * in the writer's list, last, as the Free Router's final fallback.
  */
-const ranked = (list: RankedCandidate[]) => list.filter(entry => !isMetaRouter(entry.candidate.model));
+export const ranked = (list: RankedCandidate[]) => list.filter(entry => !isMetaRouter(entry.candidate.model));
 
-interface Draft { entry: RankedCandidate; text: string; task?: string }
+export interface Draft { entry: RankedCandidate; text: string; task?: string }
 
 const sameModel = (a: { connectionId: string; model: string }, b: { connectionId: string; model: string }) => a.connectionId === b.connectionId && a.model === b.model;
 const isEntry = (entry: RankedCandidate, other: RankedCandidate) => sameModel(entry.candidate, other.candidate);
@@ -241,17 +241,87 @@ export function agentSettings(raw: unknown, candidates: { connectionId: string; 
  * Put the user's choice first in a ranked list. When the chosen model cannot take this message
  * (cooling down, or missing something the message needs), the ranking stands and the note says why.
  */
-function withChoice(list: RankedCandidate[], choice: ModelChoice | undefined, role: string): { list: RankedCandidate[]; note?: string } {
+export function withChoice(list: RankedCandidate[], choice: ModelChoice | undefined, role: string): { list: RankedCandidate[]; note?: string } {
   if (!choice) return { list };
   const entry = list.find(item => sameModel(item.candidate, choice));
   if (!entry) return { list, note: `Your ${role}, ${choice.model}, cannot take this message right now, so the ranking chose instead.` };
   return { list: [{ ...entry, why: ['your choice', ...entry.why] }, ...list.filter(item => item !== entry)] };
 }
 
+export interface StepRunner {
+  /** Report a step (an `agent` event). */
+  step: (value: AgentStep) => void;
+  /**
+   * Run one step on a ranked list of models, reported as it starts, switches model, streams, and
+   * ends. `finish` can replace what the finished step reports (its text, its reason). Returns the
+   * answer, or undefined when the step failed; only a cancel throws.
+   */
+  run: (id: string, role: AgentStep['role'], list: RankedCandidate[], overrides: Partial<AttemptContext>, extra?: Partial<AgentStep>, finish?: (text: string) => Partial<AgentStep>) => Promise<Draft | undefined>;
+  /** Model requests sent so far, failed attempts included. */
+  readonly calls: number;
+  addCalls: (n: number) => void;
+  usages: (Usage | undefined)[];
+}
+
+/** Steps for one run: shared by the Free Agent and Deep Research. */
+export function stepRunner(emit: RunContext['emit'], signal: AbortSignal, context: (overrides: Partial<AttemptContext>) => AttemptContext): StepRunner {
+  let calls = 0;
+  const usages: (Usage | undefined)[] = [];
+  const step = (value: AgentStep) => emit({ type: 'agent', ...value });
+  const run: StepRunner['run'] = async (id, role, list, overrides, extra = {}, finish) => {
+    const started = Date.now();
+    // The model's output and reasoning stream to the user as it writes, in pieces, not per token.
+    let reasoning = '';
+    const pending: Record<'text' | 'reasoning', string> = { text: '', reasoning: '' };
+    let timer: NodeJS.Timeout | undefined;
+    const flush = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      for (const channel of ['reasoning', 'text'] as const) {
+        if (pending[channel]) { emit({ type: 'agent_output', id, channel, text: pending[channel] }); pending[channel] = ''; }
+      }
+    };
+    const live = (channel: 'text' | 'reasoning', piece: string) => {
+      pending[channel] += piece;
+      timer ??= setTimeout(flush, AGENT_LIMITS.outputFlushMs);
+    };
+    try {
+      const result = await tryInOrder(list, context(overrides), {
+        trying: (entry, attempt, previous) => step({ id, role, status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: attempt === 1 ? describe(entry) : `After ${previous} failed: ${describe(entry)}`, ...extra }),
+        failed: (entry, _attempt, error) => step({ id, role, status: 'failed', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: error.message, ...extra }),
+        event: event => {
+          if (event.type === 'quota') emit(event);
+          else if (event.type === 'delta') live('text', event.text);
+          else if (event.type === 'reasoning') { reasoning += event.text; live('reasoning', event.text); }
+        },
+      });
+      flush();
+      calls += result.attempts;
+      if (!result.ok) {
+        step({ id, role, status: 'failed', reason: result.last ? `No model could do this step (last: ${result.last.message})` : 'No model was available for this step.', ...extra });
+        return undefined;
+      }
+      usages.push(result.done.usage);
+      const { candidate } = result.ranked;
+      step({
+        id, role, status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: describe(result.ranked), text: clip(result.text),
+        ...(reasoning ? { reasoning: clip(reasoning) } : {}), durationMs: Date.now() - started, ...extra, ...(finish ? finish(result.text) : {}),
+      });
+      return { entry: result.ranked, text: result.text, ...(extra.task ? { task: extra.task } : {}) };
+    } catch (error) {
+      flush();
+      if (signal.aborted) throw error;
+      // A failure after output, or a refusal: the step is lost, the run goes on.
+      step({ id, role, status: 'failed', reason: error instanceof ProviderFailure ? error.error.message : 'The step failed.', ...extra });
+      return undefined;
+    }
+  };
+  return { step, run, get calls() { return calls; }, addCalls: n => { calls += n; }, usages };
+}
+
 export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
   const { health, bench, fetchImpl = fetch, enqueue = enqueueLocal } = deps;
   return async ({ signal, emit }: RunContext) => {
-    const step = (value: AgentStep) => emit({ type: 'agent', ...value });
     const messages = run.search?.auto ? await withWebResults(run.messages, run.search.apiKey, signal, emit, fetchImpl) : run.messages;
     const task = profileTask(messages, run.tools, run.request.maxTokens);
     const text = lastUserText(messages);
@@ -262,61 +332,14 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
 
     const config = run.agent ?? {};
     const notes: string[] = [];
-    let calls = 0;
-    const usages: (Usage | undefined)[] = [];
     const blockedAccounts = new Set<string>();
     const context = (overrides: Partial<AttemptContext>): AttemptContext => ({
       owner: run.owner, health, request: run.request, messages, tools: [], documents: run.documents, search: run.search,
       signal, fetchImpl, enqueue, maxAttempts: 1, blockedAccounts, ...overrides,
     });
-    /** One step, reported as it starts, switches model, and ends. Returns the answer, or undefined when it failed. */
-    const runStep = async (
-      id: string, role: AgentStep['role'], list: RankedCandidate[], overrides: Partial<AttemptContext>, extra: Partial<AgentStep> = {},
-    ): Promise<Draft | undefined> => {
-      const started = Date.now();
-      // The model's output and reasoning stream to the user as it writes, in pieces, not per token.
-      let reasoning = '';
-      const pending: Record<'text' | 'reasoning', string> = { text: '', reasoning: '' };
-      let timer: NodeJS.Timeout | undefined;
-      const flush = () => {
-        clearTimeout(timer);
-        timer = undefined;
-        for (const channel of ['reasoning', 'text'] as const) {
-          if (pending[channel]) { emit({ type: 'agent_output', id, channel, text: pending[channel] }); pending[channel] = ''; }
-        }
-      };
-      const live = (channel: 'text' | 'reasoning', piece: string) => {
-        pending[channel] += piece;
-        timer ??= setTimeout(flush, AGENT_LIMITS.outputFlushMs);
-      };
-      try {
-        const result = await tryInOrder(list, context(overrides), {
-          trying: (entry, attempt, previous) => step({ id, role, status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: attempt === 1 ? describe(entry) : `After ${previous} failed: ${describe(entry)}`, ...extra }),
-          failed: (entry, _attempt, error) => step({ id, role, status: 'failed', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: error.message, ...extra }),
-          event: event => {
-            if (event.type === 'quota') emit(event);
-            else if (event.type === 'delta') live('text', event.text);
-            else if (event.type === 'reasoning') { reasoning += event.text; live('reasoning', event.text); }
-          },
-        });
-        flush();
-        calls += result.attempts;
-        if (!result.ok) {
-          step({ id, role, status: 'failed', reason: result.last ? `No model could do this step (last: ${result.last.message})` : 'No model was available for this step.', ...extra });
-          return undefined;
-        }
-        usages.push(result.done.usage);
-        const { candidate } = result.ranked;
-        step({ id, role, status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: describe(result.ranked), text: clip(result.text), ...(reasoning ? { reasoning: clip(reasoning) } : {}), durationMs: Date.now() - started, ...extra });
-        return { entry: result.ranked, text: result.text, ...(extra.task ? { task: extra.task } : {}) };
-      } catch (error) {
-        flush();
-        if (signal.aborted) throw error;
-        // A failure after output, or a refusal: the step is lost, the run goes on.
-        step({ id, role, status: 'failed', reason: error instanceof ProviderFailure ? error.error.message : 'The step failed.', ...extra });
-        return undefined;
-      }
-    };
+    const steps = stepRunner(emit, signal, context);
+    const { step } = steps;
+    const runStep = steps.run;
     const strategyStep = () => step({ id: 'strategy', role: 'strategy', status: 'done', mode, reason: [reason, ...notes].join(' ') });
 
     const decision = chooseStrategy(text, task, own.length, config.behavior);
@@ -399,7 +422,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       failed: (entry, _attempt, error) => step({ id: 'writer', role: 'writer', status: 'failed', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: error.message }),
       event: event => { if (event.type === 'delta') answered = true; emit(event); },
     });
-    calls += result.attempts;
+    steps.addCalls(result.attempts);
 
     if (!result.ok) {
       // No writer could answer. A draft is still an answer: show the first one rather than nothing.
@@ -408,14 +431,14 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
       // The draft's own step names the model that wrote it.
       emit({ type: 'status', message: 'No model could check and rewrite the drafts, so this is one unchecked draft.' });
       emit({ type: 'delta', text: fallback.text });
-      const outcome: AgentOutcome = { mode, task: task.kind, calls, writer: { connectionId: fallback.entry.candidate.connectionId, model: fallback.entry.candidate.model } };
-      return { ...(sumUsage(usages) ? { usage: sumUsage(usages) } : {}), agent: outcome };
+      const outcome: AgentOutcome = { mode, task: task.kind, calls: steps.calls, writer: { connectionId: fallback.entry.candidate.connectionId, model: fallback.entry.candidate.model } };
+      return { ...(sumUsage(steps.usages) ? { usage: sumUsage(steps.usages) } : {}), agent: outcome };
     }
-    usages.push(result.done.usage);
+    steps.usages.push(result.done.usage);
     const { candidate } = result.ranked;
     step({ id: 'writer', role: 'writer', status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: note ? 'Checked the drafts and wrote the answer.' : describe(result.ranked), durationMs: Date.now() - started });
-    const outcome: AgentOutcome = { mode, task: task.kind, calls, writer: { connectionId: candidate.connectionId, model: candidate.model } };
-    const usage = sumUsage(usages);
+    const outcome: AgentOutcome = { mode, task: task.kind, calls: steps.calls, writer: { connectionId: candidate.connectionId, model: candidate.model } };
+    const usage = sumUsage(steps.usages);
     return { ...(usage ? { usage } : {}), finishReason: result.done.finishReason, ...(result.done.loadMs !== undefined ? { loadMs: result.done.loadMs } : {}), agent: outcome };
   };
 }

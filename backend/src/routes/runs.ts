@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import type { AgentConfig, BenchScore, RunEnvelope, RunMessage, ToolName } from '@app/types';
+import type { AgentConfig, BenchScore, ResearchDepth, RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
 import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
@@ -8,6 +8,7 @@ import { RunExecutor, RunRegistry } from '../runtime/runs.js';
 import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 import { withWebResults } from '../runtime/autoSearch.js';
 import { agentExecutor, agentSettings } from '../runtime/agent.js';
+import { RESEARCH_DEPTHS, researchExecutor } from '../runtime/research.js';
 
 type FetchFn = typeof fetch;
 
@@ -15,7 +16,7 @@ interface ValidRun {
   key: string;
   request: ModelRequest;
   /** Present when the server chooses the model; `request.target` and `request.model` are then placeholders. */
-  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent'; agent?: AgentConfig };
+  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent' | 'research'; agent?: AgentConfig; research?: { depth: ResearchDepth } };
   tools: ToolName[];
   documents: WorkspaceDocument[];
   /** auto: search the web before answering when the latest message needs current information. */
@@ -40,7 +41,7 @@ export function resolveConnections(connections: unknown, limit = ROUTE_LIMITS.co
 
 /** Validate a route: every connection passes the destination policy, and every model names one of them. */
 export function validateRoute(route: any): RouteCandidate[] {
-  if (!route || typeof route !== 'object' || (route.strategy !== 'free' && route.strategy !== 'agent')) throw new Error('Unknown route strategy.');
+  if (!route || typeof route !== 'object' || !['free', 'agent', 'research'].includes(route.strategy)) throw new Error('Unknown route strategy.');
   const { models } = route;
   const targets = resolveConnections(route.connections);
   if (!Array.isArray(models) || !models.length || models.length > ROUTE_LIMITS.models) throw new Error(`A route needs 1–${ROUTE_LIMITS.models} models.`);
@@ -91,10 +92,14 @@ export function validateRunRequest(body: any): ValidRun {
   if (documents.reduce((n: number, d: any) => n + Buffer.byteLength(d.content, 'utf8'), 0) > 4_000_000) throw new Error('Attached documents exceed 4 MB of text.');
   let search: ValidRun['search'];
   const auto = body.search?.auto === true;
-  if (tools.includes('web_search') || auto) {
+  const research = body.route?.strategy === 'research';
+  if (tools.includes('web_search') || auto || research) {
     const key = body.search?.apiKey;
-    if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) throw new Error('Web search needs an Exa API key. Add one in Connections.');
-    search = { apiKey: key, auto };
+    if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) {
+      throw new Error(research ? 'Deep research needs an Exa API key. Add one in Connections.' : 'Web search needs an Exa API key. Add one in Connections.');
+    }
+    // Deep Research does its own searching, so it never adds an automatic search on top.
+    search = { apiKey: key, auto: auto && !research };
   }
   const documentTools = tools.some(name => DOCUMENT_TOOLS.has(name));
   if (documentTools) {
@@ -105,7 +110,13 @@ export function validateRunRequest(body: any): ValidRun {
   }
   return {
     key: body.idempotencyKey,
-    ...(candidates ? { route: { candidates, strategy: body.route.strategy, ...(body.route.strategy === 'agent' ? { agent: agentSettings(body.route.agent, candidates) } : {}) } } : {}),
+    ...(candidates ? {
+      route: {
+        candidates, strategy: body.route.strategy,
+        ...(body.route.strategy !== 'free' ? { agent: agentSettings(body.route.agent, candidates) } : {}),
+        ...(research ? { research: { depth: RESEARCH_DEPTHS.includes(body.route.research?.depth) ? body.route.research.depth : 'standard' } } : {}),
+      },
+    } : {}),
     request: {
       target, model: candidates ? '' : body.model,
       freeOnly: !!candidates || body.costPolicy !== 'any',
@@ -126,9 +137,10 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, ow
       owner, candidates: run.route.candidates, request, messages: messages as RunMessage[], tools: run.tools, documents: run.documents,
       ...(run.search ? { search: run.search } : {}),
       ...(run.route.agent ? { agent: run.route.agent } : {}),
+      ...(run.route.research ? { research: run.route.research } : {}),
     };
     const deps = { health, fetchImpl, ...(bench ? { bench } : {}) };
-    return run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
+    return run.route.strategy === 'research' ? researchExecutor(routed, deps) : run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
   }
   return async ({ signal, emit }) => {
     const request = run.search?.auto

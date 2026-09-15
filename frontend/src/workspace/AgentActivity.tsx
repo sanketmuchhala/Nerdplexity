@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, Check, CornerDownRight, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, CornerDownRight, ExternalLink, Loader2, Search } from 'lucide-react';
 import type { AgentMode, AgentStep } from '@app/types';
 import ModelLogo, { formatModelName } from './ModelLogo';
 import { RouterMark } from './RouterMark';
@@ -9,6 +9,7 @@ const MODE: Record<AgentMode, (drafts: number) => string> = {
   direct: () => 'Answered directly',
   ensemble: drafts => drafts === 1 ? 'One draft, checked and rewritten' : `${COUNT[drafts] ?? drafts} drafts, checked and combined`,
   plan: () => 'Split into parts for specialists',
+  research: () => 'Deep research',
 };
 
 function roleLabel(step: AgentStep) {
@@ -18,12 +19,16 @@ function roleLabel(step: AgentStep) {
     case 'drafter': return `Draft ${n ?? ''}`.trim();
     case 'specialist': return `Part ${n ?? ''}${step.kind ? ` · ${step.kind}` : ''}`;
     case 'writer': return 'Final answer';
+    case 'searcher': return `Search ${n ?? ''}`.trim();
+    case 'reader': return `Source ${n ?? ''}`.trim();
+    case 'outliner': return 'Outline';
+    case 'checker': return 'Citation check';
     default: return step.role;
   }
 }
 
 const state = (step: AgentStep) => step.status === 'running' ? 'working…'
-  : step.status === 'failed' ? 'failed'
+  : step.status === 'failed' ? (step.role === 'checker' ? 'issues found' : 'failed')
     : step.durationMs !== undefined ? `${(step.durationMs / 1000).toFixed(1)} s` : 'done';
 
 const short = (model?: string) => model ? formatModelName(undefined, model) : 'a model';
@@ -72,9 +77,15 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
   if (!strategy && !work.length) return null;
 
   const planner = work.find(step => step.role === 'planner');
-  const inputs = work.filter(step => step.role === 'drafter' || step.role === 'specialist');
+  const searches = work.filter(step => step.role === 'searcher');
+  const inputs = work.filter(step => step.role === 'drafter' || step.role === 'specialist' || step.role === 'reader');
+  const outliner = work.find(step => step.role === 'outliner');
   const writer = work.find(step => step.role === 'writer');
-  const received = inputs.filter(step => step.status === 'done' && step.text);
+  // A source that gave no checked notes sends nothing on.
+  const received = inputs.filter(step => step.status === 'done' && step.text && !(step.role === 'reader' && /^Kept 0 /.test(step.reason)));
+  const research = strategy?.mode === 'research';
+  // Many sources can be read by the same few models: the flow line shows each model once.
+  const inputModels = [...new Map(inputs.filter(step => step.model).map(step => [`${step.connectionId}\n${step.model}`, step])).values()];
   const drafts = work.filter(step => step.role === 'drafter').length;
   const models = [...new Map(work.filter(step => step.model && step.connectionId).map(step => [`${step.connectionId}\n${step.model}`, step])).values()];
 
@@ -102,13 +113,20 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
           {work.length > 0 && (
             <div className="np-agent-flow" aria-label="How the models worked together">
               {planner && <><span className="np-agent-flow-group"><em>Plan</em>{who(planner)}</span><ArrowRight size={12} aria-hidden /></>}
+              {searches.length > 0 && (
+                <><span className="np-agent-flow-group"><em>Search</em><span className="np-agent-who"><Search size={11} aria-hidden />{searches.length} search{searches.length === 1 ? '' : 'es'}</span></span><ArrowRight size={12} aria-hidden /></>
+              )}
               {inputs.length > 0 && (
                 <>
-                  <span className="np-agent-flow-group"><em>{inputs[0].role === 'specialist' ? 'Parts' : 'Drafts'}</em>{inputs.map(step => <span key={step.id}>{who(step)}</span>)}</span>
-                  {writer && <ArrowRight size={12} aria-hidden />}
+                  <span className="np-agent-flow-group">
+                    <em>{research ? `Read ${inputs.length} source${inputs.length === 1 ? '' : 's'}` : inputs[0].role === 'specialist' ? 'Parts' : 'Drafts'}</em>
+                    {(research ? inputModels : inputs).map(step => <span key={step.id}>{who(step)}</span>)}
+                  </span>
+                  {(outliner || writer) && <ArrowRight size={12} aria-hidden />}
                 </>
               )}
-              {writer && <span className="np-agent-flow-group"><em>{inputs.length ? 'Checks and writes' : 'Answers'}</em>{who(writer)}</span>}
+              {outliner && <><span className="np-agent-flow-group"><em>Outline</em>{who(outliner)}</span>{writer && <ArrowRight size={12} aria-hidden />}</>}
+              {writer && <span className="np-agent-flow-group"><em>{research ? 'Writes the report' : inputs.length ? 'Checks and writes' : 'Answers'}</em>{who(writer)}</span>}
             </div>
           )}
 
@@ -120,7 +138,7 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
                 <li key={step.id} className={`np-agent-step ${step.status}`}>
                   <div className="np-agent-step-head">
                     {step.status === 'failed' ? <AlertTriangle size={12} aria-hidden /> : step.status === 'running' ? <Loader2 size={12} className="np-spin" aria-hidden /> : <Check size={12} aria-hidden />}
-                    <strong>{roleLabel(step)}</strong>
+                    <strong>{research && step.role === 'writer' ? 'Report' : roleLabel(step)}</strong>
                     {step.model && (
                       <span className="np-agent-model">
                         {logo(step)}
@@ -131,13 +149,22 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
                     <small className="np-agent-state">{state(step)}</small>
                   </div>
 
+                  {step.role === 'searcher' && step.task && <p className="np-agent-handoff"><Search size={11} aria-hidden /><span className="np-agent-task">{step.task}</span></p>}
+                  {step.role === 'reader' && step.url && (
+                    <p className="np-agent-handoff">
+                      <CornerDownRight size={11} aria-hidden />From the search:
+                      <a href={step.url} target="_blank" rel="noopener noreferrer">{step.task || step.url}<ExternalLink size={9} aria-hidden /></a>
+                    </p>
+                  )}
                   {step.role === 'specialist' && step.task && (
                     <p className="np-agent-handoff"><CornerDownRight size={11} aria-hidden />From the plan: <span className="np-agent-task">{step.task}</span></p>
                   )}
                   {step.role === 'writer' && received.length > 0 && (
                     <p className="np-agent-handoff">
                       <CornerDownRight size={11} aria-hidden />
-                      <span>Received {received.map(input => `${roleLabel(input)} from ${short(input.model)}`).join(', ')} to check and combine</span>
+                      <span>{research
+                        ? `Received the checked notes from ${received.length} source${received.length === 1 ? '' : 's'}${outliner?.status === 'done' ? ' and the outline' : ''}`
+                        : `Received ${received.map(input => `${roleLabel(input)} from ${short(input.model)}`).join(', ')} to check and combine`}</span>
                     </p>
                   )}
                   {step.reason && <p className={step.status === 'failed' ? 'np-route-error' : 'np-agent-why'}>{step.reason}</p>}
@@ -145,8 +172,8 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
                   {thinking && <Stream label="Thinking" doneLabel="Show its thinking" text={thinking} live={running} thinking />}
                   {step.role !== 'writer' && step.text && (
                     <Stream
-                      label={step.role === 'planner' ? 'Planning' : 'Writing'}
-                      doneLabel={step.role === 'planner' ? 'Read the plan' : step.role === 'specialist' ? 'Read this part' : 'Read the draft'}
+                      label={step.role === 'planner' ? 'Planning' : step.role === 'reader' ? 'Reading' : step.role === 'outliner' ? 'Outlining' : 'Writing'}
+                      doneLabel={step.role === 'planner' ? 'Read the plan' : step.role === 'specialist' ? 'Read this part' : step.role === 'reader' ? 'Read the notes' : step.role === 'outliner' ? 'Read the outline' : 'Read the draft'}
                       text={step.text}
                       live={running}
                     />
@@ -157,6 +184,9 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
                   )}
                   {(step.role === 'drafter' || step.role === 'specialist') && step.status === 'done' && writer?.model && (
                     <p className="np-agent-handoff"><ArrowRight size={11} aria-hidden />Sent to {short(writer.model)} to check</p>
+                  )}
+                  {step.role === 'reader' && step.status === 'done' && writer?.model && received.includes(step) && (
+                    <p className="np-agent-handoff"><ArrowRight size={11} aria-hidden />Notes sent to {short(writer.model)} for the report</p>
                   )}
                 </li>
               );

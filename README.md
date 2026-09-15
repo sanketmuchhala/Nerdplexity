@@ -105,7 +105,9 @@ Provider notes: OpenRouter free models have per-minute and per-day limits, and a
 
 **Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
 
-Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md) and its [architecture](backend/docs/free-agent-architecture.md), and [Bench](backend/docs/bench.md).
+**Deep research** is a Free Agent mode for questions that need an investigation. Turn it on in the composer (it needs an Exa key): the agent plans the research from several perspectives, searches the web, has several free models read the pages in parallel, keeps only the quotes it can find on the page, and writes a report that cites its sources as [1], [2], with a citation check at the end. The live panel shows every search, every source and what was kept from it, and which model did what.
+
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md) and its [architecture](backend/docs/free-agent-architecture.md), [Deep Research](backend/docs/deep-research.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 

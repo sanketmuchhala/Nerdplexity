@@ -805,3 +805,5 @@ details.np-agent.live { border-color: rgba(var(--np-accent-rgb), .35); }
 details.np-tool .np-agent-stream pre, .np-agent-stream pre { margin: 0; padding: 8px 10px; max-height: 180px; overflow: auto; background: var(--np-sidebar); border-radius: 6px; color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .np-agent-stream.thinking pre, .np-agent-text.thinking pre { color: var(--np-muted); font-style: italic; }
 .np-agent-step .np-agent-text { margin-top: 6px; }
+.np-agent-handoff a { display: inline-flex; align-items: center; gap: 3px; color: var(--np-accent); text-decoration: none; overflow-wrap: anywhere; }
+.np-agent-handoff a:hover { text-decoration: underline; }

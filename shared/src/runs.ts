@@ -96,11 +96,26 @@ export interface RouteModel {
  * with several specialists and have the strongest model check and write the answer.
  */
 export interface RouteRequest {
-  strategy: 'free' | 'agent';
+  strategy: 'free' | 'agent' | 'research';
   connections: { id: string; target: ConnectionTarget }[];
   models: RouteModel[];
   /** How the Free Agent should work, from the user's settings. Ignored by the Free Router. */
   agent?: AgentConfig;
+  /** Deep Research: how far to search. Used with strategy 'research'. */
+  research?: { depth?: ResearchDepth };
+}
+
+/** How much Deep Research searches and reads: more sources and requests for deeper settings. */
+export type ResearchDepth = 'quick' | 'standard' | 'deep';
+
+/** A source a Deep Research report cites as [n]. */
+export interface ResearchSource {
+  n: number;
+  title: string;
+  url: string;
+  published?: string;
+  /** Checked notes taken from it. */
+  notes: number;
 }
 
 /** One model, on one connection. */
@@ -139,8 +154,8 @@ export interface RouteStep {
   category?: ProviderErrorCategory;
 }
 
-/** How the Free Agent handles one message. */
-export type AgentMode = 'direct' | 'ensemble' | 'plan';
+/** How the Free Agent handles one message. 'research' is Deep Research. */
+export type AgentMode = 'direct' | 'ensemble' | 'plan' | 'research';
 
 /**
  * One step of a Free Agent run. Steps are reported as they start and finish (same id).
@@ -149,15 +164,17 @@ export type AgentMode = 'direct' | 'ensemble' | 'plan';
  */
 export interface AgentStep {
   id: string;
-  role: 'strategy' | 'planner' | 'drafter' | 'specialist' | 'writer';
+  role: 'strategy' | 'planner' | 'drafter' | 'specialist' | 'writer' | 'searcher' | 'reader' | 'outliner' | 'checker';
   status: 'running' | 'done' | 'failed' | 'skipped';
   /** Safe to show: why this step or model, or why it failed. */
   reason: string;
   connectionId?: string;
   model?: string;
   mode?: AgentMode;
-  /** The part of the message a specialist answers. */
+  /** The part of the message a specialist answers; a searcher's query; a reader's page title. */
   task?: string;
+  /** The page a Deep Research reader read. */
+  url?: string;
   kind?: TaskKind;
   /** A draft or part answer, shortened, for the user to inspect. The final answer streams as deltas. */
   text?: string;
@@ -183,6 +200,8 @@ export interface AgentOutcome {
   calls: number;
   /** The model that wrote the final answer. */
   writer: { connectionId: string; model: string };
+  /** Deep Research: the sources the report cites as [n]. */
+  sources?: ResearchSource[];
 }
 
 /** Which model answered a routed run. */

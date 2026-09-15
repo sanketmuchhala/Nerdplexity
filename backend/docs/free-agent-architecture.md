@@ -136,7 +136,8 @@ flowchart LR
 | Run route | `backend/src/routes/runs.ts` | Validate the request and route (`validateRoute`), sanitize settings (`agentSettings`), load Bench scores, pick the executor | Rank or call models |
 | Specialists route | `backend/src/routes/agent.ts` | `POST /v1/agent/specialists`: the top three per kind, for the settings hints and the Bench page | Start runs |
 | Run harness | `backend/src/runtime/runs.ts` | Lifecycle, sequence numbers, replay, timeout, orphan cancel, one terminal event | Know about roles or models |
-| Agent executor | `backend/src/runtime/agent.ts` | Strategy, roles, steps, writer, fallback draft, outcome | Talk to providers directly |
+| Agent executor | `backend/src/runtime/agent.ts` | Strategy, roles, steps, writer, fallback draft, outcome; `stepRunner`, which Deep Research shares | Talk to providers directly |
+| Deep Research executor | `backend/src/runtime/research.ts` | Plan, search, read with quote checks, outline, report, citation check ([Deep Research](deep-research.md)) | Talk to providers directly |
 | Router parts | `backend/src/runtime/router.ts` | Task profile, ranking, health, `tryInOrder` | Know about roles |
 | Automatic web search | `backend/src/runtime/autoSearch.ts` | Search once before any step when the message needs current information | Run per step |
 | Adapters and tool loop | `backend/src/runtime/adapters.ts`, `toolLoop.ts` | Provider protocols, streaming, tool calls (writer only, direct mode) | Choose models |
@@ -339,7 +340,7 @@ The executor resolves with:
 
 ## 7. The step runner
 
-`runStep(id, role, list, overrides, extra)` wraps `tryInOrder` for the planner, drafters, and specialists (the writer calls `tryInOrder` directly because it streams). It turns the router's hooks into `agent` events and never throws, except when the run is canceled.
+`stepRunner(emit, signal, context)` makes the step runner for a run; its `run(id, role, list, overrides, extra, finish)` wraps `tryInOrder` for the planner, drafters, and specialists (the writer calls `tryInOrder` directly because it streams). It turns the router's hooks into `agent` events and never throws, except when the run is canceled. `finish` lets a caller replace what the finished step reports: Deep Research uses it to show a reader's checked notes and how many quotes were dropped. Deep Research's planner, readers, and outliner are steps of the same runner.
 
 ```mermaid
 stateDiagram-v2

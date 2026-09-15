@@ -153,3 +153,41 @@ test('while it works, the panel is open and shows each model drafting and thinki
   await saved.locator('summary').first().click();
   await expect(saved.getByText('Show its thinking').first()).toBeVisible();
 });
+
+test('Deep research plans, searches, has several models read the sources, and writes a report citing them', async ({ page }) => {
+  await connectAgentModels(page);
+  // Deep research needs an Exa key.
+  await nav(page, 'Connections').click();
+  await page.getByLabel('Exa API key').fill('exa-test-key-000001');
+  await page.getByRole('button', { name: 'Save key' }).click();
+  await expect(page.locator('.np-web-search')).toContainText('Key saved for this tab');
+  await chooseAgent(page);
+  // Type, switch Deep research on, and send at once: the message waits for the setting to be saved.
+  const text = prompt('How tall is the fake tower and who built it?');
+  await page.getByRole('textbox', { name: 'Message' }).fill(text);
+  await page.getByRole('button', { name: 'Deep research' }).click();
+  await page.getByRole('textbox', { name: 'Message' }).press('Enter');
+  await expect(page.getByRole('button', { name: 'Deep research' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.np-composer-footnote')).toContainText('Deep research: the Free Agent plans');
+  await expect(page.getByText(/Research report from agent-model-70b: the tower is 300 metres tall \[1\]/)).toBeVisible();
+  // The sources the report cites, numbered in order.
+  await expect(page.getByRole('link', { name: /example\.com/ })).toHaveCount(2);
+
+  const panel = page.getByLabel('Free Agent steps').last();
+  await expect(panel).toContainText('Deep research');
+  await panel.locator('summary').first().click();
+  const flow = panel.getByLabel('How the models worked together');
+  await expect(flow).toContainText('2 searches');
+  await expect(flow).toContainText('Read 2 sources');
+  await expect(flow).toContainText('Writes the report');
+  // Each reader kept its true quote and dropped the invented one.
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('Kept 1 note; dropped 1 whose quote is not on the page');
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Citation check' })).toContainText('2 citations to 2 of 2 sources; each names a source with checked notes');
+
+  // Only checked quotes reached the writer.
+  const calls = await upstream(page, text);
+  const writer = calls.find(call => call.messages.some(m => m.role === 'system' && m.content.includes('You write a research report')))!;
+  const note = writer.messages.find(m => m.role === 'system' && m.content.includes('You write a research report'))!.content;
+  expect(note).toContain('The tower is 300 metres tall');
+  expect(note).not.toContain('This sentence is not on the page at all.');
+});

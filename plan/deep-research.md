@@ -46,8 +46,8 @@ Hard caps on searches, model requests, and minutes. When a budget or the free qu
 
 ## Phases
 
-0. **R0, live multi-model panel** (also for the Free Agent): every model's role, thinking, and output streams live, with the hand-offs between models. Deep Research is built on it.
-1. **R1, engine.** Plan → search → read (with quote matching) → outline → write with citations, one round. `research` steps in the live panel. Tests with a fake search API and fake models.
+0. **R0, live multi-model panel** (also for the Free Agent): every model's role, thinking, and output streams live, with the hand-offs between models. Deep Research is built on it. Done 2026-09-15.
+1. **R1, engine.** Plan → search → read (with quote matching) → outline → write with citations, one round. `research` steps in the live panel. Tests with a fake search API and fake models. Done 2026-09-15 ([`backend/docs/deep-research.md`](../backend/docs/deep-research.md)), with a Deep research switch in the composer so it can be used now; the rest of R3 (depth, plan editing, progress counts) remains.
 2. **R2, loop and checks.** Reflection rounds, the citation checker, conflicting sources.
 3. **R3, experience.** A Deep research choice for a message (it costs many requests, so it is chosen, not automatic), plan preview and edit, live progress (sources found, reading 4 of 12), a report view with numbered sources, export.
 4. **R4, evaluation.** A small question set with known answers: answer accuracy and citation support, against the Free Agent's single answer. Tune budgets from the results.

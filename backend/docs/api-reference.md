@@ -316,6 +316,10 @@ Rate limits put a model (or, for account-wide limits such as OpenRouter's free-m
 
 The run then reports `agent` step events and ends with `completed.agent` (section 6).
 
+### Deep Research example
+
+`"strategy": "research"` runs [Deep Research](deep-research.md) on the same route. It needs `search: { "provider": "exa", "apiKey": "…" }` ("Deep research needs an Exa API key." otherwise); `search.auto` is ignored. `route.research.depth` is `quick`, `standard` (the default, and what anything else becomes), or `deep`. Its steps are `agent` events with the roles `searcher` (query in `task`), `reader` (page in `task` and `url`), `outliner`, and `checker`, besides `planner` and `writer`; `completed.agent` has `mode: "research"` and `sources: [{ n, title, url, published?, notes }]`, the sources the report cites as `[n]`.
+
 ## 6. Follow and replay events
 
 ### `GET /v1/runs/:id/events?after=N`
