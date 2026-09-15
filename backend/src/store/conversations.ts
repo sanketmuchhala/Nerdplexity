@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, lt, sql } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { attachments, conversations, messages } from '../db/schema.js';
 import { CONVERSATION_FIELDS, type AttachmentInput, type ConversationInput, type ConversationPatch, type ForkInput, type MessageInput } from './validate.js';
@@ -20,8 +20,15 @@ const messageOut = (row: MessageRow) => defined({
   finishReason: row.finishReason, feedback: row.feedback,
 });
 
-const attachmentOut = (row: AttachmentRow) => ({
+const attachmentFields = (includeOriginals: boolean) => ({
+  ...getTableColumns(attachments),
+  pdfBase64: includeOriginals ? attachments.pdfBase64 : sql<string | null>`NULL`,
+  hasPdf: sql<boolean>`${attachments.pdfBase64} IS NOT NULL`,
+});
+const attachmentOut = (row: AttachmentRow & { hasPdf?: boolean }) => defined({
   id: row.id, name: row.name, mimeType: row.mimeType, size: row.size, content: row.content, kind: row.kind, createdAt: row.createdAt,
+  hasPdf: row.hasPdf || !!row.pdfBase64 || undefined,
+  pdfBase64: row.pdfBase64 ?? undefined,
 });
 
 function conversationOut(row: ConversationRow, rows: MessageRow[], files: AttachmentRow[]) {
@@ -46,8 +53,22 @@ const messageRow = (userId: string, conversationId: string, message: MessageInpu
 
 const attachmentRow = (userId: string, conversationId: string, file: AttachmentInput, position: number) => ({
   userId, conversationId, position, id: file.id, name: file.name, mimeType: file.mimeType, size: file.size,
-  content: file.content, kind: file.kind, createdAt: file.createdAt,
+  content: file.content, kind: file.kind, createdAt: file.createdAt, pdfBase64: file.pdfBase64 ?? null,
 });
+
+export async function getPdfSource(db: Database, userId: string, conversationId: string, attachmentId: string) {
+  const [row] = await db.select({ pdfBase64: attachments.pdfBase64 }).from(attachments).where(and(
+    eq(attachments.userId, userId), eq(attachments.conversationId, conversationId), eq(attachments.id, attachmentId),
+  ));
+  return row?.pdfBase64 ?? null;
+}
+
+export async function restorePdfSource(db: Database, userId: string, conversationId: string, attachmentId: string, pdfBase64: string) {
+  const rows = await db.update(attachments).set({ pdfBase64 }).where(and(
+    eq(attachments.userId, userId), eq(attachments.conversationId, conversationId), eq(attachments.id, attachmentId), eq(attachments.kind, 'text'),
+  )).returning({ id: attachments.id });
+  return rows.length > 0;
+}
 
 function extraOf(input: ConversationInput) {
   const known = new Set<string>(CONVERSATION_FIELDS);
@@ -55,11 +76,11 @@ function extraOf(input: ConversationInput) {
   return Object.keys(extra).length ? extra : null;
 }
 
-export async function listConversations(db: Database, userId: string): Promise<StoredConversation[]> {
+export async function listConversations(db: Database, userId: string, includeOriginals = false): Promise<StoredConversation[]> {
   const [rows, messageRows, attachmentRows] = await Promise.all([
     db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt)),
     db.select().from(messages).where(eq(messages.userId, userId)).orderBy(asc(messages.position), asc(messages.createdAt)),
-    db.select().from(attachments).where(eq(attachments.userId, userId)).orderBy(asc(attachments.position)),
+    db.select(attachmentFields(includeOriginals)).from(attachments).where(eq(attachments.userId, userId)).orderBy(asc(attachments.position)),
   ]);
   const byThread = <T extends { conversationId: string }>(items: T[]) => {
     const map = new Map<string, T[]>();
@@ -71,12 +92,12 @@ export async function listConversations(db: Database, userId: string): Promise<S
   return rows.map(row => conversationOut(row, threadMessages.get(row.id) ?? [], threadFiles.get(row.id) ?? []));
 }
 
-export async function getConversation(db: Database, userId: string, id: string): Promise<StoredConversation | null> {
+export async function getConversation(db: Database, userId: string, id: string, includeOriginals = false): Promise<StoredConversation | null> {
   const [row] = await db.select().from(conversations).where(and(eq(conversations.userId, userId), eq(conversations.id, id)));
   if (!row) return null;
   const [messageRows, attachmentRows] = await Promise.all([
     db.select().from(messages).where(and(eq(messages.userId, userId), eq(messages.conversationId, id))).orderBy(asc(messages.position), asc(messages.createdAt)),
-    db.select().from(attachments).where(and(eq(attachments.userId, userId), eq(attachments.conversationId, id))).orderBy(asc(attachments.position)),
+    db.select(attachmentFields(includeOriginals)).from(attachments).where(and(eq(attachments.userId, userId), eq(attachments.conversationId, id))).orderBy(asc(attachments.position)),
   ]);
   return conversationOut(row, messageRows, attachmentRows);
 }

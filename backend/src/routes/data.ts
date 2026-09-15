@@ -37,7 +37,8 @@ const DATA_PATHS = ['/account', '/store', '/conversations', '/documents', '/run-
 
 export function dataRouter(db: Database, user: RequestHandler): Router {
   const router = Router();
-  router.use(DATA_PATHS, user, express.json({ limit: '25mb' }));
+  // A 20 MB PDF uses about 27 MB as base64, alongside extracted text.
+  router.use(DATA_PATHS, user, express.json({ limit: '50mb' }));
 
   router.get('/account', (req, res) => {
     const account: AccountInfo = { id: uid(req), email: req.userEmail ?? '', name: req.userName ?? '', local: uid(req) === LOCAL_USER_ID || uid(req).startsWith('test-') };
@@ -61,6 +62,24 @@ export function dataRouter(db: Database, user: RequestHandler): Router {
   router.get('/conversations/:id', handle(async (req, res) => {
     const found = await threads.getConversation(db, uid(req), req.params.id);
     if (found) res.json(found); else notFound(res, 'This thread');
+  }));
+
+  router.get('/conversations/:id/export', handle(async (req, res) => {
+    const found = await threads.getConversation(db, uid(req), req.params.id, true);
+    if (found) res.json(found); else notFound(res, 'This thread');
+  }));
+
+  router.get('/conversations/:id/attachments/:attachmentId/pdf', handle(async (req, res) => {
+    const pdfBase64 = await threads.getPdfSource(db, uid(req), req.params.id, req.params.attachmentId);
+    res.set('Cache-Control', 'private, no-store');
+    if (pdfBase64) res.json({ pdfBase64 }); else notFound(res, 'The original PDF');
+  }));
+
+  router.put('/conversations/:id/attachments/:attachmentId/pdf', handle(async (req, res) => {
+    const source = body(validate.pdfSource, req, res);
+    if (!source) return;
+    if (await threads.restorePdfSource(db, uid(req), req.params.id, req.params.attachmentId, source.pdfBase64)) res.status(204).end();
+    else notFound(res, 'This attachment');
   }));
 
   router.patch('/conversations/:id', handle(async (req, res) => {

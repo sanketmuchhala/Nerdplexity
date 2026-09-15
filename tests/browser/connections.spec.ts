@@ -63,6 +63,8 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
 
   const card = page.getByRole('article').filter({ hasText: 'example/chat-1' });
   await expect(card).toContainText('131K ctx');
+  // This remote endpoint reports no price; explicitly allow it before running.
+  await page.getByLabel(/Free only/).uncheck();
   await card.getByRole('button', { name: 'Select Model' }).click();
 
   await expect(page).toHaveURL(/\/app$/);
@@ -73,7 +75,7 @@ test('a custom endpoint is discovered, selected, and used for a streamed answer'
   await expect(page.getByText('example/chat-1 · Example')).toBeVisible();
 
   // The run is routed by connection, and the key travels only in the request body.
-  expect(runBody).toMatchObject({ idempotencyKey: expect.any(String), target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-example-secret' }, model: 'example/chat-1' });
+  expect(runBody).toMatchObject({ idempotencyKey: expect.any(String), costPolicy: 'any', target: { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-example-secret' }, model: 'example/chat-1' });
   expect(runBody.provider).toBeUndefined();
 
   // Session-only keys are forgotten on reload.

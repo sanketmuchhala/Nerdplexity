@@ -67,7 +67,7 @@ export async function importData(db: Database, userId: string, data: ImportReque
 /** Everything one user has, in the shape importData accepts. */
 export async function exportData(db: Database, userId: string): Promise<ImportRequest> {
   const [threads, docs, runRows, connectionRows, presetRows, comparisonRows, settingsRow] = await Promise.all([
-    listConversations(db, userId),
+    listConversations(db, userId, true),
     db.select({ id: documents.id, title: documents.title, content: documents.content, updatedAt: documents.updatedAt }).from(documents).where(eq(documents.userId, userId)),
     db.select({ record: runs.record }).from(runs).where(eq(runs.userId, userId)),
     db.select({ record: connections.record }).from(connections).where(eq(connections.userId, userId)),

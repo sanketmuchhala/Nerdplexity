@@ -13,6 +13,9 @@ export interface ThreadAttachment {
   size: number;
   content: string;
   kind: 'text' | 'image';
+  /** Original PDF is fetched only when opened. The bytes appear on upload/export only. */
+  hasPdf?: boolean;
+  pdfBase64?: string;
   createdAt: number;
 }
 /** 'stopped' is the legacy name for 'canceled'. 'interrupted' means the client lost the run. */

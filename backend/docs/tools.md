@@ -84,11 +84,13 @@ Names come from `Map` instances rather than prototype-bearing objects. Unknown s
 Documents live in the owner-scoped server database. The frontend attaches the workspace documents to a run request only when a document tool is enabled. The route enforces:
 
 - at most 20 documents;
-- at most 100,000 characters per document;
-- at most 400,000 total characters;
+- at most 2 MB of UTF-8 text per document;
+- at most 4 MB of UTF-8 text total;
 - local model execution only.
 
 The tool-loop system prompt receives document IDs and titles, not full content. Content reaches the model only inside results of `search_documents` or `read_document`.
+
+Workspace imports and chat attachments share the browser document reader: PDF, DOCX/XLSX/PPTX, ODT/ODS/ODP, EPUB, RTF, HTML, and text/data/code files. The browser extracts text from files up to 20 MB before saving it. PDFs are limited to 500 pages; image-only scans need OCR. Legacy Office and Apple iWork formats need export first. Chat attachments are a separate path: their text or selected excerpts go to the chosen model, including online providers. See [Document inputs](../../README.md#document-inputs) for all import limits.
 
 ```mermaid
 flowchart LR

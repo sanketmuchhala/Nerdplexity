@@ -48,7 +48,7 @@ flowchart TB
 
 ### Where data lives
 
-The server database (PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set) saves each user's threads, documents, connection metadata, input snapshots, partial/final output, finished run history, presets, settings, and [Bench](bench.md) results. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume. The diagram above shows the earlier browser-only storage; the execution path is unchanged.
+The server database (PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set) saves each user's threads, documents, connection metadata, input snapshots, partial/final output, finished run history, presets, settings, and [Bench](bench.md) results. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume.
 
 ## 2. Startup and middleware order
 
@@ -83,7 +83,7 @@ Middleware order matters:
 3. CORS headers are added only for loopback or configured browser origins.
 4. `originGuard` returns `403` before an untrusted browser page can reach a runtime or provider.
 5. Hosted account routes and authenticated ownership are applied; local mode uses the built-in local owner.
-6. Route-specific JSON limits are applied (50 MB import, 25 MB saved data, 10 MB runs, 1 MB discovery/Bench/model management).
+6. Route-specific JSON limits are applied (50 MB import and saved data, 10 MB runs, 1 MB discovery/Bench/model management).
 7. API routes run.
 8. Unknown `/v1/*` routes return JSON `404` instead of the React app.
 9. The safe error handler avoids logging raw bodies that may contain API keys.

@@ -549,7 +549,7 @@ export function Models({
     checks,
     checkModel,
   } = useConnections();
-  const persistedFreeOnly = settings?.costPolicy === 'free-only';
+  const persistedFreeOnly = settings?.costPolicy !== 'any';
   const [freeOnly, setFreeOnly] = useState(persistedFreeOnly);
   useEffect(() => setFreeOnly(persistedFreeOnly), [persistedFreeOnly]);
   useConnections((state) => state.keyVersion);
@@ -638,6 +638,7 @@ export function Models({
     model: ModelDescriptor,
     free: boolean,
   ) => {
+    if (freeOnly && !free) { setActionError('Free only is on. Turn it off before checking a paid or unpriced model.'); return; }
     if (
       !free &&
       !window.confirm(

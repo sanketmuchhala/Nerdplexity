@@ -240,6 +240,8 @@ export type RunContentPart =
 interface RunStartBase {
   /** Client-generated; repeating a start with the same key returns the same run. */
   idempotencyKey: string;
+  /** Omission is free-only. Paid single-model requests must explicitly use 'any'. Routes remain free-only. */
+  costPolicy?: 'free-only' | 'any';
   messages: RunMessage[];
   settings?: { temperature?: number; maxTokens?: number; numCtx?: number };
   /** Tools the model may call. Document tools require `documents` and a model on this machine. */

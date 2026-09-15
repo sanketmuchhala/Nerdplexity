@@ -47,13 +47,17 @@ function costOf(ref: ModelRef) {
   return costStatus(connections.find(c => c.id === ref.connectionId), result?.ok ? result.models.find(m => m.id === ref.modelId) : undefined, result?.ok ? result.execution : undefined);
 }
 
+/** Read permission at dispatch time, including retries and explicit per-thread permission. */
+export function runCostPolicy(conversationId?: string): 'free-only' | 'any' {
+  const chat = useChat.getState();
+  return chat.settings?.costPolicy === 'any' || (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) ? 'any' : 'free-only';
+}
+
 /** Why Free only blocks this model in this thread, or null when it may run. */
 export function policyBlock(ref: ModelRef, conversationId?: string): string | null {
   // The Free Router only ever uses models verified as free.
   if (isRouter(ref)) return null;
-  const chat = useChat.getState();
-  if (chat.settings?.costPolicy !== 'free-only') return null;
-  if (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) return null;
+  if (runCostPolicy(conversationId) === 'any') return null;
   const status = costOf(ref);
   return status.free ? null : `Free only is on. ${status.detail}`;
 }
@@ -295,6 +299,7 @@ export function useRun() {
         : { target: targetFor(connection!), model: attempt.model };
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
+        costPolicy: routed ? 'free-only' : runCostPolicy(attempt.conversationId),
         settings: attempt.input.settings,
         ...(attempt.tools.length ? { tools: attempt.tools } : {}),
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],

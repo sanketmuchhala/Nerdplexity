@@ -25,6 +25,8 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 | Any | `/v1/auth/*` | Better Auth sign-up, sign-in, sign-out, and session routes | Hosted only |
 | GET | `/v1/account` | Current owner/account | Available; auth required when hosted |
 | Various | `/v1/conversations/*`, `/v1/documents/*` | Owner-scoped threads, messages, attachments, and workspace documents | Available |
+| GET | `/v1/conversations/:id/export` | Thread export including saved PDF originals | Available |
+| GET, PUT | `/v1/conversations/:id/attachments/:attachmentId/pdf` | Fetch or restore an original PDF as `{pdfBase64}`; owner-scoped, maximum 20 MB decoded | Available |
 | Various | `/v1/run-records/*` | Durable run history and completion claims | Available; owner-scoped |
 | Various | `/v1/connections/*`, `/v1/presets/*`, `/v1/comparisons/*`, `/v1/settings` | Saved workspace records without keys | Available; owner-scoped |
 | POST | `/v1/models/discover` | Validate a target and list models | Available; private targets refused |
