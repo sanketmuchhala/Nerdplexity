@@ -1,6 +1,6 @@
 # Assistant behavior
 
-Status: **implemented** · verified 2026-09-14 · prompt version `everyday-chat-v1`
+Status: **implemented** · verified 2026-09-15 · prompt version `everyday-chat-v1`
 
 This page describes current behavior. The broader memory and research design in `docs/plans/chat-quality-memory-research.md` remains a proposal.
 
@@ -14,7 +14,9 @@ Saved run input snapshots include the exact instruction text and version sent to
 
 The configured context budget is capped by the selected model's reported context length. The selected model's reported output limit also caps the requested output. These automatic adjustments are recorded as run notices.
 
-When input plus reserved output does not fit, Nerdplexity removes the oldest complete historical turn until it fits. It never slices through a message. Product instructions, imported/thread instructions, attachments, and the current prompt are retained; if those fixed inputs still do not fit, sending is blocked with an actionable error. The complete transcript remains stored even when older turns are omitted from one request.
+Large text attachments use question-relevant, labelled excerpts. Before selecting excerpts, Nerdplexity reserves space for up to two recent complete turns that fit within half the remaining input budget, preserving context for follow-up questions. Small attachments stay complete when they fit. Excerpt notices disclose omitted document content; the full extracted text remains attached.
+
+When input plus reserved output does not fit, Nerdplexity removes the oldest complete historical turn until it fits. It never slices through a conversation message. Product instructions, imported/thread instructions, the selected attachment context, and the current prompt are retained; if those fixed inputs still do not fit, sending is blocked with an actionable error. The complete transcript remains stored even when older turns are omitted from one request.
 
 Token counts are UTF-8 estimates, not provider-tokenizer results. Tool results consume additional context during an agent run.
 
@@ -38,4 +40,3 @@ Raw HTML is ignored and the syntax tree is passed through `rehype-sanitize`. Cod
 - Explicit profile settings and long-term/project memory.
 - Semantic long-thread compaction or retrieval beyond whole-turn omission.
 - Distributed or restartable live run execution.
-

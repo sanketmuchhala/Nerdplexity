@@ -30,6 +30,13 @@ describe('costStatus', () => {
     expect(costStatus(connection({ kind: 'groq', name: 'Groq', billing: 'paid' }), model('llama'))).toMatchObject({ cls: 'paid', free: false });
   });
 
+  it('requires verified zero pricing on OpenRouter even when the account has no billing', () => {
+    const account = connection({ billing: 'no-billing' });
+    expect(costStatus(account, model('paid', { pricing: 'paid' })).free).toBe(false);
+    expect(costStatus(account, model('unknown')).free).toBe(false);
+    expect(costStatus(account, model('free', { pricing: 'zero-price' })).free).toBe(true);
+  });
+
   it('uses the discovered execution location when known', () => {
     expect(costStatus(connection({ kind: 'openai-compatible', baseURL: 'http://host.docker.internal:1234/v1' }), model('m'), 'remote')).toMatchObject({ free: false });
   });

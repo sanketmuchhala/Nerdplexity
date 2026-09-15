@@ -48,7 +48,7 @@ flowchart TB
 
 ### Where data lives
 
-The server database (PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set) saves each user's threads, documents, connection metadata, input snapshots, partial/final output, finished run history, presets, settings, and [Bench](bench.md) results. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume. The diagram above shows the earlier browser-only storage; the execution path is unchanged.
+The server database (PGlite in `backend/data` on your computer, Postgres when `DATABASE_URL` is set) saves each user's threads, documents, connection metadata, input snapshots, partial/final output, finished run history, presets, settings, and [Bench](bench.md) results. API keys remain in browser session memory or optional device storage and are supplied only for the request that needs them. `RunRegistry` remains in-process: after a restart saved data survives, but an in-flight generation cannot resume.
 
 ## 2. Startup and middleware order
 

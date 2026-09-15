@@ -7,6 +7,8 @@ import type {
   ToolName,
 } from '@app/types';
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
+import { DOCUMENT_LIMITS, documentFileError, readDocument } from './documents';
+import { documentContext } from './documentContext';
 
 /**
  * Tool groups a thread can enable; 'documents' is search plus read. 'web' is kept for threads and
@@ -75,20 +77,18 @@ Be honest about uncertainty and limitations. Never claim to have searched, opene
 
 For code, give complete and internally consistent snippets when practical and call out consequential assumptions. For factual claims that depend on current information, use available research tools when enabled; otherwise say that freshness was not verified. Do not invent citations.`;
 
-export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 100_000, imageBytes: 2_000_000, totalBytes: 5_000_000 } as const;
+export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: DOCUMENT_LIMITS.textBytes, imageBytes: 2_000_000, totalBytes: 20_000_000 } as const;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'jsonl', 'log', 'xml', 'yaml', 'yml', 'toml', 'ini', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'rs', 'go', 'java', 'kt', 'c', 'h', 'cpp', 'hpp', 'cs', 'php', 'swift', 'sql', 'sh', 'zsh', 'fish', 'html', 'css', 'scss', 'less', 'vue', 'svelte']);
 
 export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
-  const extension = file.name.toLowerCase().split('.').pop() ?? '';
   const image = IMAGE_TYPES.has(file.type);
   if (!file.name.trim() || file.name.length > 200) return 'Use a file name under 200 characters.';
-  if (!image && !file.type.startsWith('text/') && !TEXT_EXTENSIONS.has(extension)) return 'Attach a supported image, text, Markdown, data, or source-code file.';
-  if (!image && file.size > ATTACHMENT_LIMITS.textBytes) return 'Keep each text attachment under 100 KB.';
+  if (!image) { const error = documentFileError(file); if (error) return error; }
   if (image && file.size > ATTACHMENT_LIMITS.imageBytes) return 'Keep each image attachment under 2 MB.';
   if (current.length >= ATTACHMENT_LIMITS.count) return 'Attach up to 8 files to a thread.';
   if (image && current.filter(item => item.kind === 'image').length >= ATTACHMENT_LIMITS.images) return 'Attach up to 4 images to a thread.';
-  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 5 MB total.';
+  if (image && current.filter(item => item.kind === 'image').reduce((n, item) => n + item.size, 0) + file.size > 5_000_000) return 'Keep images under 5 MB total.';
+  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 20 MB total.';
   return null;
 }
 
@@ -103,8 +103,10 @@ export async function attachmentFromFile(file: File, current: ThreadAttachment[]
     for (let offset = 0; offset < bytes.length; offset += 32_768)
       binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
     content = btoa(binary);
-  } else content = await file.text();
+  } else content = await readDocument(file);
   if (!image && content.includes('\0')) throw new Error('This file does not appear to be plain text.');
+  if (current.reduce((n, item) => n + new TextEncoder().encode(item.content).length, 0) + new TextEncoder().encode(content).length > 8_000_000)
+    throw new Error('Keep extracted text and encoded images under 8 MB total per thread.');
   return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now() };
 }
 
@@ -211,9 +213,6 @@ export function buildContext(
     ...(settings.systemPrompt.trim()
       ? [{ role: 'system' as const, content: `User-provided instructions for this thread:\n\n${settings.systemPrompt}` }]
       : []),
-    ...(textAttachments.length
-      ? [{ role: 'system' as const, content: `Attached files (user-provided context):\n\n${textAttachments.map((file) => `--- BEGIN FILE: ${file.name} ---\n${file.content}\n--- END FILE: ${file.name} ---`).join('\n\n')}` }]
-      : []),
   ];
   const currentPrompt: RunMessage[] = prompt.trim() ? [{ role: 'user', content: userContent }] : [];
   const budget = Math.min(
@@ -222,14 +221,28 @@ export function buildContext(
   );
   const effectiveMaxTokens = Math.min(settings.maxTokens, model?.maxOutputTokens ?? Infinity);
   const inputBudget = budget - effectiveMaxTokens;
-  // Trim only whole historical turns. Product/user instructions, attachments,
-  // and the current prompt always survive so a long thread cannot change the
-  // meaning of the request through partial-message truncation.
+  const baseTokens = estimateTokens([...fixedBeforeDialog, ...currentPrompt]);
   const turns: RunMessage[][] = [];
   for (const message of included.map(({ role, content }) => ({ role, content }))) {
     if (message.role === 'user' || !turns.length) turns.push([message]);
     else turns[turns.length - 1].push(message);
   }
+  // Leave room for up to two recent complete turns before selecting excerpts.
+  // Cap the reservation at half the remaining input space so documents still
+  // have room when a previous answer is unusually long.
+  const remainingTokens = Math.max(0, inputBudget - baseTokens - 16);
+  let recentTokens = 0;
+  for (const turn of turns.slice(-2).reverse()) {
+    const tokens = estimateTokens(turn);
+    if (recentTokens + tokens > remainingTokens / 2) break;
+    recentTokens += tokens;
+  }
+  const previousQuestion = [...dialog].reverse().find(message => message.role === 'user' && typeof message.content === 'string')?.content ?? '';
+  const attached = documentContext(textAttachments, `${previousQuestion}\n${prompt}`, Math.min(180_000, (remainingTokens - recentTokens) * 3));
+  if (attached.content) fixedBeforeDialog.push({ role: 'system', content: attached.content });
+  // Trim only whole historical turns. Product/user instructions, attachments,
+  // and the current prompt always survive so a long thread cannot change the
+  // meaning of the request through partial-message truncation.
   let keptTurns = turns;
   while (
     keptTurns.length &&
@@ -241,7 +254,7 @@ export function buildContext(
   const omittedMessages = dialog.length - keptDialog.length;
   // Gemini's catalog describes its input limit; conservatively reserve output in the workbench budget anyway.
   const warnings = settingsErrors(settings);
-  const notices: string[] = [];
+  const notices: string[] = [...attached.notices];
   if (omittedMessages > dialog.length - included.length)
     notices.push(`${omittedMessages.toLocaleString()} older message${omittedMessages === 1 ? '' : 's'} will be omitted to fit the model's context window.`);
   if (effectiveMaxTokens < settings.maxTokens)
@@ -324,8 +337,8 @@ export function exportConversation(conversation: Conversation): string {
 export function parseConversation(
   text: string,
 ): Pick<Conversation, 'title' | 'messages' | 'attachments'> {
-  if (new TextEncoder().encode(text).length > 8_000_000)
-    throw new Error('Import a thread smaller than 8 MB.');
+  if (new TextEncoder().encode(text).length > 25_000_000)
+    throw new Error('Import a thread smaller than 25 MB.');
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -398,7 +411,9 @@ export function parseConversation(
     const size = image ? Math.floor(file.content.length * 3 / 4) : encodedSize;
     return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now() };
   });
+  if (attachments.reduce((n, file) => n + new TextEncoder().encode(file.content).length, 0) > 8_000_000) throw new Error('Extracted text and encoded images exceed 8 MB total.');
+  if (attachments.filter(file => file.kind === 'image').reduce((n, file) => n + file.size, 0) > 5_000_000) throw new Error('Images exceed 5 MB total.');
   if (attachments.filter(file => file.kind === 'image').length > ATTACHMENT_LIMITS.images) throw new Error('A thread can contain up to 4 images.');
-  if (attachments.reduce((n, file) => n + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Thread attachments exceed 5 MB total.');
+  if (attachments.reduce((n, file) => n + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Thread attachments exceed 20 MB total.');
   return { title: value.title, messages, attachments };
 }

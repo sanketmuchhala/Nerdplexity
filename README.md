@@ -36,7 +36,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 | --- | --- |
 | **Models** | One searchable catalog with brand logos, favorites, filters (free, on this machine, tools, vision), price and context info, and a one-prompt **Check**. Install and remove Ollama models with live download progress. |
 | **Chat** | Streaming answers from every provider, **Stop**, **Retry**, switching models mid-thread, edit-and-regenerate branches, presets, per-thread system instructions, explicit context budgets with a request preview, reasoning shown separately, export and import. |
-| **Attachments** | Text, Markdown, and code files (100 KB each), and images for models that accept them, shown and removable before you send. |
+| **Attachments** | PDF, Office, OpenDocument, EPUB, RTF, HTML, text, data, and code files (20 MB each, up to 2 MB extracted text), plus images for vision models; inspect or remove them before sending. |
 | **Tools** | Off by default, on per thread: **Calculator** (computed by the app), **Documents** (search and read your Workspace notes, models on this machine only), **Web** (Exa search with your own key). |
 | **Compare** | Send one frozen context to two models and see both answers with measured timing and usage, then continue either one in chat. |
 | **Run history** | Every run records queue time, time to first text, tokens, errors, tool calls, and its exact input snapshot for inspection or export. |
@@ -111,10 +111,18 @@ Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/d
 Turn tools on from the message box; the choice is saved with the thread and in presets.
 
 - **Calculator:** exact arithmetic computed by the app, on any model.
-- **Documents:** search and read the notes in **Workspace**. Only for models on this machine; documents are never sent online.
+- **Documents:** search and read the notes in **Workspace**. This tool is available only for models on this machine; workspace documents are never sent to online models by the tool.
 - **Web search, automatic:** add an [Exa](https://exa.ai) key under **Connections** and there is nothing to turn on. When a message needs current information (news, prices, recent releases, a link, or "search the web for…"), Nerdplexity searches before the model answers, the model answers from the results, and the sources are shown. Works with every model, including the Free Router. Switch it off under **Connections → Web search**. Search queries go to Exa, even when the model is local.
 
 A run may use at most 6 model steps and 12 tool calls. Each call appears above the answer with its exact input, result, and time, and is kept in Run history. Tool results are treated as data, not instructions, and no tool changes anything outside the app.
+
+### Document inputs
+
+Use **Attach** in a chat or **Bring in a document** in Workspace to import PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, EPUB, RTF, HTML, plain text, Markdown, CSV/TSV, JSON, XML, YAML, logs, and source code. Extensionless text files such as Dockerfile work too. Files are read in your browser; extracted text is saved, preserving page, slide, sheet, cell, and paragraph labels where available. Chat also accepts PNG, JPEG, WebP, and GIF images for vision models.
+
+Each document can be up to 20 MB, with up to 2 MB of extracted text. A chat supports eight attachments, 20 MB of source files, and 8 MB of extracted text and encoded images total; images are limited to four, 2 MB each, and 5 MB total. Workspace supports 20 documents and 4 MB of text total. PDFs are limited to 500 pages. Large chat documents use question-relevant excerpts within the model's context budget; the full extracted text stays attached, and the interface discloses when excerpts are used.
+
+**Chat attachments are sent to the model you select, including online providers.** Workspace documents are available through the local-only Documents tool. Legacy DOC/XLS/PPT and Apple Pages/Numbers/Keynote files need export to a supported format. Scanned PDFs need OCR first, or their pages can be attached as images to a vision model. Password-protected PDFs need an unlocked copy. Unsupported or damaged files show an error while other valid chat uploads continue.
 
 ## How runs work
 
@@ -127,7 +135,7 @@ Run history records queue time, time to first text, total and model time, report
 - **Saved by the Nerdplexity server:** threads, messages, attachments, documents, run history, comparisons, presets, connections (without keys), and settings. On your computer the server keeps them in `backend/data` (PGlite; change it with `NERDPLEXITY_DATA_DIR`). A hosted server keeps them in Postgres, under each person's account. Nothing is sent to a telemetry service.
 - **API keys never reach the database.** They stay in your browser: for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the backend in request bodies for each request, never in URLs, and are left out of every export and every saved record.
 - **Accounts (hosted only):** email and password. The session token is kept in the browser and sent as a bearer header. A server on your own computer needs no sign-in.
-- **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the backend to that provider; web search sends search queries to Exa; documents are only ever read by models on this machine.
+- **What leaves your machine:** only what an online model or tool needs. Messages and chat attachments to an online model go through the backend to that provider; web search sends search queries to Exa; the Documents tool reads workspace documents only with models on this machine.
 
 Do not commit keys, `backend/data`, or personal conversation exports.
 
