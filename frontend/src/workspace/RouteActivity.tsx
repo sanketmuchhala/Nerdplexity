@@ -15,7 +15,7 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
   const last = attempts[attempts.length - 1];
   const fallbacks = attempts.filter(attempt => attempt.failure).length;
   return (
-    <details className="np-meta-chip np-route">
+    <details className="np-meta-chip np-tool np-route" aria-label="Free Router decision">
       <summary>
         <RouterMark size={14} />
         <strong>Free Router</strong>
