@@ -161,6 +161,8 @@ This prevents documents from being sent to hosted model targets through the supp
 
 Chat attachments are separate from workspace document tools. The browser extracts text from supported documents, saves that text with the thread, and sends it or selected excerpts to the model the user chooses, including online providers. PDF and archive parsers load on demand; archive extraction has entry and expanded-size limits. HTML scripts and styles, RTF embedded objects, and document markup are excluded from extracted text. See [Document inputs](../../README.md#document-inputs) for formats and import limits.
 
+Chat also saves original PDF bytes in the owner-scoped attachment row for page previews and downloads. Normal thread reads return only a `hasPdf` flag; the viewer fetches the original on demand through an authenticated, owner-scoped endpoint. Originals are included in thread/account exports and branches, and deleted with their attachment or thread. Model requests contain extracted text, never the stored PDF bytes. Workspace imports continue to store text only.
+
 ## 8. Tools and prompt injection
 
 Current tools are read-only:

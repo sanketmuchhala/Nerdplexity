@@ -30,6 +30,15 @@ describe('document ingestion and model context', () => {
     expect(await readDocument(new File([rtf], 'unicode.rtf', { type: 'text/rtf' }))).toBe('项目 项目');
   });
 
+  it('cleans null characters in extracted document text while rejecting raw binary uploads', async () => {
+    const original = new File([String.raw`{\rtf1 Basis\u0? reference: 729.\par Next\tab column}`], 'basis.rtf');
+    expect(await readDocument(original)).toBe('Basis reference: 729.\nNext\tcolumn');
+    const attachment = await attachmentFromFile(original, []);
+    expect(attachment.content).toBe('Basis reference: 729.\nNext\tcolumn');
+    await expect(attachmentFromFile(new File(['Basis\0binary'], 'basis.txt'), [])).rejects.toThrow('binary');
+    await expect(readDocument(new File([String.raw`{\rtf1\u0?}`], 'empty.rtf'))).rejects.toThrow('No readable text');
+  });
+
   it('finds a fact deep in a large file without overflowing a small model context', async () => {
     const content = `${'General background information.\n'.repeat(6000)}\nThe cobalt launch code is ZEBRA-729.\n${'More background.\n'.repeat(4000)}`;
     const attachment = await attachmentFromFile(new File([content], 'large-report.txt'), []);

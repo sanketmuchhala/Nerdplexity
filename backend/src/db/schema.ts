@@ -109,6 +109,8 @@ export const attachments = pgTable('attachments', {
   /** Text, or base64 image data. */
   content: text('content').notNull(),
   kind: text('kind').notNull(),
+  /** Original PDF for on-demand previews; never included in model context. */
+  pdfBase64: text('pdf_base64'),
   createdAt: ms('created_at').notNull(),
 }, t => [
   primaryKey({ columns: [t.userId, t.conversationId, t.id] }),
