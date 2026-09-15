@@ -1,3 +1,4 @@
+import { readDocument, documentFileError } from "./documents";
 import type {
   Connection,
   ModelDescriptor,
@@ -75,20 +76,21 @@ Be honest about uncertainty and limitations. Never claim to have searched, opene
 
 For code, give complete and internally consistent snippets when practical and call out consequential assumptions. For factual claims that depend on current information, use available research tools when enabled; otherwise say that freshness was not verified. Do not invent citations.`;
 
-export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 100_000, imageBytes: 2_000_000, totalBytes: 5_000_000 } as const;
+export const ATTACHMENT_LIMITS = { count: 8, images: 4, documentBytes: 20_000_000, imageBytes: 2_000_000, totalBytes: 20_000_000 } as const;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'jsonl', 'log', 'xml', 'yaml', 'yml', 'toml', 'ini', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'rs', 'go', 'java', 'kt', 'c', 'h', 'cpp', 'hpp', 'cs', 'php', 'swift', 'sql', 'sh', 'zsh', 'fish', 'html', 'css', 'scss', 'less', 'vue', 'svelte']);
 
 export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
-  const extension = file.name.toLowerCase().split('.').pop() ?? '';
   const image = IMAGE_TYPES.has(file.type);
   if (!file.name.trim() || file.name.length > 200) return 'Use a file name under 200 characters.';
-  if (!image && !file.type.startsWith('text/') && !TEXT_EXTENSIONS.has(extension)) return 'Attach a supported image, text, Markdown, data, or source-code file.';
-  if (!image && file.size > ATTACHMENT_LIMITS.textBytes) return 'Keep each text attachment under 100 KB.';
+  if (!image) {
+    const error = documentFileError(file);
+    if (error) return error;
+  }
+  if (!image && file.size > ATTACHMENT_LIMITS.documentBytes) return 'Keep each document attachment under 20 MB.';
   if (image && file.size > ATTACHMENT_LIMITS.imageBytes) return 'Keep each image attachment under 2 MB.';
   if (current.length >= ATTACHMENT_LIMITS.count) return 'Attach up to 8 files to a thread.';
   if (image && current.filter(item => item.kind === 'image').length >= ATTACHMENT_LIMITS.images) return 'Attach up to 4 images to a thread.';
-  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 5 MB total.';
+  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 20 MB total.';
   return null;
 }
 
@@ -97,15 +99,21 @@ export async function attachmentFromFile(file: File, current: ThreadAttachment[]
   if (error) throw new Error(error);
   const image = IMAGE_TYPES.has(file.type);
   let content: string;
+  let fileData: string | undefined;
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 32_768)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  fileData = btoa(binary);
+
   if (image) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 32_768)
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
-    content = btoa(binary);
-  } else content = await file.text();
-  if (!image && content.includes('\0')) throw new Error('This file does not appear to be plain text.');
-  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now() };
+    content = fileData;
+  } else {
+    content = await readDocument(file);
+    if (content.includes('\0')) throw new Error('This file does not appear to be plain text.');
+  }
+  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, fileData, kind: image ? 'image' : 'text', createdAt: Date.now() };
 }
 
 export function workbenchSettings(
@@ -393,10 +401,10 @@ export function parseConversation(
     const file = entry as Record<string, unknown>;
     const image = file.kind === 'image' && typeof file.mimeType === 'string' && IMAGE_TYPES.has(file.mimeType);
     const encodedSize = typeof file.content === 'string' ? new TextEncoder().encode(file.content).length : Infinity;
-    if (typeof file.name !== 'string' || !file.name.trim() || file.name.length > 200 || typeof file.content !== 'string' || (image ? encodedSize > Math.ceil(ATTACHMENT_LIMITS.imageBytes * 4 / 3) || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.content) : encodedSize > ATTACHMENT_LIMITS.textBytes) || (!image && file.content.includes('\0')))
+    if (typeof file.name !== 'string' || !file.name.trim() || file.name.length > 200 || typeof file.content !== 'string' || (image ? encodedSize > Math.ceil(ATTACHMENT_LIMITS.imageBytes * 4 / 3) || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.content) : encodedSize > ATTACHMENT_LIMITS.documentBytes) || (!image && file.content.includes('\0')))
       throw new Error('An attachment in this file is invalid or too large.');
     const size = image ? Math.floor(file.content.length * 3 / 4) : encodedSize;
-    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now() };
+    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, fileData: typeof file.fileData === 'string' ? file.fileData : undefined, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now() };
   });
   if (attachments.filter(file => file.kind === 'image').length > ATTACHMENT_LIMITS.images) throw new Error('A thread can contain up to 4 images.');
   if (attachments.reduce((n, file) => n + file.size, 0) > ATTACHMENT_LIMITS.totalBytes) throw new Error('Thread attachments exceed 5 MB total.');
