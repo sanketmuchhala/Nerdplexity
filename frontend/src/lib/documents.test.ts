@@ -50,6 +50,9 @@ describe('document ingestion and model context', () => {
     expect(JSON.stringify(result.messages)).toContain('full document is not included');
     expect(result.notices.join(' ')).toContain('selected excerpts');
     expect(attachment.content).toContain(content.trim());
+    const automatic = buildContext([], 'What is the cobalt launch code?', workbenchSettings(), undefined, undefined, [attachment]);
+    expect(JSON.stringify(automatic.messages).length).toBeLessThan(30_000);
+    expect(JSON.stringify(automatic.messages)).toContain('ZEBRA-729');
   });
 
   it('keeps every small document and balances excerpts from multiple large documents', async () => {

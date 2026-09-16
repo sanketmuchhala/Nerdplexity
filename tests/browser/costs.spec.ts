@@ -100,7 +100,7 @@ test('a free model that hits its limit offers free alternatives and never switch
   await expect(page.locator('.np-thread').getByText('Question', { exact: true })).toHaveCount(1);
 });
 
-test('an account marked as having no billing counts as free, and the Gemini data-use notice is shown', async ({ page }) => {
+test('an unpriced model stays blocked in Free only even when the account has no billing', async ({ page }) => {
   await mockDiscovery(page, { gemini: [model('gemini-2.5-flash')] });
   await page.goto('/app/models');
   await page.getByRole('button', { name: 'Add Provider' }).click();
@@ -111,8 +111,8 @@ test('an account marked as having no billing counts as free, and the Gemini data
   await form.getByLabel('Account billing').selectOption('no-billing');
   await form.getByRole('button', { name: 'Save Connection' }).click();
   await page.getByLabel(/Free only/).check();
-  await expect(card(page, 'gemini-2.5-flash')).toContainText('Free plan');
-  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeEnabled();
+  await expect(card(page, 'gemini-2.5-flash')).toContainText('Price unknown');
+  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeDisabled();
 });
 
 test('Check enforces Free only and asks before a paid check when charges are allowed', async ({ page }) => {

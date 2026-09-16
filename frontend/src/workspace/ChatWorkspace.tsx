@@ -283,19 +283,22 @@ export function ChatWorkspace({
     <div className="np-chat">
       <div className="np-chat-toolbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button
-            style={{ fontWeight: 500, fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--np-text)' }}
-            onClick={() => { if (conversation) setRename(conversation.title); }}
-            title={empty ? 'New chat' : 'Rename thread'}
-            disabled={empty}
-          >
-            {empty ? 'New chat' : conversation!.title}
-            {!empty && <Pencil size={11} />}
-          </button>
+          {empty ? (
+            <span className="np-chat-title">New chat</span>
+          ) : (
+            <button
+              className="np-chat-title"
+              onClick={() => setRename(conversation!.title)}
+              title="Rename thread"
+            >
+              {conversation!.title}
+              <Pencil size={11} />
+            </button>
+          )}
           {conversation?.branchOf && (
             <span className="np-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <GitBranch size={11} />
-              Branch
+              Branch · original retained
             </span>
           )}
           <div style={{ width: '1px', height: '14px', background: 'var(--np-line)' }} />
@@ -735,17 +738,6 @@ export function ChatWorkspace({
         {preview.warnings.length > 0 && (
           <div className="np-policy-block" role="alert">
             <span>{preview.warnings[0]}</span>
-            <button
-              className="np-button small"
-              onClick={() => setShowControls(true)}
-            >
-              Review context
-            </button>
-          </div>
-        )}
-        {preview.notices.length > 0 && (
-          <div className="np-policy-block" role="status">
-            <span>{preview.notices[0]}</span>
             <button
               className="np-button small"
               onClick={() => setShowControls(true)}

@@ -84,6 +84,10 @@ Be honest about uncertainty and limitations. Never claim to have searched, opene
 For code, give complete and internally consistent snippets when practical and call out consequential assumptions. For factual claims that depend on current information, use available research tools when enabled; otherwise say that freshness was not verified. Do not invent citations.`;
 
 export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: DOCUMENT_LIMITS.textBytes, imageBytes: 2_000_000, totalBytes: 20_000_000 } as const;
+// A large model window should preserve conversation room, not copy an entire
+// document into every request. Focused excerpts can still find facts anywhere
+// in the saved text while keeping free-provider requests practical.
+const MAX_ATTACHMENT_CONTEXT_BYTES = 20_000;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
@@ -263,7 +267,7 @@ export function buildContext(
     recentTokens += tokens;
   }
   const previousQuestion = [...dialog].reverse().find(message => message.role === 'user' && typeof message.content === 'string')?.content ?? '';
-  const attached = documentContext(textAttachments, `${previousQuestion}\n${prompt}`, Math.min(180_000, (remainingTokens - recentTokens) * 3));
+  const attached = documentContext(textAttachments, `${previousQuestion}\n${prompt}`, Math.min(MAX_ATTACHMENT_CONTEXT_BYTES, (remainingTokens - recentTokens) * 3));
   if (attached.content) fixedBeforeDialog.push({ role: 'system', content: attached.content });
   // Trim only whole historical turns. Product/user instructions, attachments,
   // and the current prompt always survive so a long thread cannot change the
