@@ -501,7 +501,8 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     if (!allNotes.length) emit({ type: 'status', message: 'No usable sources were found, so this answer comes from what the models know.' });
     const writerMessages = withNote(messages, note);
     const maxTokens = Math.max(run.request.maxTokens ?? 0, RESEARCH_LIMITS.reportTokens);
-    const writers = withChoice(rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens), kind: task.kind }, health, run.owner, bench).ranked, config.writer, 'writer').list;
+    const writerRanking = rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens), kind: task.kind }, health, run.owner, bench);
+    const writers = withChoice(writerRanking.ranked, config.writer, 'writer').list;
     const started = Date.now();
     let report = '';
     debug(`writing from ${allNotes.length} notes across ${sources.length} sources, up to ${maxTokens} tokens`);
@@ -514,7 +515,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
       event: event => { if (event.type === 'delta') report += event.text; emit(event); },
     });
     steps.addCalls(result.attempts);
-    if (!result.ok) throw noneLeft({ ranked: writers, excluded: {} }, result.attempts, health.now(), result.last);
+    if (!result.ok) throw noneLeft({ ...writerRanking, ranked: writers }, result.attempts, health.now(), result.last);
     steps.usages.push(result.done.usage);
     const { candidate } = result.ranked;
 

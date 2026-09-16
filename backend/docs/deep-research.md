@@ -71,7 +71,7 @@ The pipeline uses the Free Agent's step runner (`stepRunner` in `agent.ts`), so 
 
 Model requests per run, when every model answers first time: 1 (plan) + one per source read + 1 (outline) + 1 (report). So about 9 for quick, 15 for standard, and 23 for deep, fewer when searches return fewer pages. Each step may try a second model when one fails before answering (the report, up to 4). Each search is one Exa request.
 
-Other limits (`RESEARCH_LIMITS`): 12,000 characters of page text per reader; at most 6 notes per page; 4 readers and 3 searches at once; 800 output tokens for the plan and the outline, 1,000 per reader; at least 8,000 for the report (more if your setting is higher), continued up to 3 times if the model still stops at its limit (section 7).
+Other limits (`RESEARCH_LIMITS`): 12,000 characters of page text per reader; at most 6 notes per page; 4 readers and 3 searches at once; 800 output tokens for the plan and the outline, 1,000 per reader; at least 8,000 for the report (more if your setting is higher), continued up to 3 times if the model still stops at its limit (section 7). Asking for 8,000 tokens does not rule out smaller models: each model is sent the largest answer it can give ([Free Router, section 6](free-router.md#6-step-2-leaving-models-out)), and the continuation picks up the rest.
 
 ## 4. Plan
 

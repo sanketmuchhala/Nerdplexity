@@ -242,6 +242,34 @@ describe('Deep Research runs', () => {
     expect(result.agent?.calls).toBe(1 + 5 + 1 + 3);
   });
 
+  it('says why when no model can take the request at all', async () => {
+    const world = fakeWorld();
+    const tiny = models().map(m => ({ ...m, contextLength: 500 }));
+    const executor = researchExecutor(
+      { owner: 'u', candidates: tiny, request: { maxTokens: 512 }, messages: user('How tall is the Eiffel Tower?'), tools: [], documents: [], search: { apiKey: 'exa-key-123456' }, research: { depth: 'standard' } },
+      { health: new RouterHealth(), fetchImpl: world.fn, enqueue: task => task() },
+    );
+    await expect(executor({ signal: new AbortController().signal, emit: () => undefined }))
+      .rejects.toThrow(/No free model can take this request\. Left out: 3 context too small\./);
+  });
+
+  it('writes with small models by asking them for less, not by refusing the request', async () => {
+    const world = fakeWorld();
+    const events: ProgressPayload[] = [];
+    // Every free model holds 8,192 tokens, less than the report's 8,000-token request plus the notes.
+    const small = models().map(m => ({ ...m, contextLength: 8192 }));
+    const executor = researchExecutor(
+      { owner: 'u', candidates: small, request: { maxTokens: 512 }, messages: user('How tall is the Eiffel Tower?'), tools: [], documents: [], search: { apiKey: 'exa-key-123456' }, research: { depth: 'standard' } },
+      { health: new RouterHealth(), fetchImpl: world.fn, enqueue: task => task() },
+    );
+    const result = await executor({ signal: new AbortController().signal, emit: e => events.push(e) });
+    expect(result.agent?.mode).toBe('research');
+    const writer = world.calls.find(c => c.role === 'writer')!;
+    expect(writer.body.max_tokens).toBeLessThan(8000);
+    expect(writer.body.max_tokens).toBeGreaterThan(256);
+    expect(events.some(e => e.type === 'delta')).toBe(true);
+  });
+
   it('writes from what the models know, and says so, when the search finds nothing', async () => {
     const world = fakeWorld({ noPages: true, writer: note => note.includes('no usable sources') ? 'No sources were found. It is about 330 m.' : 'wrong prompt' });
     const { result, final, events, text } = await runResearch(world.fn, user('How tall is the Eiffel Tower?'), 'quick');

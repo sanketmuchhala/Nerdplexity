@@ -77,6 +77,7 @@ export function routerPool(
         connectionId: connection.id, model: model.id, displayName: model.displayName,
         capabilities: { tools: model.capabilities.tools, vision: model.capabilities.vision },
         ...(model.contextLength ? { contextLength: model.contextLength } : {}),
+        ...(model.maxOutputTokens ? { maxOutputTokens: model.maxOutputTokens } : {}),
       });
     }
   }
