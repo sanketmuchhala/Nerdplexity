@@ -106,7 +106,7 @@ export function PdfPreview({ conversationId, file, onClose, onRestored, onRemove
     finally { setLoading(false); }
   };
 
-  return <WorkbenchDialog title={file.name} onClose={onClose} className="np-pdf-dialog">
+  return <WorkbenchDialog title={file.name} onClose={onClose} className={`np-pdf-dialog ${splitView ? "np-dialog-split" : ""}`}>
     <div className="np-pdf-toolbar" aria-label="PDF controls">
       <button type="button" className="np-icon-button" aria-label="Previous page" disabled={!document || pageNumber <= 1} onClick={() => setPageNumber(n => n - 1)}><ChevronLeft size={18} /></button>
       <span aria-live="polite">Page {document ? pageNumber : '—'} of {document?.numPages ?? '—'}</span>
@@ -114,6 +114,7 @@ export function PdfPreview({ conversationId, file, onClose, onRestored, onRemove
       <button type="button" className="np-icon-button" aria-label="Zoom out" disabled={!document || zoom <= .5} onClick={() => setZoom(n => Math.max(.5, n - .25))}><ZoomOut size={17} /></button>
       <span>{Math.round(zoom * 100)}%</span>
       <button type="button" className="np-icon-button" aria-label="Zoom in" disabled={!document || zoom >= 2} onClick={() => setZoom(n => Math.min(2, n + .25))}><ZoomIn size={17} /></button>
+      <button type="button" className="np-button small ghost" onClick={() => setSplitView(!splitView)} style={{ marginLeft: "auto" }}>{splitView ? "Full View" : "Split View"}</button>
       {download && <div className="np-pdf-actions">
         <a className="np-button small ghost" href={download} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} />Open in browser</a>
         <a className="np-button small ghost" href={download} download={file.name}><Download size={15} />Download PDF</a>
