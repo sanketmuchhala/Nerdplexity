@@ -205,9 +205,43 @@ describe('ranking', () => {
     const rotated = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-new-key' });
     expect(health.coolingUntil(accountOf('u1', rotated), 'm-70b')).toBeUndefined();
   });
+
+  it('clears an account cooldown after a successful authenticated request', () => {
+    const health = new RouterHealth();
+    const account = accountOf('u1', openrouter);
+    health.failure(account, 'bad-route', { category: 'auth', message: 'bad key', retryable: false, scope: 'account' });
+    expect(health.coolingUntil(account, 'good-route')).toBeDefined();
+    health.success(account, 'good-route');
+    expect(health.coolingUntil(account, 'another-route')).toBeUndefined();
+  });
 });
 
 describe('routed execution', () => {
+  it('routes around a model-level 401 after the same account already worked in this run', async () => {
+    const { fn, asked } = fakeProviders({
+      'worked-before': () => stream(answer('first ok')),
+      'bad-route': () => error(401, 'upstream unauthorized'),
+      'good-route': () => stream(answer('second ok')),
+    });
+    const health = new RouterHealth();
+    const blockedAccounts = new Set<string>();
+    const successfulAccounts = new Set<string>();
+    const ranked = rankCandidates([candidate('worked-before'), candidate('bad-route'), candidate('good-route')], profileTask(ask('hi'), []), health, 'u1').ranked;
+    const ctx = (maxAttempts: number): Parameters<typeof tryInOrder>[1] => ({
+      owner: 'u1', health, request: {}, messages: ask('hi'), tools: [], documents: [],
+      signal: new AbortController().signal, fetchImpl: fn, enqueue: task => task(), maxAttempts,
+      blockedAccounts, successfulAccounts,
+    });
+    expect((await tryInOrder([ranked.find(r => r.candidate.model === 'worked-before')!], ctx(1))).ok).toBe(true);
+    const recovered = await tryInOrder([
+      ranked.find(r => r.candidate.model === 'bad-route')!,
+      ranked.find(r => r.candidate.model === 'good-route')!,
+    ], ctx(2));
+    expect(recovered.ok).toBe(true);
+    expect(asked).toEqual(['worked-before', 'bad-route', 'good-route']);
+    expect(blockedAccounts).toEqual(new Set());
+  });
+
   it('tries the next model when the first is rate limited before answering, and reports each attempt', async () => {
     const { fn, asked } = fakeProviders({
       'big-120b': () => error(429, 'Provider returned error'),
