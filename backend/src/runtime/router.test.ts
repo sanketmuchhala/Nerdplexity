@@ -3,7 +3,7 @@ import type { RunEnvelope, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import { ProviderFailure } from './adapters.js';
 import { RunRegistry, type ProgressPayload } from './runs.js';
-import { accountOf, benchIndex, noneLeft, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT, AccountPacer, tryInOrder } from './router.js';
+import { accountOf, benchIndex, noneLeft, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT, AccountPacer, spreadByVendor, tryInOrder } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const sse = (records: unknown[], done = true) => records.map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + (done ? 'data: [DONE]\n\n' : '');
@@ -427,5 +427,44 @@ describe('saying why every model is set aside', () => {
     const { message } = noneLeft(ranking('quota', 'account'), 0, Date.now()).error;
     expect(message).toMatch(/20 requests a minute and 50 a day/);
     expect(message).toMatch(/\$10 of credit/);
+  });
+});
+
+describe('spreading attempts across vendors', () => {
+  const ranked = (...models: string[]) => models.map(model => ({ candidate: candidate(model), score: 1, why: [] }));
+
+  it('keeps the best model first and alternates vendors after it', () => {
+    // Ranking by size puts OpenRouter's two largest free models, both NVIDIA, at the top together.
+    const order = spreadByVendor(ranked(
+      'nvidia/ultra-550b:free', 'nvidia/super-120b:free', 'google/gemma-31b:free', 'meta/llama-70b:free',
+    )).map(entry => entry.candidate.model);
+    expect(order[0]).toBe('nvidia/ultra-550b:free');
+    expect(order.slice(0, 3)).toEqual(['nvidia/ultra-550b:free', 'google/gemma-31b:free', 'meta/llama-70b:free']);
+    expect(order).toHaveLength(4);
+    expect(new Set(order).size).toBe(4);
+  });
+
+  it('leaves a single-vendor ranking exactly as it was', () => {
+    const list = ranked('nvidia/a:free', 'nvidia/b:free');
+    expect(spreadByVendor(list)).toBe(list);
+  });
+
+  it('gives a two-attempt step a second vendor when one vendor is down', async () => {
+    // Both NVIDIA models fail: without spreading, a two-attempt step never reaches another vendor.
+    const down = () => error(503, 'Service temporarily overloaded');
+    const providers = fakeProviders({
+      'nvidia/ultra-550b:free': down, 'nvidia/super-120b:free': down, 'cohere/north-mini:free': () => stream(answer('Planned')),
+    });
+    const health = new RouterHealth();
+    const list = rankCandidates(
+      [candidate('nvidia/ultra-550b:free'), candidate('nvidia/super-120b:free'), candidate('cohere/north-mini:free')],
+      profileTask(ask('hi'), []), health, 'u1',
+    ).ranked;
+    const result = await tryInOrder(list, {
+      owner: 'u1', health, request: {}, messages: ask('hi'), tools: [], documents: [],
+      signal: new AbortController().signal, fetchImpl: providers.fn, enqueue: task => task(), maxAttempts: 2, blockedAccounts: new Set(),
+    });
+    expect(result.ok).toBe(true);
+    expect(providers.asked).toEqual(['nvidia/ultra-550b:free', 'cohere/north-mini:free']);
   });
 });

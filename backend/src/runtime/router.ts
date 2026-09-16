@@ -476,7 +476,35 @@ export type AttemptResult =
  * refusal, the failure is thrown, because switching models would splice two answers together or
  * shop for a model that complies. Returns the answer text as well as streaming it through hooks.
  */
-export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext, hooks: AttemptHooks = {}): Promise<AttemptResult> {
+/** The vendor that actually runs a model ("nvidia/nemotron-3-ultra-550b-a55b:free" -> "nvidia"). */
+const vendorOf = (candidate: RouteCandidate) =>
+  (candidate.model.includes('/') ? candidate.model.split('/', 1)[0] : candidate.connectionId).toLowerCase();
+
+/**
+ * The ranking, reordered so consecutive attempts prefer different vendors while each vendor keeps
+ * its own order. Ranking by size puts one vendor's family at the top together (OpenRouter's two
+ * largest free models are both NVIDIA), so a vendor-wide outage could use up a two-attempt step
+ * before any other vendor was asked. The best model is still tried first; only the fallbacks move.
+ */
+export function spreadByVendor(ranked: RankedCandidate[]): RankedCandidate[] {
+  const groups = new Map<string, RankedCandidate[]>();
+  for (const entry of ranked) {
+    const vendor = vendorOf(entry.candidate);
+    const group = groups.get(vendor);
+    if (group) group.push(entry);
+    else groups.set(vendor, [entry]);
+  }
+  if (groups.size < 2) return ranked;
+  const queues = [...groups.values()];
+  const spread: RankedCandidate[] = [];
+  for (let round = 0; spread.length < ranked.length; round++) {
+    for (const queue of queues) if (queue[round]) spread.push(queue[round]);
+  }
+  return spread;
+}
+
+export async function tryInOrder(list: RankedCandidate[], ctx: AttemptContext, hooks: AttemptHooks = {}): Promise<AttemptResult> {
+  const ranked = spreadByVendor(list);
   let attempts = 0;
   let last: ProviderError | undefined;
   let previous: string | undefined;
