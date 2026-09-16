@@ -865,3 +865,23 @@ button.np-chat-title { cursor: pointer; }
 .np-message-actions:focus-within { opacity: 1 !important; transform: translateY(0) !important; }
 .np-route-diagnostics summary { color: var(--np-muted); font-size: 12px; cursor: pointer; }
 .np-route-diagnostics { margin-top: 10px; border-top: 1px solid var(--np-line); padding-top: 10px; }
+
+/* PR 2: Chat PR additions */
+/* Answer Layout: 65-75ch width, generous spacing */
+.np-message-body, .np-message pre { max-width: 75ch; }
+.np-message-body p { margin-bottom: 1.2em; line-height: 1.7; }
+
+/* Subdue provenance */
+.np-provenance { opacity: 0.6; font-size: 11px; margin-top: 12px; }
+
+/* Composer context dropdown */
+.np-mode-dropdown-container { position: relative; }
+.np-mode-dropdown-container summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
+.np-mode-dropdown-container summary::-webkit-details-marker { display: none; }
+.np-mode-dropdown-menu { position: absolute; bottom: 100%; left: 0; margin-bottom: 8px; background: var(--np-panel); border: 1px solid var(--np-border); border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 100; min-width: 200px; }
+.np-dropdown-item { width: 100%; justify-content: flex-start; padding: 8px 12px; border: none; border-radius: 8px; }
+
+/* Attachment tray styling update */
+.np-composer-area .np-thread-files { background: transparent; border: none; padding: 0 0 10px 0; max-height: 200px; overflow-y: auto; }
+.np-composer-area .np-attachments { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; }
+.np-composer-area .np-attachment { flex: 1 1 auto; max-width: none; min-width: 200px; }

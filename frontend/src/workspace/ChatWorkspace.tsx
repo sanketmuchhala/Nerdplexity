@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import {
+import { 
   ArrowDown,
   ArrowRight,
   ArrowUp,
@@ -21,6 +21,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react';
+
 import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
@@ -495,45 +496,7 @@ export function ChatWorkspace({
         </WorkbenchDialog>
       )}
 
-      {!!conversation?.attachments?.length && (
-        <section className="np-thread-files" aria-label="Files in this chat">
-          <header><h2>Files in this chat <span>({conversation.attachments.length})</span></h2><span>Included with each prompt</span></header>
-          <div className="np-attachments" aria-label="Thread attachments">
-            {conversation.attachments.map((file) => {
-              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
-              return (
-              <details key={file.id} className="np-attachment">
-                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
-                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
-                  <span>{file.name}</span>
-                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
-                </summary>
-                <div>
-                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
-                  <div className="np-attachment-actions" style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                    <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
-                      <X size={12} /> Remove from context
-                    </button>
-                    {file.fileData && (
-                      <a
-                        className="np-button ghost small"
-                        href={`data:${file.mimeType};base64,${file.fileData}`}
-                        download={file.name}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <Download size={12} /> View original
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </details>
-            ); })}
-          </div>
-        </section>
-      )}
-      {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
+            {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
         <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
           useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
         }} />
@@ -848,6 +811,44 @@ export function ChatWorkspace({
             </div>
           </div>
         )}
+        {!!conversation?.attachments?.length && (
+        <section className="np-thread-files" aria-label="Files in this chat">
+          <header><h2>Files in this chat <span>({conversation.attachments.length})</span></h2><span>Included with each prompt</span></header>
+          <div className="np-attachments" aria-label="Thread attachments">
+            {conversation.attachments.map((file) => {
+              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
+              return (
+              <details key={file.id} className="np-attachment">
+                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
+                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
+                </summary>
+                <div>
+                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
+                  <div className="np-attachment-actions" style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                      <X size={12} /> Remove from context
+                    </button>
+                    {file.fileData && (
+                      <a
+                        className="np-button ghost small"
+                        href={`data:${file.mimeType};base64,${file.fileData}`}
+                        download={file.name}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <Download size={12} /> View original
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </details>
+            ); })}
+          </div>
+        </section>
+      )}
         <form
           className="np-composer"
           onSubmit={(e) => {
@@ -929,7 +930,12 @@ export function ChatWorkspace({
                   }
                 }}
               />
-              {([
+              <details className="np-mode np-mode-dropdown-container">
+                <summary aria-haspopup="menu" aria-label="Tools">
+                  <Workflow size={13} /> <span className="np-mode-label">Tools</span>
+                </summary>
+                <div className="np-mode-dropdown-menu" role="menu">
+                  {([
                 ['calculator', Calculator, 'Calculator', 'Lets the model do exact arithmetic with an app calculator'],
                 ['documents', Workflow, 'Documents', 'Open your Workspace documents and choose whether this thread may search them'],
               ] as const).map(([tool, Icon, name, hint]) => (
@@ -947,6 +953,8 @@ export function ChatWorkspace({
                   <span className="np-mode-label">{name}</span>
                 </button>
               ))}
+                </div>
+              </details>
               {isAgent(ref) && (
                 <button
                   type="button"
