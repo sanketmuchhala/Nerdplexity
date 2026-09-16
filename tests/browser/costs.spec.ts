@@ -71,7 +71,7 @@ test('Free only blocks models that are not confirmed free until the user allows 
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   await expect(page.getByText('Billed answer.')).toBeVisible();
   expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({ model: 'vendor/unlisted', target: { kind: 'openrouter', apiKey: 'sk-or-test' } });
+  expect(runs[0]).toMatchObject({ model: 'vendor/unlisted', costPolicy: 'any', target: { kind: 'openrouter', apiKey: 'sk-or-test' } });
 });
 
 test('a free model that hits its limit offers free alternatives and never switches on its own', async ({ page }) => {
@@ -115,17 +115,25 @@ test('an account marked as having no billing counts as free, and the Gemini data
   await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeEnabled();
 });
 
-test('Check proves a model responds, and asks first when it may be billed', async ({ page }) => {
+test('Check enforces Free only and asks before a paid check when charges are allowed', async ({ page }) => {
   await mockDiscovery(page, { openrouter: [model('a:free', { pricing: 'zero-price' }), model('vendor/big', { pricing: 'paid', price: { input: 3, output: 15 } })] });
   const runs = await mockRuns(page, [[{ type: 'delta', text: 'OK' }, { type: 'completed', timing }]]);
   await addConnection(page, 'openrouter', 'sk-or-test');
   await card(page, 'a:free').getByRole('button', { name: 'Check' }).click();
   await expect(card(page, 'a:free')).toContainText('Check passed · first text in 0.4s');
+  await card(page, 'vendor/big').getByRole('button', { name: 'Check' }).click();
+  await expect(page.getByRole('alert')).toContainText('Turn it off before checking a paid or unpriced model');
+  expect(runs).toHaveLength(1);
+  await page.getByLabel(/Free only/).uncheck();
   const dialogs: string[] = [];
-  page.on('dialog', dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  page.once('dialog', dialog => { dialogs.push(dialog.message()); void dialog.dismiss(); });
   await card(page, 'vendor/big').getByRole('button', { name: 'Check' }).click();
   await expect.poll(() => dialogs.length).toBe(1);
   expect(dialogs[0]).toContain('may bill it');
   expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({ model: 'a:free', settings: { maxTokens: 64 } });
+  expect(runs[0]).toMatchObject({ model: 'a:free', costPolicy: 'free-only', settings: { maxTokens: 64 } });
+  page.once('dialog', dialog => { void dialog.accept(); });
+  await card(page, 'vendor/big').getByRole('button', { name: 'Check' }).click();
+  await expect(card(page, 'vendor/big')).toContainText('Check passed');
+  expect(runs[1]).toMatchObject({ model: 'vendor/big', costPolicy: 'any' });
 });

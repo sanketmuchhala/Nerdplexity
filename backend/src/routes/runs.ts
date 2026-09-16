@@ -66,6 +66,7 @@ const LIMITS = [['temperature', 0, 2, false], ['maxTokens', 1, 128_000, true], [
 
 export function validateRunRequest(body: any): ValidRun {
   if (!body || typeof body !== 'object') throw new Error('Request body is required.');
+  if (body.costPolicy !== undefined && !['free-only', 'any'].includes(body.costPolicy)) throw new Error('Choose a valid model cost policy.');
   if (typeof body.idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(body.idempotencyKey)) throw new Error('A valid idempotency key is required.');
   let candidates = body.route !== undefined ? validateRoute(body.route) : undefined;
   const target: ResolvedTarget = candidates ? candidates[0].target : resolveTarget(body.target);
@@ -86,8 +87,8 @@ export function validateRunRequest(body: any): ValidRun {
   const tools: ToolName[] = body.tools ?? [];
   if (!Array.isArray(tools) || tools.some(name => !TOOL_NAMES.includes(name)) || new Set(tools).size !== tools.length) throw new Error(`Choose tools from: ${TOOL_NAMES.join(', ')}.`);
   const documents = body.documents ?? [];
-  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
-  if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
+  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || Buffer.byteLength(d.content, 'utf8') > 2_000_000)) throw new Error('Attach up to 20 text documents, each under 2 MB of text.');
+  if (documents.reduce((n: number, d: any) => n + Buffer.byteLength(d.content, 'utf8'), 0) > 4_000_000) throw new Error('Attached documents exceed 4 MB of text.');
   let search: ValidRun['search'];
   const auto = body.search?.auto === true;
   if (tools.includes('web_search') || auto) {
@@ -107,6 +108,7 @@ export function validateRunRequest(body: any): ValidRun {
     ...(candidates ? { route: { candidates, strategy: body.route.strategy } } : {}),
     request: {
       target, model: candidates ? '' : body.model,
+      freeOnly: !!candidates || body.costPolicy !== 'any',
       messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
       temperature: settings.temperature, maxTokens: settings.maxTokens, numCtx: settings.numCtx,
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readDocument } from './documents';
-import { attachmentFromFile, exportConversation, parseConversation } from './workbench';
+import { attachmentFromFile, buildContext, exportConversation, parseConversation, workbenchSettings } from './workbench';
 import type { Conversation } from './db';
 
 describe('document ingestion and model context', () => {
@@ -28,6 +28,55 @@ describe('document ingestion and model context', () => {
   it('decodes multibyte RTF escapes and skips Unicode fallback characters', async () => {
     const rtf = String.raw`{\rtf1\ansi\ansicpg65001 \'e9\'a1\'b9\'e7\'9b\'ae \uc2\u39033\'3f\'3f\u30446??}`;
     expect(await readDocument(new File([rtf], 'unicode.rtf', { type: 'text/rtf' }))).toBe('项目 项目');
+  });
+
+  it('cleans null characters in extracted document text while rejecting raw binary uploads', async () => {
+    const original = new File([String.raw`{\rtf1 Basis\u0? reference: 729.\par Next\tab column}`], 'basis.rtf');
+    expect(await readDocument(original)).toBe('Basis reference: 729.\nNext\tcolumn');
+    const attachment = await attachmentFromFile(original, []);
+    expect(attachment.content).toBe('Basis reference: 729.\nNext\tcolumn');
+    await expect(attachmentFromFile(new File(['Basis\0binary'], 'basis.txt'), [])).rejects.toThrow('binary');
+    await expect(readDocument(new File([String.raw`{\rtf1\u0?}`], 'empty.rtf'))).rejects.toThrow('No readable text');
+  });
+
+  it('finds a fact deep in a large file without overflowing a small model context', async () => {
+    const content = `${'General background information.\n'.repeat(6000)}\nThe cobalt launch code is ZEBRA-729.\n${'More background.\n'.repeat(4000)}`;
+    const attachment = await attachmentFromFile(new File([content], 'large-report.txt'), []);
+    const settings = { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 };
+    const result = buildContext([], 'What is the cobalt launch code?', settings, undefined, undefined, [attachment]);
+    expect(result.warnings).toEqual([]);
+    expect(result.estimatedTokens + result.effective.maxTokens!).toBeLessThanOrEqual(4096);
+    expect(JSON.stringify(result.messages)).toContain('ZEBRA-729');
+    expect(JSON.stringify(result.messages)).toContain('full document is not included');
+    expect(result.notices.join(' ')).toContain('selected excerpts');
+    expect(attachment.content).toContain(content.trim());
+  });
+
+  it('keeps every small document and balances excerpts from multiple large documents', async () => {
+    const files = await Promise.all(['one', 'two', 'three'].map(name => attachmentFromFile(new File([`${'背景信息'.repeat(30_000)}\n${name} cobalt code: 42\n`], `${name}.txt`), [])));
+    const small = await attachmentFromFile(new File(['Keep this complete.'], 'small.txt'), []);
+    const result = buildContext([], 'Find cobalt code in each file', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 }, undefined, undefined, [...files, small]);
+    expect(result.warnings).toEqual([]);
+    const text = JSON.stringify(result.messages);
+    for (const name of ['one', 'two', 'three']) expect(text).toContain(`${name} cobalt code: 42`);
+    expect(text).toContain('Keep this complete.');
+  });
+
+  it('keeps the recent conversation alongside large-document excerpts for follow-up questions', async () => {
+    const attachment = await attachmentFromFile(new File([
+      `${'Background notes.\n'.repeat(20_000)}\nCobalt launch code: ZEBRA-729.`,
+    ], 'report.txt'), []);
+    const recent = [
+      { role: 'user' as const, content: 'Review the cobalt launch. ' + 'Focus on launch readiness. '.repeat(35) },
+      { role: 'assistant' as const, content: 'The launch needs a code check. ' + 'Confirm the release checklist. '.repeat(35) },
+    ];
+    const history = [{ role: 'user' as const, content: 'Old unrelated discussion. '.repeat(1000) }, ...recent];
+    const result = buildContext(history, 'What is its code?', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 }, undefined, undefined, [attachment]);
+    expect(result.warnings).toEqual([]);
+    expect(result.estimatedTokens + result.effective.maxTokens!).toBeLessThanOrEqual(4096);
+    for (const message of recent) expect(result.messages).toContainEqual(message);
+    expect(JSON.stringify(result.messages)).toContain('ZEBRA-729');
+    expect(result.omittedMessages).toBe(1);
   });
 
   it('round-trips larger extracted attachments through thread export', async () => {

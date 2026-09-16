@@ -354,7 +354,7 @@ export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext,
     if (ctx.blockedAccounts.has(account) || ctx.health.coolingUntil(account, candidate.model)) continue;
     attempts++;
     hooks.trying?.(entry, attempts, previous);
-    const request: ModelRequest = { ...ctx.request, target: candidate.target, model: candidate.model, messages: ctx.messages as ModelMessage[], waitOnRateLimit: false };
+    const request: ModelRequest = { ...ctx.request, target: candidate.target, model: candidate.model, messages: ctx.messages as ModelMessage[], waitOnRateLimit: false, freeOnly: true };
     const sentAt = Date.now();
     let answeredAt: number | undefined;
     let text = '';

@@ -97,7 +97,7 @@ describe('explicit request context', () => {
       { role: 'user', content: 'Explain it' },
     ]);
     expect(preview.messages[1].content).toContain('const value = 42;');
-    await expect(attachmentFromFile(new File(['x'.repeat(20_000_001)], 'large.txt'), [])).rejects.toThrow('20 MB');
+    await expect(attachmentFromFile(new File(['x'.repeat(2_000_001)], 'large.txt'), [])).rejects.toThrow('2 MB');
     await expect(attachmentFromFile(new File(['x'], 'archive.zip', { type: 'application/zip' }), [])).rejects.toThrow('supported');
     const image = await attachmentFromFile(new File(['image-bytes'], 'image.png', { type: 'image/png' }), []);
     const blocked = buildContext([], 'Describe it', settings, { capabilities: { vision: false } } as ModelDescriptor, undefined, [image]);
@@ -166,6 +166,16 @@ describe('portable thread imports', () => {
     expect(parseConversation(text).attachments).toMatchObject([{ name: 'notes.md', content: '# Notes' }]);
   });
 
+  it('preserves PDF originals in thread exports and rejects malformed originals', () => {
+    const pdfBase64 = btoa('%PDF-1.4\nOriginal pages\n%%EOF');
+    const source = { ...conversation, attachments: [{ id: 'pdf-file', name: 'brief.pdf', mimeType: 'application/pdf', size: 28, content: '[Page 1]\nBrief', kind: 'text' as const, createdAt: 2, hasPdf: true, pdfBase64 }] };
+    const exported = exportConversation(source);
+    expect(parseConversation(exported).attachments).toMatchObject([{ hasPdf: true, pdfBase64, content: '[Page 1]\nBrief' }]);
+    const invalid = JSON.parse(exported);
+    invalid.attachments[0].pdfBase64 = btoa('This is not a PDF');
+    expect(() => parseConversation(JSON.stringify(invalid))).toThrow();
+  });
+
   it('ignores injected routing fields and refuses unsupported messages or excessive data', () => {
     const data = JSON.parse(exportConversation(conversation));
     expect(
@@ -184,6 +194,6 @@ describe('portable thread imports', () => {
         JSON.stringify({ ...data, messages: [{ role: 'tool', content: 'x' }] }),
       ),
     ).toThrow('invalid');
-    expect(() => parseConversation('x'.repeat(8_000_001))).toThrow('8 MB');
+    expect(() => parseConversation('x'.repeat(50_000_001))).toThrow('50 MB');
   });
 });

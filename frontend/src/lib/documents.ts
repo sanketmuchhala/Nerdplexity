@@ -1,4 +1,4 @@
-/** Files are decoded in the browser. Only extracted text is saved or sent to a model. */
+/** Files are decoded in the browser. Models receive text; PDF originals are kept for previews. */
 export const DOCUMENT_LIMITS = { fileBytes: 20_000_000, textBytes: 2_000_000, workspaceBytes: 4_000_000 } as const;
 export const DOCUMENT_FORMATS = 'PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), OpenDocument, EPUB, RTF, HTML, text, data, and code';
 const PACKAGED = new Set(['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'epub']);
@@ -15,6 +15,22 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'application/epub+zip': 'epub', 'text/html': 'html', 'application/rtf': 'rtf', 'text/rtf': 'rtf',
 };
 const extensionOf = (file: Pick<File, 'name' | 'type'>) => MIME_EXTENSIONS[file.type] ?? file.name.toLowerCase().split('.').pop() ?? '';
+export const isPdf = (file: Pick<File, 'name' | 'type'>) => extensionOf(file) === 'pdf';
+
+export async function fileBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 32_768)
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  return btoa(binary);
+}
+
+export function pdfBytes(base64: string): Uint8Array<ArrayBuffer> {
+  if (!base64 || base64.length > 26_666_668 || base64.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error('The original PDF data is invalid.');
+  const binary = atob(base64);
+  if (binary.length > DOCUMENT_LIMITS.fileBytes || !binary.slice(0, 1024).includes('%PDF-')) throw new Error('Choose a PDF smaller than 20 MB.');
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
 
 export function documentFileError(file: Pick<File, 'name' | 'size' | 'type'>): string | null {
   if (file.size > DOCUMENT_LIMITS.fileBytes) return 'Keep each document under 20 MB.';
@@ -23,8 +39,12 @@ export function documentFileError(file: Pick<File, 'name' | 'size' | 'type'>): s
   return null;
 }
 
+// PDF font maps and other document parsers may emit nulls in otherwise readable text.
+// Clean parser output before validation/storage; decodeText still rejects raw binary files.
+const cleanExtractedText = (text: string) => text.replaceAll('\0', '').replace(/\r\n?/g, '\n').trim();
+
 function checkedText(text: string): string {
-  const content = text.replace(/\r\n?/g, '\n').trim();
+  const content = cleanExtractedText(text);
   if (!content) throw new Error('No readable text was found in this document.');
   if (new TextEncoder().encode(content).length > DOCUMENT_LIMITS.textBytes)
     throw new Error('The extracted document exceeds 2 MB of text. Split it into smaller documents.');
@@ -261,10 +281,14 @@ function resolvePath(base: string, target: string): string {
   return parts.join('/');
 }
 
-async function pdfText(bytes: Uint8Array): Promise<string> {
+export async function loadPdf(bytes: Uint8Array) {
   const [pdfjs, worker] = await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  const task = pdfjs.getDocument({ data: bytes, useSystemFonts: true });
+  return pdfjs.getDocument({ data: bytes, useSystemFonts: true });
+}
+
+async function pdfText(bytes: Uint8Array): Promise<string> {
+  const task = await loadPdf(bytes);
   try {
     const doc = await task.promise;
     if (doc.numPages > 500) throw new Error('Keep PDFs under 500 pages. Split this PDF into smaller documents.');
@@ -274,13 +298,13 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
       const page = await doc.getPage(number);
       const text = await page.getTextContent();
       let previousY: number | undefined;
-      const content = text.items.map(item => {
+      const content = cleanExtractedText(text.items.map(item => {
         if (!('str' in item)) return '';
         const y = item.transform[5];
         const newline = previousY !== undefined && Math.abs(previousY - y) > 3;
         previousY = y;
         return `${newline ? '\n' : ''}${item.str}${item.hasEOL ? '\n' : ' '}`;
-      }).join('').trim();
+      }).join(''));
       pages.push(`[Page ${number}]\n${content || '[No extractable text on this page; images and scans require OCR.]'}`);
       total += new TextEncoder().encode(pages[pages.length - 1]).length;
       if (total > DOCUMENT_LIMITS.textBytes) throw new Error('The extracted PDF exceeds 2 MB of text. Split it into smaller documents.');
