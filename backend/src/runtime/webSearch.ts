@@ -20,17 +20,31 @@ function failure(status: number, detail: string): Error {
   return new Error(detail && status === 400 ? `${reason} ${detail}` : reason);
 }
 
-export interface WebPage { title: string; url: string; published?: string; text: string }
+export interface WebPage {
+  title: string;
+  url: string;
+  published?: string;
+  text: string;
+  /** Exa's own extracts for the query: page text, used when a reader finds nothing itself. */
+  highlights: string[];
+}
 
 /**
- * One Exa search that returns each page's text (up to textChars), for Deep Research readers.
- * Pages without text are left out.
+ * One Exa search that returns each page's text (up to textChars) and Exa's highlights for the
+ * query. Pages with neither are left out. `since` asks for pages published on or after that date.
  */
-export async function exaPages(query: string, numResults: number, apiKey: string, textChars: number, signal: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<WebPage[]> {
+export async function exaPages(
+  query: string, numResults: number, apiKey: string, textChars: number, signal: AbortSignal,
+  fetchImpl: typeof fetch = fetch, options: { since?: string } = {},
+): Promise<WebPage[]> {
   const response = await fetchImpl(`${exaURL()}/search`, {
     method: 'POST', redirect: 'error', signal,
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-    body: JSON.stringify({ query, type: 'auto', numResults, contents: { text: { maxCharacters: textChars } } }),
+    body: JSON.stringify({
+      query, type: 'auto', numResults,
+      ...(options.since ? { startPublishedDate: options.since } : {}),
+      contents: { text: { maxCharacters: textChars }, highlights: { query, numSentences: 3, highlightsPerUrl: 5 } },
+    }),
   });
   const body = await response.text().catch(() => '');
   let data: any;
@@ -38,14 +52,17 @@ export async function exaPages(query: string, numResults: number, apiKey: string
   if (!response.ok) throw failure(response.status, redact(String(data?.error ?? body), apiKey).replace(/\s+/g, ' ').trim().slice(0, 200));
   if (!data || !Array.isArray(data.results)) throw new Error('Exa returned an unexpected response.');
   return data.results
-    .filter((r: any) => typeof r?.url === 'string' && /^https?:\/\//i.test(r.url) && typeof r.text === 'string' && r.text.trim())
-    .slice(0, numResults)
+    .filter((r: any) => typeof r?.url === 'string' && /^https?:\/\//i.test(r.url))
     .map((r: any): WebPage => ({
       title: typeof r.title === 'string' && r.title.trim() ? r.title.trim().slice(0, 300) : r.url.slice(0, 300),
       url: r.url.slice(0, 2000),
       ...(typeof r.publishedDate === 'string' && r.publishedDate ? { published: r.publishedDate.slice(0, 10) } : {}),
-      text: r.text.slice(0, textChars),
-    }));
+      text: typeof r.text === 'string' ? r.text.slice(0, textChars) : '',
+      highlights: (Array.isArray(r.highlights) ? r.highlights : []).filter((h: unknown): h is string => typeof h === 'string' && !!h.trim()).map((h: string) => h.trim().slice(0, 1200)).slice(0, 5),
+    }))
+    // A page with neither text nor an extract has nothing to read.
+    .filter((page: WebPage) => page.text.trim() || page.highlights.length)
+    .slice(0, numResults);
 }
 
 /** One Exa search, reduced to titles, URLs, dates, and query-relevant excerpts. */

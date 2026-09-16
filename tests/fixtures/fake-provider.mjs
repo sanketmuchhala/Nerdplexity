@@ -30,8 +30,9 @@ const QUOTA = {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Pages the fake Exa returns with text, for Deep Research.
 const RESEARCH_PAGES = {
-  'fake tower height': { title: 'Tower height', url: 'https://example.com/tower-height', text: 'The tower is 300 metres tall. It sways a little in the wind.' },
-  'fake tower builder': { title: 'Tower builder', url: 'https://example.com/tower-builder', text: 'The tower was built by a company between 1887 and 1889. Work took two years.' },
+  'fake tower height': { title: 'Tower height', url: 'https://example.com/tower-height', text: 'The tower is 300 metres tall. It sways a little in the wind.', highlights: ['The tower is 300 metres tall.'] },
+  // No page text: only the search engine's extract, which still becomes a note.
+  'fake tower builder': { title: 'Tower builder', url: 'https://example.com/tower-builder', text: '', highlights: ['The tower was built by a company between 1887 and 1889.'] },
 };
 const frame = (data) => `data: ${JSON.stringify(data)}\n\n`;
 const delta = (content) => frame({ choices: [{ delta: { content } }] });
@@ -125,8 +126,11 @@ http
       const text = system.includes('You plan web research')
         ? JSON.stringify({ perspectives: ['An engineer', 'A historian'], questions: [{ question: 'How tall is the tower?', queries: ['fake tower height'] }, { question: 'Who built it?', queries: ['fake tower builder'] }] })
         : system.includes('You read one web page')
-          // A true quote (the page's first sentence) and one the page does not contain.
-          ? JSON.stringify({ notes: [{ fact: `Fact from ${body.model}.`, quote: page.split('\n\n').at(-1).split('. ')[0], question: 1 }, { fact: 'Invented.', quote: 'This sentence is not on the page at all.', question: 1 }] })
+          // Lines rather than JSON: one fact quoting the page, and one invention that is dropped.
+          ? [
+            `- Fact from ${body.model} -- "${page.split('\n\n').at(-1).split('. ')[0]}"`,
+            '- Invented -- "This sentence is nowhere on the page at all, in any form."',
+          ].join('\n')
           : system.includes('You outline a research report')
             ? JSON.stringify({ sections: [{ heading: 'Height', notes: [1] }, { heading: 'Builder', notes: [2] }] })
             : system.includes('You write a research report')

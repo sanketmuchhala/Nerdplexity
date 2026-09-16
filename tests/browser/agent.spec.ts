@@ -158,8 +158,9 @@ test('while it works, the panel is open and shows each model drafting and thinki
 });
 
 test('Deep research plans, searches, has several models read the sources, and writes a report citing them', async ({ page }) => {
-  // A research run needs six model requests in a row through the shared queue for models on this machine.
-  test.slow();
+  // A research run needs six model requests in a row through the queue shared by every test's
+  // models on this machine, so under load it takes minutes rather than seconds.
+  test.setTimeout(180_000);
   await connectAgentModels(page);
   // Deep research needs an Exa key.
   await nav(page, 'Connections').click();
@@ -177,7 +178,7 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await expect(page.getByRole('button', { name: 'Deep research' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.np-composer-footnote')).toContainText('Deep research: the Free Agent plans');
   // The report cites the sources it was given. Which model writes it is up to the ranking and health.
-  await expect(page.getByText(/^Research report from agent-model-\d+b: the tower is 300 metres tall \[1\], and it was built by a company \[2\]\.$/)).toBeVisible(SLOW);
+  await expect(page.getByText(/^Research report from agent-model-\d+b: the tower is 300 metres tall \[1\], and it was built by a company \[2\]\.$/)).toBeVisible({ timeout: 120_000 });
   // The sources the report cites, numbered in order.
   await expect(page.getByRole('link', { name: /example\.com/ })).toHaveCount(2);
 
@@ -189,7 +190,10 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await expect(flow).toContainText('Read 2 sources');
   await expect(flow).toContainText('Writes the report');
   // Each reader kept its true quote and dropped the invented one.
-  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('Kept 1 note; dropped 1 whose quote is not on the page');
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('Kept 1 note');
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('dropped 1 the page does not say');
+  // A page with no text of its own is still read, through the search engine's extract.
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 2' })).toContainText('Kept 1 note');
   await expect(panel.locator('.np-agent-step').filter({ hasText: 'Citation check' })).toContainText('2 citations to 2 of 2 sources; each names a source with checked notes');
 
   // Only checked quotes reached the writer.
