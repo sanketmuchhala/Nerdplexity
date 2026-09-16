@@ -895,3 +895,7 @@ button.np-chat-title { cursor: pointer; }
 .np-agent-step.running { border: 1px solid var(--np-accent); box-shadow: 0 0 0 1px var(--np-accent); }
 
 /* Live cooldown & Diagnostics already implemented in PR1 */
+
+/* PR 5: PDF Split Viewer */
+.np-dialog-split { right: 0; left: auto !important; width: 50vw; border-left: 1px solid var(--np-border); border-radius: 0; transform: none !important; }
+.np-dialog-split dialog { height: 100vh; max-height: 100vh; border-radius: 0; }

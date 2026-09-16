@@ -18,6 +18,7 @@ export function PdfPreview({ conversationId, file, onClose, onRestored, onRemove
   const [document, setDocument] = useState<PDFDocumentProxy>();
   const [pageNumber, setPageNumber] = useState(1);
   const [zoom, setZoom] = useState(1);
+  const [splitView, setSplitView] = useState(false);
   const [width, setWidth] = useState(600);
   const [loading, setLoading] = useState(!!file.hasPdf);
   const [rendering, setRendering] = useState(false);
