@@ -1,6 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import type { InputSnapshot, Preset, WorkbenchSettings } from './workbench';
-import type { ActivityTrace, AgentMode, AgentOutcome, AgentStep, Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
+import type { ActivityTrace, AgentConfig, AgentMode, AgentOutcome, AgentStep, Connection, ConnectionKind, ExecutionLocation, ModelRef, PricingClass, ProviderErrorCategory, RateLimitState, RouteOutcome, RouteStep, TaskKind, ToolTrace } from '@app/types';
 
 export type Provider = "openai" | "anthropic" | "gemini" | "deepseek" | "local-ollama";
 export type Role = "system" | "user" | "assistant";
@@ -12,7 +12,11 @@ export interface ThreadAttachment {
   mimeType: string;
   size: number;
   content: string;
-  kind: 'text' | 'image' | 'pdf';
+  fileData?: string;
+  kind: 'text' | 'image';
+  /** Original PDF is fetched only when opened. The bytes appear on upload/export only. */
+  hasPdf?: boolean;
+  pdfBase64?: string;
   createdAt: number;
 }
 /** 'stopped' is the legacy name for 'canceled'. 'interrupted' means the client lost the run. */
@@ -209,6 +213,10 @@ export interface AppSettings {
   favoriteModels?: string[];
   /** Set once legacy provider settings have been converted to connections. */
   connectionsVersion?: number;
+  /** How the Free Agent works: behavior, drafts, and which model does each part. */
+  agent?: AgentConfig;
+  /** Set once the default moved from the Free Router to the Free Agent, so it happens only once. */
+  agentDefault?: boolean;
   /** Web search runs automatically when a message needs current information and an Exa key is set. Default 'auto'. */
   webSearch?: 'auto' | 'off';
   /** 'free-only' blocks runs that cannot be confirmed free. */

@@ -3,7 +3,7 @@ import type { RunEnvelope, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import { ProviderFailure } from './adapters.js';
 import { RunRegistry, type ProgressPayload } from './runs.js';
-import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun } from './router.js';
+import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT, AccountPacer, tryInOrder } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const sse = (records: unknown[], done = true) => records.map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + (done ? 'data: [DONE]\n\n' : '');
@@ -40,6 +40,78 @@ async function execute(run: Partial<RoutedRun> & { candidates: RouteCandidate[] 
   catch (e) { thrown = e; }
   return { result, thrown, events, routes: events.filter(e => e.type === 'route'), text: events.flatMap(e => e.type === 'delta' ? [e.text] : []).join('') };
 }
+
+describe('spacing requests to one account', () => {
+  /** A pacer on a clock that never really waits: the waits are recorded instead. */
+  const paced = () => {
+    let now = 0;
+    const waits: number[] = [];
+    const pacer = new AccountPacer(() => now, async ms => { waits.push(ms); now += ms; });
+    return { pacer, waits, tick: (ms: number) => { now += ms; } };
+  };
+
+  it('spaces requests by what the provider allows a minute, and not at all on this machine', async () => {
+    const { pacer, waits } = paced();
+    const signal = new AbortController().signal;
+    // OpenRouter's free models allow 20 a minute: one request every three seconds.
+    for (let i = 0; i < 3; i++) await pacer.take('account-a', 'openrouter', 'remote', signal);
+    expect(waits).toEqual([3000, 3000]);
+    expect(pacer.gap('groq', 'remote')).toBe(2000);
+    expect(pacer.gap('cerebras', 'remote')).toBe(12_000);
+    expect(pacer.gap('ollama', 'local')).toBe(0);
+  });
+
+  it('keeps each account on its own schedule, and waits no longer than needed', async () => {
+    const { pacer, waits, tick } = paced();
+    const signal = new AbortController().signal;
+    await pacer.take('account-a', 'openrouter', 'remote', signal);
+    await pacer.take('account-b', 'openrouter', 'remote', signal);
+    expect(waits).toEqual([]);
+    tick(3000);
+    await pacer.take('account-a', 'openrouter', 'remote', signal);
+    expect(waits).toEqual([]);
+  });
+
+  it('makes parallel requests to one account wait their turn', async () => {
+    const waits: number[] = [];
+    let clock = 0;
+    const pacer = new AccountPacer(() => clock, async ms => { waits.push(ms); clock += ms; });
+    let sent = 0;
+    const fetchImpl = (async () => { sent++; return stream(answer('ok')); }) as typeof fetch;
+    const health = new RouterHealth();
+    const ranked = rankCandidates([candidate('a'), candidate('b')], profileTask(ask('hi'), []), health, 'u').ranked;
+    const context = (): Parameters<typeof tryInOrder>[1] => ({
+      owner: 'u', health, request: {}, messages: ask('hi'), tools: [], documents: [],
+      signal: new AbortController().signal, fetchImpl, enqueue: task => task(), maxAttempts: 1, blockedAccounts: new Set(), pacer,
+    });
+    await Promise.all([tryInOrder([ranked[0]], context()), tryInOrder([ranked[1]], context())]);
+    // The first goes at once; the second waits for the account's next slot, three seconds later.
+    expect(waits).toEqual([3000]);
+    expect(sent).toBe(2);
+  });
+});
+
+describe('fitting a long answer to a model', () => {
+  const fits = (asked: number, extra: Partial<RouteCandidate>, chars = 4000) =>
+    fitOutput(asked, { ...candidate('m', { contextLength: undefined }), ...extra }, ask('x'.repeat(chars)));
+
+  it('asks a model for no more output than it can give, instead of leaving it out', () => {
+    // 4,000 characters is about 1,000 tokens of prompt.
+    expect(fits(8000, { contextLength: 8192 })).toBe(8192 - 1000 - 256);
+    expect(fits(8000, { contextLength: 131_072 })).toBeUndefined();
+    expect(fits(8000, { contextLength: 131_072, maxOutputTokens: 4096 })).toBe(4096);
+    expect(fits(2048, { contextLength: 131_072 })).toBeUndefined();
+    expect(fits(8000, {})).toBeUndefined();
+  });
+
+  it('judges what fits on a reserve, so a long answer does not rule out every smaller model', () => {
+    const long = [{ role: 'user' as const, content: 'x'.repeat(4000) }];
+    // Asking for 8,000 tokens of output does not push the request past a 8k model's context.
+    expect(profileTask(long, [], 8000).estimatedTokens).toBe(1000 + RESERVED_OUTPUT);
+    expect(rankCandidates([candidate('small', { contextLength: 8192 })], profileTask(long, [], 8000), new RouterHealth(), 'u').ranked).toHaveLength(1);
+    expect(promptTokens(long)).toBe(1000);
+  });
+});
 
 describe('task profile', () => {
   it('classifies the latest request and what a model must support', () => {

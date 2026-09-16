@@ -10,6 +10,7 @@ import {
   FileText,
   GitBranch,
   Lightbulb,
+  Microscope,
   Paperclip,
   Pencil,
   RotateCcw,
@@ -42,11 +43,11 @@ import {
   exportConversation,
   workbenchSettings,
   type WorkbenchTool,
-  pdfBlobUrls,
 } from '../lib/workbench';
+import { PdfPreview } from './PdfPreview';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
-import { autoWebSearch } from '../lib/searchKey';
+import { autoWebSearch, hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -106,7 +107,7 @@ export function ChatWorkspace({
     content: string;
   } | null>(null);
   const [rename, setRename] = useState<string | null>(null);
-  const [viewPdf, setViewPdf] = useState<{ id: string, name: string, url: string } | null>(null);
+  const [previewPdfId, setPreviewPdfId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const branchDraft = useRef<string | null>(null);
@@ -131,6 +132,7 @@ export function ChatWorkspace({
   // Searches run on their own when a message needs current information; there is no Web button.
   const webAuto = autoWebSearch(settings?.webSearch);
   const documentsOn = enabledTools.includes('documents');
+  const researchOn = isAgent(ref) && enabledTools.includes('research');
   const preview = buildContext(
     conversation?.messages ?? [],
     input,
@@ -763,39 +765,23 @@ export function ChatWorkspace({
         )}
         {!!conversation?.attachments?.length && (
           <div className="np-attachments" aria-label="Thread attachments">
-            {conversation.attachments.map((file) => (
+            {conversation.attachments.map((file) => {
+              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
+              return (
               <details key={file.id} className="np-attachment">
-                <summary>
+                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
                   {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
                   <span>{file.name}</span>
-                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · inspect</small>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
                 </summary>
                 <div>
-                  {file.kind === 'image' ? (
-                    <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} />
-                  ) : file.kind === 'pdf' ? (
-                    pdfBlobUrls.has(file.id) ? (
-                      <div className="np-attachment-pdf-actions">
-                        <p>PDF Document</p>
-                        <button type="button" className="np-button primary small" onClick={() => setViewPdf({ id: file.id, name: file.name, url: pdfBlobUrls.get(file.id)! })}>
-                          Open PDF
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="np-attachment-pdf-actions">
-                        <p>PDF Document (Text Only)</p>
-                        <p className="np-text-small">This document was uploaded in a previous session. Re-upload it to view the original PDF.</p>
-                      </div>
-                    )
-                  ) : (
-                    <pre>{file.content}</pre>
-                  )}
-                  <button type="button" className="np-button ghost small np-remove-attachment" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
+                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
                     <X size={12} /> Remove from context
                   </button>
                 </div>
               </details>
-            ))}
+            )})}
           </div>
         )}
         <form
@@ -898,6 +884,22 @@ export function ChatWorkspace({
                   <span className="np-mode-label">{name}</span>
                 </button>
               ))}
+              {isAgent(ref) && (
+                <button
+                  type="button"
+                  className={`np-mode ${researchOn ? 'selected' : ''}`}
+                  aria-pressed={researchOn}
+                  aria-label="Deep research"
+                  disabled={run.running || (!researchOn && !hasSearchKey())}
+                  title={hasSearchKey()
+                    ? 'Research the web for each message in this thread: a plan, several searches, sources read by several free models, and a cited report. Takes minutes and 15 to 25 requests.'
+                    : 'Add an Exa key under Connections to use Deep research'}
+                  onClick={() => void toggleTool('research')}
+                >
+                  <Microscope size={13} />
+                  <span className="np-mode-label">Deep research</span>
+                </button>
+              )}
             </div>
             <div className="np-composer-send">
               {local && (
@@ -944,8 +946,10 @@ export function ChatWorkspace({
                   .join(', ')}`,
               webAuto && 'Web search is automatic (Exa)',
               routed
-                ? isAgent(ref)
-                  ? `The Free Agent may ask several of your ${pool?.models ?? 0} free models per message (at most 5 requests) and writes one checked answer; prompts go only to the models it asks.`
+                ? researchOn
+                  ? `Deep research: the Free Agent plans, searches the web with Exa, has several of your ${pool?.models ?? 0} free models read the sources, and writes a report citing them. Takes minutes and 15 to 25 requests.`
+                  : isAgent(ref)
+                  ? `The Free Agent picks from your ${pool?.models ?? 0} free models for each part of an answer and has the strongest check the result; prompts go only to the models it asks.`
                   : `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'
@@ -959,23 +963,11 @@ export function ChatWorkspace({
           <span>Shift + Enter for a new line</span>
         </div>
       </div>
-      {viewPdf && (
-        <WorkbenchDialog title={viewPdf.name} onClose={() => setViewPdf(null)}>
-          <div className="np-pdf-viewer">
-            <iframe
-              src={viewPdf.url}
-              title={viewPdf.name}
-              className="np-pdf-iframe"
-            />
-            <div className="np-pdf-footer">
-               <a href={viewPdf.url} download={viewPdf.name} className="np-button ghost small">Download</a>
-               <button className="np-button primary small" onClick={() => {
-                 window.open(viewPdf.url, '_blank');
-               }}>Open in browser</button>
-            </div>
-          </div>
-        </WorkbenchDialog>
-      )}
+      {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
+        <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
+          useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
+        }} />
+      ))}
     </div>
   );
 }

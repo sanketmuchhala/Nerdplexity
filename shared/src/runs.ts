@@ -88,6 +88,8 @@ export interface RouteModel {
   displayName?: string;
   capabilities?: { tools: Capability; vision: Capability };
   contextLength?: number;
+  /** The most output tokens the provider allows in one answer, when the catalog says. */
+  maxOutputTokens?: number;
 }
 
 /**
@@ -96,9 +98,50 @@ export interface RouteModel {
  * with several specialists and have the strongest model check and write the answer.
  */
 export interface RouteRequest {
-  strategy: 'free' | 'agent';
+  strategy: 'free' | 'agent' | 'research';
   connections: { id: string; target: ConnectionTarget }[];
   models: RouteModel[];
+  /** How the Free Agent should work, from the user's settings. Ignored by the Free Router. */
+  agent?: AgentConfig;
+  /** Deep Research: how far to search. Used with strategy 'research'. */
+  research?: { depth?: ResearchDepth };
+}
+
+/** How much Deep Research searches and reads: more sources and requests for deeper settings. */
+export type ResearchDepth = 'quick' | 'standard' | 'deep';
+
+/** A source a Deep Research report cites as [n]. */
+export interface ResearchSource {
+  n: number;
+  title: string;
+  url: string;
+  published?: string;
+  /** Checked notes taken from it. */
+  notes: number;
+}
+
+/** One model, on one connection. */
+export interface ModelChoice {
+  connectionId: string;
+  model: string;
+}
+
+/** auto: the agent decides per message. quick: always one model. thorough: always drafts (or parts) checked by a writer. */
+export type AgentBehavior = 'auto' | 'quick' | 'thorough';
+
+/**
+ * The user's Free Agent settings. Every model choice is optional: without one, the agent uses its
+ * ranking. A chosen model that cannot take a message (cooling down, missing a capability) is
+ * replaced by the ranking for that message, and the step says so.
+ */
+export interface AgentConfig {
+  behavior?: AgentBehavior;
+  /** Drafts in an ensemble, 1-3. Default 2. */
+  drafts?: number;
+  writer?: ModelChoice;
+  planner?: ModelChoice;
+  drafters?: ModelChoice[];
+  specialists?: Partial<Record<TaskKind, ModelChoice>>;
 }
 
 /** One step of the router's decision, shown with the answer. */
@@ -113,8 +156,8 @@ export interface RouteStep {
   category?: ProviderErrorCategory;
 }
 
-/** How the Free Agent handles one message. */
-export type AgentMode = 'direct' | 'ensemble' | 'plan';
+/** How the Free Agent handles one message. 'research' is Deep Research. */
+export type AgentMode = 'direct' | 'ensemble' | 'plan' | 'research';
 
 /**
  * One step of a Free Agent run. Steps are reported as they start and finish (same id).
@@ -123,18 +166,22 @@ export type AgentMode = 'direct' | 'ensemble' | 'plan';
  */
 export interface AgentStep {
   id: string;
-  role: 'strategy' | 'planner' | 'drafter' | 'specialist' | 'writer';
+  role: 'strategy' | 'planner' | 'drafter' | 'specialist' | 'writer' | 'searcher' | 'reader' | 'outliner' | 'checker';
   status: 'running' | 'done' | 'failed' | 'skipped';
   /** Safe to show: why this step or model, or why it failed. */
   reason: string;
   connectionId?: string;
   model?: string;
   mode?: AgentMode;
-  /** The part of the message a specialist answers. */
+  /** The part of the message a specialist answers; a searcher's query; a reader's page title. */
   task?: string;
+  /** The page a Deep Research reader read. */
+  url?: string;
   kind?: TaskKind;
   /** A draft or part answer, shortened, for the user to inspect. The final answer streams as deltas. */
   text?: string;
+  /** The model's reasoning for this step, when it reports any, shortened. */
+  reasoning?: string;
   durationMs?: number;
 }
 
@@ -155,6 +202,8 @@ export interface AgentOutcome {
   calls: number;
   /** The model that wrote the final answer. */
   writer: { connectionId: string; model: string };
+  /** Deep Research: the sources the report cites as [n]. */
+  sources?: ResearchSource[];
 }
 
 /** Which model answered a routed run. */
@@ -180,6 +229,8 @@ export type RunEventPayload =
   | ({ type: 'tool' } & ToolTrace)
   | ({ type: 'route' } & RouteStep)
   | ({ type: 'agent' } & AgentStep)
+  /** Live output of a Free Agent step (a draft, a plan, a part answer) as the model writes it; appended to the step with that id. */
+  | { type: 'agent_output'; id: string; channel: 'text' | 'reasoning'; text: string }
   /** A Bench job graded one item (result), or skipped planned requests after a limit; done of total requests. */
   | { type: 'bench'; result?: BenchResult; skipped?: number; done: number; total: number }
   /** loadMs: time the runtime reports spending loading the model for this run (Ollama only); a large value means a cold start. */
@@ -210,7 +261,7 @@ export type RunContentPart =
 interface RunStartBase {
   /** Client-generated; repeating a start with the same key returns the same run. */
   idempotencyKey: string;
-  /** Omission is free-only. Paid single-model requests must explicitly use any. */
+  /** Omission is free-only. Paid single-model requests must explicitly use 'any'. Routes remain free-only. */
   costPolicy?: 'free-only' | 'any';
   messages: RunMessage[];
   settings?: { temperature?: number; maxTokens?: number; numCtx?: number };

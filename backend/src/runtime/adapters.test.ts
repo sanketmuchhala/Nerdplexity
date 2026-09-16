@@ -159,6 +159,15 @@ describe('OpenAI-style streaming', () => {
     expect(result.events).toContainEqual({ type: 'model', model: 'nvidia/nemotron-3-nano-v1:free', provider: 'Nvidia' });
   });
 
+  it('sends a zero-price ceiling for free-only OpenRouter requests and removes it for explicitly paid requests', async () => {
+    for (const freeOnly of [true, false]) {
+      const { fn, calls } = fakeFetch(() => stream(sse([{ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }])));
+      await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }, { freeOnly }), fn);
+      expect(calls[0].body.provider.allow_fallbacks).toBe(false);
+      expect(calls[0].body.provider.max_price).toEqual(freeOnly ? { prompt: 0, completion: 0, request: 0, image: 0, audio: 0 } : undefined);
+    }
+  });
+
   it('categorizes quota, auth, context, and missing-model failures without leaking the key', async () => {
     // A long wait is left to the user rather than retried automatically.
     const quota = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Rate limit reached' } }, 429, { 'retry-after': '30' })).fn)).error);

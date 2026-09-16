@@ -28,6 +28,17 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm test:split
+      # Screenshots and traces of a failed browser test, to see what the page showed.
+      - name: Upload browser test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # The same backend tests against a real Postgres server, as on Railway (the rest use PGlite).
   postgres:

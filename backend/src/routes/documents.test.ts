@@ -11,5 +11,6 @@ describe('document run limits', () => {
     const document = { id: 'report', title: 'report.pdf', content: 'x'.repeat(2_000_001) };
     expect(() => validateRunRequest({ ...request, documents: [document] })).toThrow('2 MB');
     expect(() => validateRunRequest({ ...request, documents: Array.from({ length: 3 }, (_, id) => ({ ...document, id: String(id), content: 'x'.repeat(1_500_000) })) })).toThrow('4 MB');
+    expect(() => validateRunRequest({ ...request, documents: [{ ...document, content: '界'.repeat(700_000) }] })).toThrow('2 MB');
   });
 });

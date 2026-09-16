@@ -1,0 +1,1 @@
+ALTER TABLE "attachments" ADD COLUMN "pdf_base64" text;

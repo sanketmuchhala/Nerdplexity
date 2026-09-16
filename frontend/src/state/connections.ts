@@ -5,7 +5,7 @@ import { KEYED_KINDS } from '../lib/db';
 import * as store from '../lib/store';
 import { authHeaders, sessionEnded } from '../lib/api';
 import * as credentials from '../lib/credentials';
-import { isLocal, usesBaseURL } from '../lib/cost';
+import { costStatus, isLocal, usesBaseURL } from '../lib/cost';
 import { followRun, startRun } from '../workspace/runClient';
 import { apiUrl, unreachableMessage } from '../lib/backend';
 import { routerPool, type RouterPool } from '../lib/router';
@@ -109,6 +109,14 @@ const useConnections = create<ConnectionStore>((set, get) => ({
     const key = modelKey(connectionId, modelId);
     if (!connection || get().checks[key]?.status === 'running') return;
     const finish = (result: CheckState) => set(state => ({ checks: { ...state.checks, [key]: result } }));
+    const settings = await store.settings.get();
+    const freeOnly = settings?.costPolicy !== 'any';
+    const result = latestResult(get().catalog[connectionId]);
+    const cost = costStatus(connection, result?.ok ? result.models.find(model => model.id === modelId) : undefined, result?.ok ? result.execution : undefined);
+    if (freeOnly && !cost.free) {
+      finish({ status: 'failed', at: Date.now(), error: { category: 'invalid-request', message: 'Free only is on. Paid or unpriced model checks are blocked.' } });
+      return;
+    }
     finish({ status: 'running' });
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('The check timed out after 60 seconds.')), 60_000);
@@ -116,6 +124,7 @@ const useConnections = create<ConnectionStore>((set, get) => ({
       // A short prompt proves the model can run, which listing models cannot.
       const { runId } = await startRun({
         idempotencyKey: uuidv4(), target: targetFor(connection), model: modelId,
+        costPolicy: freeOnly ? 'free-only' : 'any',
         messages: [{ role: 'user', content: 'Reply with the word OK.' }], settings: { maxTokens: 64 },
       }, controller.signal);
       const terminal = await followRun(runId, 0, envelope => {

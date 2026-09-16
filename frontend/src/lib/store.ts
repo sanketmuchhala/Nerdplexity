@@ -12,6 +12,9 @@ const id = (value: string) => encodeURIComponent(value);
 export type ConversationPatch = Partial<Pick<Conversation, 'title' | 'provider' | 'model' | 'allowCharges' | 'settings' | 'workbench' | 'updatedAt'>> & { connectionId?: string | null };
 
 export const conversations = {
+  export: (conversationId: string) => api<Conversation>(`/v1/conversations/${id(conversationId)}/export`),
+  pdf: (conversationId: string, attachmentId: string, signal?: AbortSignal) => api<{ pdfBase64: string }>(`/v1/conversations/${id(conversationId)}/attachments/${id(attachmentId)}/pdf`, { signal }),
+  restorePdf: (conversationId: string, attachmentId: string, pdfBase64: string) => api(`/v1/conversations/${id(conversationId)}/attachments/${id(attachmentId)}/pdf`, { method: 'PUT', body: { pdfBase64 } }),
   list: () => api<Conversation[]>('/v1/conversations'),
   create: (conversation: Conversation) => api<Conversation>('/v1/conversations', { body: conversation }),
   update: (conversationId: string, patch: ConversationPatch) => api(`/v1/conversations/${id(conversationId)}`, { method: 'PATCH', body: patch }),

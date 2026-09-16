@@ -66,7 +66,7 @@ Starting and following are separate requests. This is essential: if the browser 
 | max output | Integer 1–128,000 |
 | context window | Integer 1,024–1,048,576 |
 | tools | Unique names from the built-in registry |
-| documents | At most 20; title ≤200 chars; content ≤100,000 chars each and ≤400,000 total |
+| documents | At most 20; title ≤200 chars; UTF-8 content ≤2 MB each and ≤4 MB total |
 | web search | Requires `{ provider: "exa", apiKey }` when `web_search` is enabled |
 
 Express also applies a 10 MB JSON-body limit before route validation. The route clones message content so later client-side mutation cannot change the server's input snapshot.
