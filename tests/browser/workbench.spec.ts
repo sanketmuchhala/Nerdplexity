@@ -399,6 +399,7 @@ test('Ollama install progress and removal reflect runtime state', async ({ page 
 
 test('calculator tool: the exact call and result stay separate from model text and persist', async ({ page }) => {
   await setup(page, 'tool-model');
+  await page.locator('summary[aria-label="Tools"]').click();
   const toggle = page.getByRole('button', { name: 'Calculator tool' });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
