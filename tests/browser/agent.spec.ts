@@ -157,6 +157,17 @@ test('while it works, the panel is open and shows each model drafting and thinki
   await expect(saved.getByText('Show its thinking').first()).toBeVisible();
 });
 
+test('without an Exa key, Deep research says what it needs and opens where the key goes', async ({ page }) => {
+  await connectAgentModels(page);
+  await chooseAgent(page);
+  await page.getByRole('button', { name: 'Deep research' }).click();
+  // Not silently disabled: it says what is missing and offers the way there.
+  await expect(page.getByRole('alert')).toContainText('Add your Exa key under Connections');
+  await expect(page.getByRole('button', { name: 'Deep research' })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Open Connections' }).click();
+  await expect(page.getByLabel('Exa API key')).toBeVisible();
+});
+
 test('Deep research plans, searches, has several models read the sources, and writes a report citing them', async ({ page }) => {
   // A research run needs six model requests in a row through the queue shared by every test's
   // models on this machine, so under load it takes minutes rather than seconds.

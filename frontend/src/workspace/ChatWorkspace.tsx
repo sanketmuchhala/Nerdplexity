@@ -64,11 +64,13 @@ export function ChatWorkspace({
   documents,
   onModels,
   onDocuments,
+  onConnections,
 }: {
   run: ReturnType<typeof useRun>;
   documents: WorkspaceDocument[];
   onModels: () => void;
   onDocuments: () => void;
+  onConnections: () => void;
 }) {
   const {
     activeConversation,
@@ -103,6 +105,8 @@ export function ChatWorkspace({
   const [showControls, setShowControls] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [showDocs, setShowDocs] = useState(false);
+  /** Deep research was asked for without an Exa key saved in this browser. */
+  const [needsExaKey, setNeedsExaKey] = useState(false);
   const [edit, setEdit] = useState<{
     messageId: string;
     content: string;
@@ -718,6 +722,15 @@ export function ChatWorkspace({
         </button>
       )}
       <div className="np-composer-area">
+        {needsExaKey && (
+          <p className="np-error" role="alert">
+            Deep research searches the web with Exa. Add your Exa key under Connections, then turn it on again. Keys are kept per address, so one saved elsewhere is not here.
+            <button className="np-button small" onClick={() => { setNeedsExaKey(false); onConnections(); }}>Open Connections</button>
+            <button className="np-icon-button" aria-label="Dismiss Exa key notice" onClick={() => setNeedsExaKey(false)}>
+              <X size={14} />
+            </button>
+          </p>
+        )}
         {actionError && (
           <div className="np-error" role="alert" style={{ whiteSpace: 'pre-line' }}>
             {actionError}
@@ -921,11 +934,16 @@ export function ChatWorkspace({
                   className={`np-mode ${researchOn ? 'selected' : ''}`}
                   aria-pressed={researchOn}
                   aria-label="Deep research"
-                  disabled={run.running || (!researchOn && !hasSearchKey())}
+                  disabled={run.running}
                   title={hasSearchKey()
                     ? 'Research the web for each message in this thread: a plan, several searches, sources read by several free models, and a cited report. Takes minutes and 15 to 25 requests.'
-                    : 'Add an Exa key under Connections to use Deep research'}
-                  onClick={() => void toggleTool('research')}
+                    : 'Deep research searches the web with Exa. Add your Exa key under Connections; keys are kept per address, so a key saved elsewhere is not here.'}
+                  onClick={() => {
+                    // Without a key there is nothing to search with: say so, and offer the way there.
+                    if (!researchOn && !hasSearchKey()) { setNeedsExaKey(true); return; }
+                    setNeedsExaKey(false);
+                    void toggleTool('research');
+                  }}
                 >
                   <Microscope size={13} />
                   <span className="np-mode-label">Deep research</span>
