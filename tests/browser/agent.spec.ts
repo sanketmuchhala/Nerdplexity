@@ -8,7 +8,7 @@ const SLOW = { timeout: 60_000 };
 const fake = `http://127.0.0.1:${Number(process.env.FAKE_PROVIDER_PORT) || 5299}`;
 // The suffix keeps prompts unique without looking like arithmetic.
 const prompt = (text: string) => `${text} [ref ${Date.now()}x${Math.random().toString(36).slice(2, 7)}]`;
-const nav = (page: Page, name: string) => page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name });
+
 
 async function connectAgentModels(page: Page) {
   await page.goto('/app/models');
@@ -22,7 +22,7 @@ async function connectAgentModels(page: Page) {
 }
 
 async function chooseAgent(page: Page) {
-  await nav(page, 'Chat').click();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
   await page.getByRole('button', { name: 'Choose model' }).click();
   await page.getByRole('button', { name: 'Use the Free Agent' }).click();
   await expect(page.getByRole('dialog', { name: 'Choose a model' })).toHaveCount(0);
@@ -68,7 +68,7 @@ test('the Free Agent drafts with two models, has the strongest check and write t
   expect(writer.messages.some(m => m.role === 'system' && m.content.includes('Draft from agent-model-30b.'))).toBe(true);
 
   // Run history still names every model.
-  await nav(page, 'Run history').click();
+  await page.getByRole('navigation', { name: 'Lab navigation' }).getByRole('button', { name: 'History' }).click();
   await expect(page.locator('.np-run-row').first()).toContainText('agent-model-70b via Free Agent · 3 requests');
 });
 
@@ -96,7 +96,7 @@ test('the Free Agent splits a message with several parts between specialists, us
   expect(helloCalls).toHaveLength(2);
   expect(new Set(helloCalls.map(call => call.model)).size).toBe(2);
 
-  await nav(page, 'Bench').click();
+  await page.getByRole('navigation', { name: 'Lab navigation' }).getByRole('button', { name: 'Bench' }).click();
   const table = page.getByLabel('Specialists');
   await expect(table.getByRole('row', { name: /^Code/ })).toContainText('agent-model-70b');
   await expect(table.getByRole('row', { name: /^Writing/ })).toContainText('agent-model-30b');
@@ -117,12 +117,12 @@ test('agent settings choose how the Free Agent behaves and which model does each
   await expect.poll(async () => (await upstream(page, quick)).length).toBe(1);
 
   // Back to automatic, with the smallest model writing the final answer and one draft.
-  await nav(page, 'Models').click();
+  await page.getByRole('navigation', { name: 'Settings navigation' }).getByRole('button', { name: 'Models' }).click();
   await settings.getByRole('radio', { name: /^Automatic/ }).check();
   await settings.getByLabel('Drafts per answer').selectOption('1');
   await expect(settings.getByLabel('Draft 2')).toHaveCount(0);
   await settings.getByLabel('Final answer').selectOption({ label: 'agent-model-8b · Fake agent' });
-  await nav(page, 'Chat').click();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
   const chosen = prompt('Solve 9 * 6 and show your work');
   await send(page, chosen);
   await expect(page.getByText('Checked final answer from agent-model-8b.')).toBeVisible();
@@ -131,7 +131,7 @@ test('agent settings choose how the Free Agent behaves and which model does each
   expect(calls.at(-1)!.model).toBe('agent-model-8b');
 
   // The settings are kept, and reset returns every part to automatic.
-  await nav(page, 'Models').click();
+  await page.getByRole('navigation', { name: 'Settings navigation' }).getByRole('button', { name: 'Models' }).click();
   await expect(settings.getByLabel('Final answer')).toHaveValue(/agent-model-8b/);
   await settings.getByRole('button', { name: 'Reset to automatic' }).click();
   await expect(settings.getByLabel('Final answer')).toHaveValue('');
@@ -174,7 +174,7 @@ test('Deep research plans, searches, has several models read the sources, and wr
   test.setTimeout(180_000);
   await connectAgentModels(page);
   // Deep research needs an Exa key.
-  await nav(page, 'Connections').click();
+  await page.getByRole('navigation', { name: 'Settings navigation' }).getByRole('button', { name: 'Connections' }).click();
   await page.getByLabel('Exa API key').fill('exa-test-key-000001');
   await page.getByRole('button', { name: 'Save key' }).click();
   await expect(page.locator('.np-web-search')).toContainText('Key saved for this tab');
