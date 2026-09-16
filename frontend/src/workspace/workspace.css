@@ -448,6 +448,7 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
   .np-sidebar { visibility: hidden; }
   .np-sidebar.open { visibility: visible; }
   .np-close-nav { display: inline-flex; position: absolute; right: 12px; top: 12px; }
+  .np-menu { display: inline-flex; }
 }
 @media (max-width: 600px) {
   .np-dialog, .np-dialog.sheet { width: calc(100% - 16px); margin: auto; max-height: calc(100dvh - 16px); height: auto; }

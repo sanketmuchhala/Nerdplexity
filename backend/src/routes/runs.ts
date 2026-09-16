@@ -87,8 +87,8 @@ export function validateRunRequest(body: any): ValidRun {
   const tools: ToolName[] = body.tools ?? [];
   if (!Array.isArray(tools) || tools.some(name => !TOOL_NAMES.includes(name)) || new Set(tools).size !== tools.length) throw new Error(`Choose tools from: ${TOOL_NAMES.join(', ')}.`);
   const documents = body.documents ?? [];
-  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
-  if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
+  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 2_000_000)) throw new Error('Attach up to 20 text documents, each under 2 MB.');
+  if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 4_000_000) throw new Error('Attached documents exceed 4 MB.');
   let search: ValidRun['search'];
   const auto = body.search?.auto === true;
   if (tools.includes('web_search') || auto) {

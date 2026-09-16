@@ -272,7 +272,7 @@ export function ChatWorkspace({
           {conversation?.branchOf && (
             <span className="np-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <GitBranch size={11} />
-              Branch
+              Branch · original retained
             </span>
           )}
           <div style={{ width: '1px', height: '14px', background: 'var(--np-line)' }} />
