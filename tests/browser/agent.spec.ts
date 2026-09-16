@@ -174,7 +174,8 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   await expect(page.getByRole('button', { name: 'Deep research' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.np-composer-footnote')).toContainText('Deep research: the Free Agent plans');
-  await expect(page.getByText(/Research report from agent-model-70b: the tower is 300 metres tall \[1\]/)).toBeVisible(SLOW);
+  // The report cites the sources it was given. Which model writes it is up to the ranking and health.
+  await expect(page.getByText(/^Research report from agent-model-\d+b: the tower is 300 metres tall \[1\], and it was built by a company \[2\]\.$/)).toBeVisible(SLOW);
   // The sources the report cites, numbered in order.
   await expect(page.getByRole('link', { name: /example\.com/ })).toHaveCount(2);
 
