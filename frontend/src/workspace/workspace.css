@@ -725,3 +725,39 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 
 .np-attachment-pdf-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; padding: 12px 0; border-block: 1px solid var(--np-line); margin-bottom: 8px; }
 .np-attachment-pdf-actions p { color: var(--np-text); margin: 0; font-weight: 500; font-size: 11px; }
+
+/* Antigravity UI: Shimmering Live Status */
+@keyframes np-shimmer {
+  0% { opacity: 0.5; filter: hue-rotate(0deg); }
+  50% { opacity: 1; filter: hue-rotate(15deg); }
+  100% { opacity: 0.5; filter: hue-rotate(0deg); }
+}
+
+.np-live-status {
+  animation: np-shimmer 2s ease-in-out infinite;
+  background: linear-gradient(90deg, var(--np-muted), var(--np-text), var(--np-muted));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 500;
+}
+
+/* Modal Backdrops using framer motion will blur via inline styles, but we can add utility classes */
+.np-backdrop-blur {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Antigravity UI: Message Actions Hover Animation */
+.np-message-actions {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.np-thread > *:hover .np-message-actions,
+.np-message:hover + .np-message-actions,
+.np-message-actions:hover {
+  opacity: 1;
+  transform: translateY(0);
+}

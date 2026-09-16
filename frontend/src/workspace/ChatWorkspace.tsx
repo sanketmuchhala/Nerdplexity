@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowDown,
   ArrowRight,
@@ -461,12 +462,13 @@ export function ChatWorkspace({
         }}
       >
         {empty ? (
-          <div className="np-welcome-minimal">
+          <motion.div className="np-welcome-minimal" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", stiffness: 300, damping: 30 }}>
             <h1>Nerdplexity</h1>
             <p>A quiet space for intelligence that runs on your terms.</p>
-            <div className="np-suggestions">
+            <motion.div className="np-suggestions" variants={{ show: { transition: { staggerChildren: 0.05 } } }} initial="hidden" animate="show">
               {suggestions.map(({ icon: Icon, title, text }) => (
-                <button
+                <motion.button
+                  variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 30 } } }}
                   key={title}
                   onClick={() => {
                     if (title === 'Work with my notes') {
@@ -482,9 +484,9 @@ export function ChatWorkspace({
                 >
                   <Icon size={18} />
                   <span>{title}</span>
-                </button>
+                </motion.button>
               ))}
-            </div>
+            </motion.div>
             {!ready && (
               <button className="np-connect-prompt" onClick={onModels}>
                 {needsKey
@@ -497,7 +499,7 @@ export function ChatWorkspace({
                 <ArrowRight size={14} />
               </button>
             )}
-          </div>
+          </motion.div>
         ) : (
           <div className="np-thread">
             {messages.map((message, index) => (
@@ -764,11 +766,12 @@ export function ChatWorkspace({
           </div>
         )}
         {!!conversation?.attachments?.length && (
-          <div className="np-attachments" aria-label="Thread attachments">
+          <motion.div layout className="np-attachments" aria-label="Thread attachments">
+            <AnimatePresence mode="popLayout">
             {conversation.attachments.map((file) => {
               const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
               return (
-              <details key={file.id} className="np-attachment">
+              <motion.details layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", stiffness: 300, damping: 30 }} key={file.id} className="np-attachment">
                 <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
                   {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
                   <span>{file.name}</span>
@@ -780,9 +783,10 @@ export function ChatWorkspace({
                     <X size={12} /> Remove from context
                   </button>
                 </div>
-              </details>
+              </motion.details>
             )})}
-          </div>
+            </AnimatePresence>
+          </motion.div>
         )}
         <form
           className="np-composer"
@@ -908,8 +912,14 @@ export function ChatWorkspace({
                   Local
                 </span>
               )}
+              <AnimatePresence mode="popLayout" initial={false}>
               {run.running ? (
-                <button
+                <motion.button
+                  key="stop"
+                  initial={{ scale: 0, rotate: -90 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  exit={{ scale: 0, rotate: 90 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   type="button"
                   className="np-send stop"
                   aria-label="Stop generation"
@@ -917,9 +927,14 @@ export function ChatWorkspace({
                   onClick={run.stop}
                 >
                   <Square size={14} fill="currentColor" />
-                </button>
+                </motion.button>
               ) : (
-                <button
+                <motion.button
+                  key="send"
+                  initial={{ scale: 0, rotate: 90 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  exit={{ scale: 0, rotate: -90 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
                   type="submit"
                   className="np-send"
                   aria-label="Send message"
@@ -929,8 +944,9 @@ export function ChatWorkspace({
                   }
                 >
                   <ArrowUp size={18} />
-                </button>
+                </motion.button>
               )}
+              </AnimatePresence>
             </div>
           </div>
         </form>

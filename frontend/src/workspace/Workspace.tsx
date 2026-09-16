@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { chooseAgentByDefault, isAgent, isRouter, routerName } from '../lib/router';
 import { RouterMark } from './RouterMark';
@@ -208,7 +209,7 @@ export default function Workspace() {
           onClick={() => setSidebar(false)}
         />
       )}
-      <aside
+      <motion.aside layout transition={{ type: "spring", stiffness: 300, damping: 30 }}
         ref={navigationRef}
         className={`np-sidebar ${sidebar ? 'open' : ''}`}
         role={sidebar ? 'dialog' : undefined}
@@ -394,8 +395,8 @@ export default function Workspace() {
             <span>LOCAL WORKSPACE</span>
           </div>
         </div>
-      </aside>
-      <main id="workspace-content" className="np-main">
+      </motion.aside>
+      <motion.main layout transition={{ type: "spring", stiffness: 300, damping: 30 }} id="workspace-content" className="np-main">
         <header className="np-topbar">
           <div>
             <button
@@ -480,7 +481,7 @@ export default function Workspace() {
             onDocuments={() => go('/app/workspace')}
           />
         )}
-      </main>
+      </motion.main>
       {palette && (
         <WorkbenchDialog
           title="Search workspace"
