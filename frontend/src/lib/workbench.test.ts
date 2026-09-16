@@ -97,7 +97,7 @@ describe('explicit request context', () => {
       { role: 'user', content: 'Explain it' },
     ]);
     expect(preview.messages[1].content).toContain('const value = 42;');
-    await expect(attachmentFromFile(new File(['x'.repeat(100_001)], 'large.txt'), [])).rejects.toThrow('100 KB');
+    await expect(attachmentFromFile(new File(['x'.repeat(20_000_001)], 'large.txt'), [])).rejects.toThrow('20 MB');
     await expect(attachmentFromFile(new File(['x'], 'archive.zip', { type: 'application/zip' }), [])).rejects.toThrow('supported');
     const image = await attachmentFromFile(new File(['image-bytes'], 'image.png', { type: 'image/png' }), []);
     const blocked = buildContext([], 'Describe it', settings, { capabilities: { vision: false } } as ModelDescriptor, undefined, [image]);

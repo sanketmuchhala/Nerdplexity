@@ -1,6 +1,6 @@
 {
-  "id": "3bb2bd0f-56f9-4de3-a43f-1b03d2b36323",
-  "prevId": "13da4529-8cbf-401f-92d9-22995205777b",
+  "id": "120fb614-52bc-400e-b2f0-cbea017af8e5",
+  "prevId": "3bb2bd0f-56f9-4de3-a43f-1b03d2b36323",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -178,6 +178,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "file_data": {
+          "name": "file_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "kind": {
           "name": "kind",

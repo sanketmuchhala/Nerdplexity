@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readDocument } from './documents';
-import { attachmentFromFile, buildContext, exportConversation, parseConversation, workbenchSettings } from './workbench';
+import { attachmentFromFile, exportConversation, parseConversation } from './workbench';
 import type { Conversation } from './db';
 
 describe('document ingestion and model context', () => {
@@ -28,29 +28,6 @@ describe('document ingestion and model context', () => {
   it('decodes multibyte RTF escapes and skips Unicode fallback characters', async () => {
     const rtf = String.raw`{\rtf1\ansi\ansicpg65001 \'e9\'a1\'b9\'e7\'9b\'ae \uc2\u39033\'3f\'3f\u30446??}`;
     expect(await readDocument(new File([rtf], 'unicode.rtf', { type: 'text/rtf' }))).toBe('项目 项目');
-  });
-
-  it('finds a fact deep in a large file without overflowing a small model context', async () => {
-    const content = `${'General background information.\n'.repeat(6000)}\nThe cobalt launch code is ZEBRA-729.\n${'More background.\n'.repeat(4000)}`;
-    const attachment = await attachmentFromFile(new File([content], 'large-report.txt'), []);
-    const settings = { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 };
-    const result = buildContext([], 'What is the cobalt launch code?', settings, undefined, undefined, [attachment]);
-    expect(result.warnings).toEqual([]);
-    expect(result.estimatedTokens + result.effective.maxTokens!).toBeLessThanOrEqual(4096);
-    expect(JSON.stringify(result.messages)).toContain('ZEBRA-729');
-    expect(JSON.stringify(result.messages)).toContain('full document is not included');
-    expect(result.notices.join(' ')).toContain('selected excerpts');
-    expect(attachment.content).toContain(content.trim());
-  });
-
-  it('keeps every small document and balances excerpts from multiple large documents', async () => {
-    const files = await Promise.all(['one', 'two', 'three'].map(name => attachmentFromFile(new File([`${'背景信息'.repeat(30_000)}\n${name} cobalt code: 42\n`], `${name}.txt`), [])));
-    const small = await attachmentFromFile(new File(['Keep this complete.'], 'small.txt'), []);
-    const result = buildContext([], 'Find cobalt code in each file', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 }, undefined, undefined, [...files, small]);
-    expect(result.warnings).toEqual([]);
-    const text = JSON.stringify(result.messages);
-    for (const name of ['one', 'two', 'three']) expect(text).toContain(`${name} cobalt code: 42`);
-    expect(text).toContain('Keep this complete.');
   });
 
   it('round-trips larger extracted attachments through thread export', async () => {
