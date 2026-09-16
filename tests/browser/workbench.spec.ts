@@ -426,6 +426,8 @@ test('calculator tool: the exact call and result stay separate from model text a
   await page.reload();
   await page.locator('.np-history-row > button:first-child').filter({ hasText: text }).click();
   await expect(page.locator('.np-thread .np-tool').filter({ hasText: 'Calculator' })).toContainText('2+3*4 = 14');
+  // The reload closed the Tools menu; the toggle is only reachable once it is open again.
+  await page.locator('summary[aria-label="Tools"]').click();
   await expect(page.getByRole('button', { name: 'Calculator tool' })).toHaveAttribute('aria-pressed', 'true');
   await page.goto('/app/runs');
   const row = page.locator('.np-run-list').getByRole('button', { name: new RegExp(text.replace(/[[\]+*?]/g, '\\$&')) }).first();
@@ -436,7 +438,7 @@ test('calculator tool: the exact call and result stay separate from model text a
 
 test('malformed tool arguments are returned to the model and the run still completes', async ({ page }) => {
   await setup(page, 'tool-model');
-    await page.locator('summary[aria-label="Tools"]').click();
+  await page.locator('summary[aria-label="Tools"]').click();
   await page.getByRole('button', { name: 'Calculator tool' }).click();
   const text = unique('malformed request');
   await send(page, text, 1);

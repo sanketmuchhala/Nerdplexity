@@ -196,7 +196,15 @@ describe('OpenAI-style streaming', () => {
     expect(context.category).toBe('context');
     const echoed = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'bad request for key sk-compat-secret' } }, 400)).fn)).error);
     expect(echoed.message).toContain('[redacted]');
-    expect(failure((await run(request(compat), fakeFetch(() => json({}, 404)).fn)).error).category).toBe('invalid-request');
+    // A catalog entry the provider will not serve is about the model, not the request: its own
+    // category, so the router can set it aside for hours instead of re-trying it on every step.
+    const phantom = failure((await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }), fakeFetch(() => json({
+      error: { message: 'No endpoints found', metadata: { provider_name: 'Nvidia', raw: 'Specified function in account is not found' } },
+    }, 404)).fn)).error);
+    expect(phantom).toMatchObject({ category: 'missing-model', retryable: false });
+    expect(phantom.scope).toBeUndefined();
+    expect(phantom.message).toMatch(/lists this model but has no working endpoint/);
+    // A transient 503 stays an ordinary outage with a short cooldown.
     expect(failure((await run(request(compat), fakeFetch(() => json({}, 503)).fn)).error)).toMatchObject({ category: 'unavailable', retryable: true });
   });
 

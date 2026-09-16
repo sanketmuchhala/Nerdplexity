@@ -14,6 +14,8 @@ export type ProviderErrorCategory =
   | 'auth'
   | 'quota'
   | 'unavailable'
+  /** The provider lists this model but will not serve it: a catalog entry with no working endpoint. */
+  | 'missing-model'
   | 'invalid-request'
   | 'context'
   | 'refused'

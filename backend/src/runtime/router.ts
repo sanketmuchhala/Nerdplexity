@@ -35,7 +35,7 @@ export const MAX_ATTEMPTS = 4;
 export const RESERVED_OUTPUT = 4096;
 
 /** Failures that happen before the model answers and may not happen on another model. A refusal is the model's decision and is never routed around. */
-const FALLBACK = new Set<ProviderErrorCategory>(['quota', 'unavailable', 'transport', 'timeout', 'invalid-request', 'context', 'auth']);
+const FALLBACK = new Set<ProviderErrorCategory>(['quota', 'unavailable', 'transport', 'timeout', 'missing-model', 'invalid-request', 'context', 'auth']);
 
 const CODE = /```|\b(function|class|def|const|compile[sd]?|stack ?trace|exception|bug|debug|refactor|regex|sql|typescript|javascript|python|rust|golang|java|c\+\+|html|css|endpoint|unit tests?|script|snippet|code)\b/i;
 // A minus sign counts only with spaces ("12 - 7"), so dates, phone numbers, and IDs ("2026-09-14") are not math.
@@ -108,11 +108,16 @@ interface ModelHealth {
   /** Exponentially weighted first-text latency. */
   ttftMs?: number;
   cooldownUntil?: number;
+  /** Why it is cooling, so the "none left" message can name the cause instead of guessing. */
+  cooldownCategory?: ProviderErrorCategory;
   lastFailureAt?: number;
 }
 
 const MAX_TRACKED = 2000;
-const COOLDOWN: Partial<Record<ProviderErrorCategory, number>> = { quota: 60_000, unavailable: 30_000, transport: 20_000, timeout: 30_000, auth: 10 * 60_000 };
+// A model the provider cannot serve at all is set aside for hours, not seconds: without that it is
+// re-ranked first on every step of every run (a free 550B model with a 1M context tops the ranking),
+// and each step wastes its first attempt discovering the same thing again.
+const COOLDOWN: Partial<Record<ProviderErrorCategory, number>> = { quota: 60_000, unavailable: 30_000, transport: 20_000, timeout: 30_000, auth: 10 * 60_000, 'missing-model': 6 * 60 * 60_000 };
 const MAX_COOLDOWN_MS = 24 * 60 * 60_000;
 
 /** An account is its provider, address, and key, so changing a key starts fresh. Keys are hashed, never kept. */
@@ -122,7 +127,7 @@ export function accountOf(owner: string, target: ResolvedTarget): string {
 
 export class RouterHealth {
   private models = new Map<string, ModelHealth>();
-  private accounts = new Map<string, number>();
+  private accounts = new Map<string, { until: number; category: ProviderErrorCategory }>();
 
   constructor(readonly now: () => number = Date.now) {}
 
@@ -144,8 +149,17 @@ export class RouterHealth {
   /** When this model can be tried again, or undefined when it can be tried now. */
   coolingUntil(account: string, model: string): number | undefined {
     const now = this.now();
-    const until = Math.max(this.accounts.get(account) ?? 0, this.peek(account, model)?.cooldownUntil ?? 0);
+    const until = Math.max(this.accounts.get(account)?.until ?? 0, this.peek(account, model)?.cooldownUntil ?? 0);
     return until > now ? until : undefined;
+  }
+
+  /** Why this model is cooling: the account's reason first, since it covers every model on it. */
+  coolingCause(account: string, model: string): ProviderErrorCategory | undefined {
+    const now = this.now();
+    const account_ = this.accounts.get(account);
+    if (account_ && account_.until > now) return account_.category;
+    const entry = this.peek(account, model);
+    return entry?.cooldownUntil && entry.cooldownUntil > now ? entry.cooldownCategory : undefined;
   }
 
   success(account: string, model: string, ttftMs?: number) {
@@ -166,8 +180,8 @@ export class RouterHealth {
     const base = COOLDOWN[error.category];
     if (base === undefined) return;
     const until = now + Math.min(Math.max(error.retryAfterMs ?? base, 1000), MAX_COOLDOWN_MS);
-    if (error.scope === 'account') this.accounts.set(account, until);
-    else entry.cooldownUntil = until;
+    if (error.scope === 'account') this.accounts.set(account, { until, category: error.category });
+    else { entry.cooldownUntil = until; entry.cooldownCategory = error.category; }
   }
 }
 
@@ -180,8 +194,10 @@ const PER_MINUTE: Partial<Record<ConnectionKind, number>> = {
   openrouter: 20, groq: 30, cerebras: 5, gemini: 15, mistral: 60, sambanova: 20, huggingface: 30, deepseek: 60, openai: 60, anthropic: 60,
 };
 const DEFAULT_PER_MINUTE = 20;
+/** Share of the published per-minute limit to aim for, leaving room for retries and other clients. */
+const HEADROOM = 0.8;
 
-const sleepUntil = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+export const sleepUntil = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
   const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, ms);
   const stop = () => { clearTimeout(timer); reject(signal.reason ?? new Error('Canceled')); };
   signal.addEventListener('abort', stop, { once: true });
@@ -196,9 +212,13 @@ export class AccountPacer {
 
   constructor(private now: () => number = Date.now, private sleep = sleepUntil) {}
 
-  /** The gap this provider's free limit implies between two requests. */
+  /**
+   * The gap this provider's free limit implies between two requests. We aim at a fraction of the
+   * published limit: spacing exactly at the limit leaves no room for a retry, a second tab, or a
+   * slow clock, and one refusal on a shared free-model limit cools every model on the account.
+   */
   gap(kind: ConnectionKind, execution: ExecutionLocation): number {
-    return execution === 'local' ? 0 : Math.ceil(60_000 / (PER_MINUTE[kind] ?? DEFAULT_PER_MINUTE));
+    return execution === 'local' ? 0 : Math.ceil(60_000 / ((PER_MINUTE[kind] ?? DEFAULT_PER_MINUTE) * HEADROOM));
   }
 
   /** Waits until this account's next slot, and books it. */
@@ -226,6 +246,8 @@ export interface Ranking {
   ranked: RankedCandidate[];
   /** Why candidates were left out, by reason, for the message when none remain. */
   excluded: Record<string, number>;
+  /** What most of the cooling-down candidates are cooling from, so the message can say so. */
+  coolingCause?: ProviderErrorCategory;
   /** Soonest time a cooling-down candidate becomes available. */
   nextAvailableAt?: number;
 }
@@ -255,6 +277,7 @@ const REASONING_MODEL = /(^|[-/_.])r1\b|reason|think|qwq|magistral|math/i;
 
 export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, health: RouterHealth, owner: string, bench?: BenchIndex): Ranking {
   const excluded: Record<string, number> = {};
+  const causes: Partial<Record<ProviderErrorCategory, number>> = {};
   const exclude = (reason: string) => { excluded[reason] = (excluded[reason] ?? 0) + 1; };
   let nextAvailableAt: number | undefined;
   const ranked: RankedCandidate[] = [];
@@ -266,7 +289,13 @@ export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, 
     if (contextLength && task.estimatedTokens > contextLength) { exclude('context too small'); continue; }
     const account = accountOf(owner, target);
     const cooling = health.coolingUntil(account, model);
-    if (cooling) { exclude('cooling down after a failure'); nextAvailableAt = Math.min(nextAvailableAt ?? cooling, cooling); continue; }
+    if (cooling) {
+      exclude('cooling down after a failure');
+      const cause = health.coolingCause(account, model);
+      if (cause) causes[cause] = (causes[cause] ?? 0) + 1;
+      nextAvailableAt = Math.min(nextAvailableAt ?? cooling, cooling);
+      continue;
+    }
 
     const why: string[] = [];
     const size = parameterBillions(model);
@@ -326,7 +355,10 @@ export function rankCandidates(candidates: RouteCandidate[], task: TaskProfile, 
     ranked.push({ candidate, score, why });
   }
   ranked.sort((a, b) => b.score - a.score || a.candidate.model.localeCompare(b.candidate.model) || a.candidate.connectionId.localeCompare(b.candidate.connectionId));
-  return { ranked, excluded, ...(nextAvailableAt !== undefined ? { nextAvailableAt } : {}) };
+  // The cause most of the cooling models share, so "none left" can name it rather than guess.
+  const coolingCause = (Object.entries(causes) as [ProviderErrorCategory, number][])
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+  return { ranked, excluded, ...(coolingCause ? { coolingCause } : {}), ...(nextAvailableAt !== undefined ? { nextAvailableAt } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +389,8 @@ export interface RouterDeps {
   fetchImpl?: FetchFn;
   /** Serializes models on this machine; the run itself is not queued because most candidates are remote. */
   enqueue?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /** Waits out a short cooldown. Replaced in tests so a wait does not take a real minute. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
 export const TASK_LABEL: Record<TaskKind, string> = {
@@ -368,6 +402,19 @@ function seconds(ms: number) {
   return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`;
 }
 
+/**
+ * What to tell the user when every model is set aside. The reason matters: a rejected key is fixed
+ * in seconds by pasting a new one, a used-up daily allowance is not fixed by waiting a minute, and a
+ * model the provider never serves is not the user's problem at all. Saying "per-minute limits" for
+ * all three sent the owner chasing the wrong thing twice.
+ */
+function coolingAdvice(cause: ProviderErrorCategory | undefined): string {
+  if (cause === 'auth') return 'The provider rejected the API key, so every model on that account is set aside. Check the key under Connections; saving a working key clears this at once, because a new key counts as a new account.';
+  if (cause === 'missing-model') return 'The provider lists these models but has no working endpoint for them. They are set aside for a few hours; this is the provider\'s catalog, not your key.';
+  if (cause === 'quota') return 'Free models have per-account limits: OpenRouter allows 20 requests a minute and 50 a day, or 1,000 a day once an account has bought $10 of credit. Deep Research uses 10 to 25 requests per run. Connecting another provider (Groq, Cerebras, Gemini) spreads the load.';
+  return 'Free models have per-minute and daily limits on each account; connecting another provider (Groq, Cerebras, Gemini) spreads the load.';
+}
+
 export function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderError): ProviderFailure {
   const reasons = Object.entries(ranking.excluded).map(([reason, count]) => `${count} ${reason}`);
   const wait = ranking.nextAvailableAt !== undefined ? ranking.nextAvailableAt - now : undefined;
@@ -377,7 +424,7 @@ export function noneLeft(ranking: Ranking, tried: number, now: number, last?: Pr
     reasons.length ? `Left out: ${reasons.join(', ')}.` : '',
     wait !== undefined ? `The next one is available in ${seconds(wait)}.` : '',
     // Free models share their provider's limits, so one account can run out all at once.
-    cooling ? 'Free models have per-minute and daily limits on each account; connecting another provider (Groq, Cerebras, Gemini) spreads the load.' : '',
+    cooling ? coolingAdvice(ranking.coolingCause ?? last?.category) : '',
   ];
   return new ProviderFailure({
     category: last?.category ?? (wait !== undefined ? 'quota' : 'invalid-request'),
@@ -429,7 +476,35 @@ export type AttemptResult =
  * refusal, the failure is thrown, because switching models would splice two answers together or
  * shop for a model that complies. Returns the answer text as well as streaming it through hooks.
  */
-export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext, hooks: AttemptHooks = {}): Promise<AttemptResult> {
+/** The vendor that actually runs a model ("nvidia/nemotron-3-ultra-550b-a55b:free" -> "nvidia"). */
+const vendorOf = (candidate: RouteCandidate) =>
+  (candidate.model.includes('/') ? candidate.model.split('/', 1)[0] : candidate.connectionId).toLowerCase();
+
+/**
+ * The ranking, reordered so consecutive attempts prefer different vendors while each vendor keeps
+ * its own order. Ranking by size puts one vendor's family at the top together (OpenRouter's two
+ * largest free models are both NVIDIA), so a vendor-wide outage could use up a two-attempt step
+ * before any other vendor was asked. The best model is still tried first; only the fallbacks move.
+ */
+export function spreadByVendor(ranked: RankedCandidate[]): RankedCandidate[] {
+  const groups = new Map<string, RankedCandidate[]>();
+  for (const entry of ranked) {
+    const vendor = vendorOf(entry.candidate);
+    const group = groups.get(vendor);
+    if (group) group.push(entry);
+    else groups.set(vendor, [entry]);
+  }
+  if (groups.size < 2) return ranked;
+  const queues = [...groups.values()];
+  const spread: RankedCandidate[] = [];
+  for (let round = 0; spread.length < ranked.length; round++) {
+    for (const queue of queues) if (queue[round]) spread.push(queue[round]);
+  }
+  return spread;
+}
+
+export async function tryInOrder(list: RankedCandidate[], ctx: AttemptContext, hooks: AttemptHooks = {}): Promise<AttemptResult> {
+  const ranked = spreadByVendor(list);
   let attempts = 0;
   let last: ProviderError | undefined;
   let previous: string | undefined;

@@ -19,7 +19,8 @@
     "test:split": "playwright test -c playwright.split.config.ts",
     "ci:no-emoji": "node ./scripts/no-emoji-check.mjs",
     "deadcode": "node ./scripts/deadcode-analyzer.mjs",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "research": "node backend/scripts/research-run.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

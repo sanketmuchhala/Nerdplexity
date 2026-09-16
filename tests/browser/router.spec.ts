@@ -38,7 +38,9 @@ test('the Free Router tries the best free model, falls back when it is rate limi
   await expect(page.locator('.np-provenance')).toHaveCount(0);
   const decision = page.getByLabel('Free Router decision');
   await expect(decision).toContainText('1 fallback');
-  await decision.locator('summary').click();
+  // The panel's own summary, not the nested "View N recovered failures" one inside it.
+  await decision.locator('> summary').click();
+  await decision.locator('.np-route-diagnostics > summary').click();
   await expect(decision).toContainText('limit-model-70b');
   await expect(decision).toContainText('rate limiting');
 
