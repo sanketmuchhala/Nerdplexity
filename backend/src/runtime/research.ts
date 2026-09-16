@@ -2,7 +2,7 @@ import type { ResearchDepth, ResearchSource, RunMessage } from '@app/types';
 import { enqueueLocal } from '../queue/localQueue.js';
 import { clip, describe, lastUserText, ranked, specialists, stepRunner, sumUsage, withChoice, withNote } from './agent.js';
 import type { RunContext, RunExecutor } from './runs.js';
-import { AttemptContext, noneLeft, profileTask, rankCandidates, RankedCandidate, RoutedRun, RouterDeps, tryInOrder } from './router.js';
+import { AttemptContext, noneLeft, profileTask, rankCandidates, RankedCandidate, RoutedRun, RouterDeps, sleepUntil, tryInOrder } from './router.js';
 import { exaPages, WebPage } from './webSearch.js';
 
 // Deep Research: plan the research from several perspectives, search the web, have several free
@@ -35,6 +35,8 @@ export const RESEARCH_LIMITS = {
   reportTokens: 8000,
   /** Times the report may be continued after hitting the model's output limit. */
   continuations: 3,
+  /** Longest the report waits for a rate-limited pool before giving up on a run that has notes. */
+  writerWaitMs: 90_000,
   /** Notes taken from the search engine's extracts when a reader finds none. */
   extractNotes: 3,
   quote: { min: 12, max: 400 },
@@ -466,7 +468,7 @@ function earlier(messages: RunMessage[]): string {
 }
 
 export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
-  const { health, bench, fetchImpl = fetch, enqueue = enqueueLocal } = deps;
+  const { health, bench, fetchImpl = fetch, enqueue = enqueueLocal, sleep = sleepUntil } = deps;
   return async ({ signal, emit }: RunContext) => {
     const apiKey = run.search?.apiKey;
     if (!apiKey) throw new Error('Deep research needs an Exa API key. Add one in Connections.');
@@ -620,12 +622,15 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     if (!allNotes.length) emit({ type: 'status', message: 'No usable sources were found, so this answer comes from what the models know.' });
     const writerMessages = withNote(messages, note);
     const maxTokens = run.request.maxTokens === undefined ? undefined : Math.max(run.request.maxTokens, RESEARCH_LIMITS.reportTokens);
-    const writerRanking = rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens ?? RESEARCH_LIMITS.reportTokens), kind: task.kind }, health, run.owner, bench);
-    const writers = withChoice(writerRanking.ranked, config.writer, 'writer').list;
     const started = Date.now();
     let report = '';
     debug(`writing from ${allNotes.length} notes across ${sources.length} sources${maxTokens === undefined ? ' with automatic output capacity' : `, up to ${maxTokens} tokens`}`);
-    const result = await tryInOrder(writers, context({ messages: writerMessages, request: { ...run.request, maxTokens }, maxAttempts: RESEARCH_LIMITS.attempts.writer }), {
+
+    const rankWriters = () => {
+      const ranking = rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens ?? RESEARCH_LIMITS.reportTokens), kind: task.kind }, health, run.owner, bench);
+      return { ranking, list: withChoice(ranking.ranked, config.writer, 'writer').list };
+    };
+    const attemptReport = (writers: RankedCandidate[]) => tryInOrder(writers, context({ messages: writerMessages, request: { ...run.request, maxTokens }, maxAttempts: RESEARCH_LIMITS.attempts.writer }), {
       trying: (entry: RankedCandidate, attempt, previous) => steps.step({
         id: 'writer', role: 'writer', status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model,
         reason: `${attempt === 1 ? '' : `After ${previous} failed: `}${allNotes.length ? `writing from ${allNotes.length} checked notes from ${sources.length} sources; ` : ''}${describe(entry)}`,
@@ -633,7 +638,34 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
       failed: (entry, _attempt, error) => steps.step({ id: 'writer', role: 'writer', status: 'failed', connectionId: entry.candidate.connectionId, model: entry.candidate.model, reason: error.message }),
       event: event => { if (event.type === 'delta') report += event.text; emit(event); },
     });
+
+    let { ranking: writerRanking, list: writers } = rankWriters();
+    let result = await attemptReport(writers);
     steps.addCalls(result.attempts);
+
+    // The run has already spent minutes searching, reading, and checking quotes. Throwing all of
+    // that away because the account is a minute into a rate limit is the worst possible outcome, so
+    // the report waits for the pool once rather than failing with the notes in hand. Nothing has
+    // been streamed yet: tryInOrder throws instead of returning when a model failed after output.
+    if (!result.ok && allNotes.length && !signal.aborted) {
+      const fresh = rankWriters();
+      const wait = fresh.ranking.nextAvailableAt === undefined ? undefined : fresh.ranking.nextAvailableAt - health.now();
+      if (!fresh.list.length && wait !== undefined && wait > 0 && wait <= RESEARCH_LIMITS.writerWaitMs) {
+        steps.step({
+          id: 'writer', role: 'writer', status: 'running',
+          reason: `Every model is briefly unavailable (${Math.ceil(wait / 1000)}s). Waiting rather than losing the ${allNotes.length} checked notes from ${sources.length} sources.`,
+        });
+        emit({ type: 'status', message: `Waiting ${Math.ceil(wait / 1000)}s for a free model to write the report.` });
+        await sleep(wait + 1000, signal);
+        // The wait is over, so an account set aside earlier in this run is worth trying again.
+        blockedAccounts.clear();
+        const retry = rankWriters();
+        writerRanking = retry.ranking;
+        writers = retry.list;
+        result = await attemptReport(writers);
+        steps.addCalls(result.attempts);
+      }
+    }
     if (!result.ok) throw noneLeft({ ...writerRanking, ranked: writers }, result.attempts, health.now(), result.last);
     steps.usages.push(result.done.usage);
     const { candidate } = result.ranked;

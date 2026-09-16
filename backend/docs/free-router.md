@@ -248,7 +248,8 @@ The router walks the sorted list:
 | `unavailable` | Yes | 5xx, provider overloaded. |
 | `transport` | Yes | Connection failed before any output. |
 | `timeout` | Yes | |
-| `invalid-request` | Yes | Often "this model does not support X" or a retired model; another model may accept it. |
+| `missing-model` | Yes | A 404: the provider lists this model but has no working endpoint for it. Cools the model down for 6 hours (section 9). |
+| `invalid-request` | Yes | Often "this model does not support X"; another model may accept it. |
 | `context` | Yes | Another model may have a larger context. |
 | `auth` | Yes | Blocks every model on that account for this run and cools the account down. |
 | `refused` | **No** | A refusal is the model's decision. Routing around it would shop for a model that complies. |
@@ -268,7 +269,7 @@ The router walks the sorted list:
 
 Free models share their provider's limits: OpenRouter's free models allow about 20 requests a minute for the whole account, Groq 30, Cerebras 5. A Free Agent message sends several requests at once, and a Deep Research run sends 10 to 25, so a burst can be refused, and one refusal on a shared free-model limit cools every model on that account at once.
 
-`AccountPacer` (one per server, shared by every run) therefore books a slot before each request: one request per account every `60,000 / requests-per-minute` milliseconds, so OpenRouter is asked at most every 3 seconds, Groq every 2, Cerebras every 12. Parallel steps wait their turn rather than arriving together; models on this machine are not spaced, because the local queue already serializes them. Different accounts run independently, so connecting more providers makes a run faster as well as more reliable.
+`AccountPacer` (one per server, shared by every run) therefore books a slot before each request: one request per account every `60,000 / (requests-per-minute x 0.8)` milliseconds, so OpenRouter is asked at most every 3.75 seconds, Groq every 2.5, Cerebras every 15. The pace aims at **80% of the published limit** rather than at it: spacing exactly at the limit leaves no room for a retry, a second browser tab, or a slow clock, and the refusal that follows cools every model on the account. Parallel steps wait their turn rather than arriving together; models on this machine are not spaced, because the local queue already serializes them. Different accounts run independently, so connecting more providers makes a run faster as well as more reliable.
 
 ### Health
 
@@ -292,7 +293,10 @@ A failure sets a cooldown on the model (or, for account-wide failures, on every 
 | `timeout` | 30 s | |
 | `transport` | 20 s | |
 | `auth` | 10 min | |
+| `missing-model` | 6 hours | |
 | others (`invalid-request`, `context`, `refused`, `unknown`) | none | |
+
+`missing-model` is long on purpose. A provider catalog can list a model it will not serve: OpenRouter lists free NVIDIA models whose upstream function is gone, priced at $0 with a 1M context, which puts them first in the ranking for every task. Without a long cooldown, each step of each run spends its first attempt rediscovering the same 404. The cooldown is on that model only, never the account, and other models are unaffected.
 
 Cooldowns are at least 1 second and at most 24 hours. A success clears the model's cooldown. While cooling down, a model is left out of routing entirely (section 6).
 

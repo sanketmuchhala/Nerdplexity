@@ -368,3 +368,65 @@ describe('Deep Research runs', () => {
     expect(world.calls.map(c => c.role)).toEqual(['planner', 'writer']);
   });
 });
+
+describe('a research run that has already done the work', () => {
+  // A standard run spends minutes searching, reading, and checking quotes. Losing all of it because
+  // the account is sixty seconds into OpenRouter's free per-minute limit is the worst outcome
+  // available, so the report waits for the pool once instead of failing with the notes in hand.
+  const freeLimit = () => new Response(
+    JSON.stringify({ error: { message: 'Rate limit exceeded: free-models-per-day', code: 429 } }),
+    { status: 429, headers: { 'content-type': 'application/json' } },
+  );
+
+  it('waits out a short rate limit rather than throwing away its checked notes', async () => {
+    const world = fakeWorld();
+    let writerCalls = 0;
+    const fetchImpl = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+      const body = JSON.parse(String(init.body ?? '{}'));
+      const system = (body.messages ?? []).filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
+      const isWriter = !String(url).includes('api.exa.ai') && /research report that answers/.test(system);
+      if (isWriter && ++writerCalls === 1) return freeLimit();
+      return world.fn(url, init);
+    }) as typeof fetch;
+
+    // A clock the fake wait moves forward, so the cooldown really expires without a real minute.
+    let now = Date.now();
+    const slept: number[] = [];
+    const events: ProgressPayload[] = [];
+    const executor = researchExecutor(
+      { owner: 'u', candidates: models(), request: { maxTokens: 512 }, messages: user('How tall is the Eiffel Tower and how many people visit it?'), tools: [], documents: [], search: { apiKey: 'exa-key-123456' }, research: { depth: 'standard' } },
+      { health: new RouterHealth(() => now), fetchImpl, enqueue: t => t(), sleep: async ms => { slept.push(ms); now += ms; } },
+    );
+    const result = await executor({ signal: new AbortController().signal, emit: e => events.push(e) });
+
+    const text = events.flatMap(e => e.type === 'delta' ? [e.text] : []).join('');
+    expect(text).toMatch(/330 m tall \[1\]/);
+    expect(result.agent?.mode).toBe('research');
+    // It waited once, for about the cooldown, and said so.
+    expect(slept).toHaveLength(1);
+    expect(slept[0]).toBeGreaterThan(50_000);
+    expect(events.some(e => e.type === 'status' && /Waiting \d+s for a free model/.test(e.message))).toBe(true);
+    const steps = events.filter((e): e is Extract<ProgressPayload, { type: 'agent' }> => e.type === 'agent');
+    expect(steps.some(s => s.id === 'writer' && /Waiting rather than losing the \d+ checked notes/.test(s.reason ?? ''))).toBe(true);
+  });
+
+  it('does not wait when there are no notes to save', async () => {
+    const world = fakeWorld({ noPages: true });
+    const fetchImpl = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+      const body = JSON.parse(String(init.body ?? '{}'));
+      const system = (body.messages ?? []).filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
+      // Everything that is not a search, a plan, a read, or an outline is the report.
+      const other = /You plan web research|You read one web page|You outline a research report/.test(system);
+      if (!String(url).includes('api.exa.ai') && !other) return freeLimit();
+      return world.fn(url, init);
+    }) as typeof fetch;
+    let now = Date.now();
+    const slept: number[] = [];
+    const executor = researchExecutor(
+      { owner: 'u', candidates: models(), request: { maxTokens: 512 }, messages: user('How tall is the Eiffel Tower?'), tools: [], documents: [], search: { apiKey: 'exa-key-123456' }, research: { depth: 'standard' } },
+      { health: new RouterHealth(() => now), fetchImpl, enqueue: t => t(), sleep: async ms => { slept.push(ms); now += ms; } },
+    );
+    await expect(executor({ signal: new AbortController().signal, emit: () => {} })).rejects.toThrow();
+    expect(slept).toEqual([]);
+  });
+});

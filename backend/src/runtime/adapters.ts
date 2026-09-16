@@ -156,7 +156,14 @@ export function failureFromStatus(status: number, detail: string, target: Resolv
     // OpenRouter's free-model limit counts every free model on the account.
     FREE_ACCOUNT_LIMIT.test(text),
   );
-  if (status === 404) return make('invalid-request', `${label} could not find this model.${text ? ` ${text}` : ''}`, false);
+  // A catalog can list a model the provider cannot actually serve (OpenRouter lists free NVIDIA
+  // models whose upstream function is gone). That is about the model, not the request, and it does
+  // not come back in a minute, so it gets its own category and a long cooldown in the router.
+  if (status === 404) return make(
+    'missing-model',
+    `${label} lists this model but has no working endpoint for it right now.${text ? ` ${text}` : ''}`,
+    false,
+  );
   if (status === 400 || status === 413 || status === 422) {
     const context = /context|too long|too many tokens|maximum.*tokens|token limit|prompt is too long/i.test(text);
     return make(context ? 'context' : 'invalid-request', `${label} rejected the request${text ? `: ${text}` : '.'}`, false);

@@ -3,7 +3,7 @@ import type { RunEnvelope, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import { ProviderFailure } from './adapters.js';
 import { RunRegistry, type ProgressPayload } from './runs.js';
-import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT, AccountPacer, tryInOrder } from './router.js';
+import { accountOf, benchIndex, noneLeft, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT, AccountPacer, tryInOrder } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const sse = (records: unknown[], done = true) => records.map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + (done ? 'data: [DONE]\n\n' : '');
@@ -53,15 +53,18 @@ describe('spacing requests to one account', () => {
     return { pacer, waits, tick: (ms: number) => { now += ms; } };
   };
 
-  it('spaces requests by what the provider allows a minute, and not at all on this machine', async () => {
+  it('spaces requests below what the provider allows a minute, and not at all on this machine', async () => {
     const { pacer, waits } = paced();
     const signal = new AbortController().signal;
-    // OpenRouter's free models allow 20 a minute: one request every three seconds.
+    // OpenRouter's free models allow 20 a minute. We aim at 80% of that, so a retry or a second tab
+    // does not push the account over a limit whose refusal cools every model on it.
     for (let i = 0; i < 3; i++) await pacer.take('account-a', 'openrouter', 'remote', signal);
-    expect(waits).toEqual([3000, 3000]);
-    expect(pacer.gap('groq', 'remote')).toBe(2000);
-    expect(pacer.gap('cerebras', 'remote')).toBe(12_000);
+    expect(waits).toEqual([3750, 3750]);
+    expect(pacer.gap('groq', 'remote')).toBe(2500);
+    expect(pacer.gap('cerebras', 'remote')).toBe(15_000);
     expect(pacer.gap('ollama', 'local')).toBe(0);
+    // Always slower than the published limit, never faster.
+    expect(pacer.gap('openrouter', 'remote')).toBeGreaterThan(60_000 / 20);
   });
 
   it('keeps each account on its own schedule, and waits no longer than needed', async () => {
@@ -70,7 +73,7 @@ describe('spacing requests to one account', () => {
     await pacer.take('account-a', 'openrouter', 'remote', signal);
     await pacer.take('account-b', 'openrouter', 'remote', signal);
     expect(waits).toEqual([]);
-    tick(3000);
+    tick(pacer.gap('openrouter', 'remote'));
     await pacer.take('account-a', 'openrouter', 'remote', signal);
     expect(waits).toEqual([]);
   });
@@ -88,8 +91,8 @@ describe('spacing requests to one account', () => {
       signal: new AbortController().signal, fetchImpl, enqueue: task => task(), maxAttempts: 1, blockedAccounts: new Set(), pacer,
     });
     await Promise.all([tryInOrder([ranked[0]], context()), tryInOrder([ranked[1]], context())]);
-    // The first goes at once; the second waits for the account's next slot, three seconds later.
-    expect(waits).toEqual([3000]);
+    // The first goes at once; the second waits for the account's next slot.
+    expect(waits).toEqual([pacer.gap('openrouter', 'remote')]);
     expect(sent).toBe(2);
   });
 });
@@ -360,5 +363,69 @@ describe('route validation', () => {
     const run = validateRunRequest({ ...base, tools: ['search_documents'], documents, route: route([{ connectionId: 'openrouter', model: 'remote' }, { connectionId: 'lm', model: 'local' }], connections) });
     expect(run.route?.candidates.map(c => c.model)).toEqual(['local']);
     expect(() => validateRunRequest({ ...base, tools: ['search_documents'], documents, route: route([{ connectionId: 'openrouter', model: 'remote' }]) })).toThrow(/Document tools run only on models on this machine/);
+  });
+});
+
+describe('a model the provider lists but cannot serve', () => {
+  // OpenRouter lists free NVIDIA models whose upstream function is gone: the catalog says $0 with a
+  // 1M context, and every call returns 404. Ranked by size and context it is first for every step,
+  // so without a cooldown each step of each run wastes its first attempt discovering this again.
+  const missing = () => new Response(JSON.stringify({ error: { message: 'No endpoints found', code: 404, metadata: {
+    provider_name: 'Nvidia', raw: '{"status":404,"detail":"Specified function in account is not found"}' } } }),
+    { status: 404, headers: { 'content-type': 'application/json' } });
+
+  it('is called once, then set aside for hours instead of being tried again on every step', async () => {
+    const providers = fakeProviders({ 'nvidia/phantom-550b:free': missing, 'meta/real-70b:free': () => stream(answer('Hi')) });
+    const health = new RouterHealth();
+    const candidates = [candidate('nvidia/phantom-550b:free', { contextLength: 1_000_000 }), candidate('meta/real-70b:free')];
+
+    const first = await execute({ candidates }, providers.fn, health);
+    expect(first.text).toBe('Hi');
+    expect(providers.asked).toEqual(['nvidia/phantom-550b:free', 'meta/real-70b:free']);
+
+    // Three more runs: the phantom is never asked again.
+    for (let i = 0; i < 3; i++) await execute({ candidates }, providers.fn, health);
+    expect(providers.asked.filter(m => m === 'nvidia/phantom-550b:free')).toHaveLength(1);
+
+    const account = accountOf('u1', openrouter);
+    expect(health.coolingCause(account, 'nvidia/phantom-550b:free')).toBe('missing-model');
+    // Hours, not the 30 seconds an ordinary outage gets.
+    expect(health.coolingUntil(account, 'nvidia/phantom-550b:free')! - Date.now()).toBeGreaterThan(60 * 60_000);
+  });
+
+  it('cools only that model, never the account, and still falls through to the next model', async () => {
+    const providers = fakeProviders({ 'nvidia/phantom-550b:free': missing, 'meta/real-70b:free': () => stream(answer('Fine')) });
+    const health = new RouterHealth();
+    const account = accountOf('u1', openrouter);
+    await execute({ candidates: [candidate('nvidia/phantom-550b:free', { contextLength: 1_000_000 }), candidate('meta/real-70b:free')] }, providers.fn, health);
+    expect(health.coolingUntil(account, 'meta/real-70b:free')).toBeUndefined();
+  });
+});
+
+describe('saying why every model is set aside', () => {
+  const ranking = (category: 'auth' | 'quota' | 'missing-model', scope?: 'account') => {
+    const health = new RouterHealth();
+    const account = accountOf('u1', openrouter);
+    health.failure(account, 'm1', { category, message: 'x', retryable: false, ...(scope ? { scope } : {}) });
+    return rankCandidates([candidate('m1')], profileTask(ask('Hi'), [], 256), health, 'u1');
+  };
+
+  it('names a rejected key rather than blaming rate limits', () => {
+    const { message } = noneLeft(ranking('auth', 'account'), 0, Date.now()).error;
+    expect(message).toMatch(/rejected the API key/);
+    expect(message).toMatch(/saving a working key clears this at once/i);
+    expect(message).not.toMatch(/per-minute/);
+  });
+
+  it('says a missing model is the provider catalog, not the user', () => {
+    const { message } = noneLeft(ranking('missing-model'), 0, Date.now()).error;
+    expect(message).toMatch(/no working endpoint/);
+    expect(message).toMatch(/not your key/);
+  });
+
+  it('gives the real free-tier numbers for a used-up allowance', () => {
+    const { message } = noneLeft(ranking('quota', 'account'), 0, Date.now()).error;
+    expect(message).toMatch(/20 requests a minute and 50 a day/);
+    expect(message).toMatch(/\$10 of credit/);
   });
 });
