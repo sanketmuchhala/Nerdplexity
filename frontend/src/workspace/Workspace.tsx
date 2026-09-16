@@ -43,23 +43,13 @@ import { BackendNotice } from './BackendNotice';
 import './workspace.css';
 
 const destinations = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare, path: '/app' },
-  { id: 'models', label: 'Models', icon: Cpu, path: '/app/models' },
-  {
-    id: 'connections',
-    label: 'Connections',
-    icon: Settings2,
-    path: '/app/connections',
-  },
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    icon: FolderOpen,
-    path: '/app/workspace',
-  },
-  { id: 'runs', label: 'Run history', icon: Clock3, path: '/app/runs' },
-  { id: 'compare', label: 'Compare', icon: GitCompare, path: '/app/compare' },
-  { id: 'bench', label: 'Bench', icon: FlaskConical, path: '/app/bench' },
+  { id: 'chat', label: 'Chat', icon: MessageSquare, path: '/app', section: 'app' },
+  { id: 'workspace', label: 'Library', icon: FolderOpen, path: '/app/workspace', section: 'app' },
+  { id: 'runs', label: 'History', icon: Clock3, path: '/app/runs', section: 'lab' },
+  { id: 'compare', label: 'Compare', icon: GitCompare, path: '/app/compare', section: 'lab' },
+  { id: 'bench', label: 'Bench', icon: FlaskConical, path: '/app/bench', section: 'lab' },
+  { id: 'models', label: 'Models', icon: Cpu, path: '/app/models', section: 'settings' },
+  { id: 'connections', label: 'Connections', icon: Settings2, path: '/app/connections', section: 'settings' },
 ];
 
 export default function Workspace() {
@@ -283,18 +273,28 @@ export default function Workspace() {
         </button>
         <div className="np-sidebar-label">WORKSPACE</div>
         <nav aria-label="Main navigation">
-          {destinations.map(({ id, label, icon: Icon, path }) => (
-            <button
-              key={id}
-              className={`np-nav-item ${current.id === id ? 'active' : ''}`}
-              aria-current={current.id === id ? 'page' : undefined}
-              onClick={() => go(path)}
-            >
-              <Icon size={16} />
-              <span>{label}</span>
-              {id === 'workspace' && documents.length > 0 && (
-                <small>{documents.length}</small>
-              )}
+          {destinations.filter(d => d.section === 'app').map(({ id, label, icon: Icon, path }) => (
+            <button key={id} className={`np-nav-item ${current.id === id ? 'active' : ''}`} aria-current={current.id === id ? 'page' : undefined} onClick={() => go(path)}>
+              <Icon size={16} /> <span>{label}</span>
+              {id === 'workspace' && documents.length > 0 && <small>{documents.length}</small>}
+              {current.id === id && <span className="np-nav-indicator" />}
+            </button>
+          ))}
+        </nav>
+        <div className="np-sidebar-label" style={{ marginTop: '16px' }}>LAB</div>
+        <nav aria-label="Lab navigation">
+          {destinations.filter(d => d.section === 'lab').map(({ id, label, icon: Icon, path }) => (
+            <button key={id} className={`np-nav-item ${current.id === id ? 'active' : ''}`} aria-current={current.id === id ? 'page' : undefined} onClick={() => go(path)}>
+              <Icon size={16} /> <span>{label}</span>
+              {current.id === id && <span className="np-nav-indicator" />}
+            </button>
+          ))}
+        </nav>
+        <div className="np-sidebar-label" style={{ marginTop: '16px' }}>SETTINGS</div>
+        <nav aria-label="Settings navigation">
+          {destinations.filter(d => d.section === 'settings').map(({ id, label, icon: Icon, path }) => (
+            <button key={id} className={`np-nav-item ${current.id === id ? 'active' : ''}`} aria-current={current.id === id ? 'page' : undefined} onClick={() => go(path)}>
+              <Icon size={16} /> <span>{label}</span>
               {current.id === id && <span className="np-nav-indicator" />}
             </button>
           ))}
