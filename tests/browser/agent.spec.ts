@@ -1,8 +1,9 @@
 import { expect as baseExpect, Page, test } from './fixtures';
 
 // The fake models count as "on this machine", and those share one queue with every other test
-// running in parallel, so an answer can wait its turn.
-const expect = baseExpect.configure({ timeout: 15_000 });
+// running in parallel, so an answer can wait its turn. A whole Deep Research run waits for six.
+const expect = baseExpect.configure({ timeout: 30_000 });
+const SLOW = { timeout: 60_000 };
 
 const fake = `http://127.0.0.1:${Number(process.env.FAKE_PROVIDER_PORT) || 5299}`;
 // The suffix keeps prompts unique without looking like arithmetic.
@@ -138,6 +139,8 @@ test('agent settings choose how the Free Agent behaves and which model does each
 });
 
 test('while it works, the panel is open and shows each model drafting and thinking, live', async ({ page }) => {
+  // Deliberately slow models, behind a queue shared with every other test: allow three times the usual.
+  test.slow();
   await connectAgentModels(page);
   await chooseAgent(page);
   await send(page, prompt('Solve 12 * 7 slowly and show your work'));
@@ -148,13 +151,15 @@ test('while it works, the panel is open and shows each model drafting and thinki
   await expect(draft.locator('.np-agent-stream').filter({ hasText: 'Writing' })).toContainText('Draft from');
   await expect(page.locator('.np-reasoning-status')).toContainText('drafting');
   // When the run ends, the drafts fold away and stay readable. Models on this machine take turns, so this takes a while.
-  await expect(page.getByText('Checked final answer from agent-model-70b.')).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText('Checked final answer from agent-model-70b.')).toBeVisible(SLOW);
   const saved = page.getByLabel('Free Agent steps').last();
   await saved.locator('summary').first().click();
   await expect(saved.getByText('Show its thinking').first()).toBeVisible();
 });
 
 test('Deep research plans, searches, has several models read the sources, and writes a report citing them', async ({ page }) => {
+  // A research run needs six model requests in a row through the shared queue for models on this machine.
+  test.slow();
   await connectAgentModels(page);
   // Deep research needs an Exa key.
   await nav(page, 'Connections').click();
@@ -169,7 +174,7 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await page.getByRole('textbox', { name: 'Message' }).press('Enter');
   await expect(page.getByRole('button', { name: 'Deep research' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.np-composer-footnote')).toContainText('Deep research: the Free Agent plans');
-  await expect(page.getByText(/Research report from agent-model-70b: the tower is 300 metres tall \[1\]/)).toBeVisible();
+  await expect(page.getByText(/Research report from agent-model-70b: the tower is 300 metres tall \[1\]/)).toBeVisible(SLOW);
   // The sources the report cites, numbered in order.
   await expect(page.getByRole('link', { name: /example\.com/ })).toHaveCount(2);
 
