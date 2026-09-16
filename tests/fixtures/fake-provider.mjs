@@ -28,6 +28,11 @@ const QUOTA = {
   'x-ratelimit-reset-requests': '1m30s',
 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Pages the fake Exa returns with text, for Deep Research.
+const RESEARCH_PAGES = {
+  'fake tower height': { title: 'Tower height', url: 'https://example.com/tower-height', text: 'The tower is 300 metres tall. It sways a little in the wind.' },
+  'fake tower builder': { title: 'Tower builder', url: 'https://example.com/tower-builder', text: 'The tower was built by a company between 1887 and 1889. Work took two years.' },
+};
 const frame = (data) => `data: ${JSON.stringify(data)}\n\n`;
 const delta = (content) => frame({ choices: [{ delta: { content } }] });
 
@@ -61,6 +66,12 @@ http
       exaLog.push({ key: req.headers['x-api-key'], body: search });
       if (req.headers['x-api-key'] !== 'exa-test-key-000001') {
         res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'Invalid API key', tag: 'INVALID_API_KEY' }));
+        return;
+      }
+      // Deep Research asks for page text: one page per query.
+      if (search.contents?.text) {
+        const page = RESEARCH_PAGES[search.query];
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ requestId: 'fake', results: page ? [{ ...page, publishedDate: '2026-03-01T00:00:00.000Z' }] : [] }));
         return;
       }
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
@@ -110,13 +121,34 @@ http
 
     if (model === 'agent-model') {
       const system = body.messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
-      const text = system.includes("Split the user's message")
+      const page = String(body.messages.at(-1)?.content ?? '');
+      const text = system.includes('You plan web research')
+        ? JSON.stringify({ perspectives: ['An engineer', 'A historian'], questions: [{ question: 'How tall is the tower?', queries: ['fake tower height'] }, { question: 'Who built it?', queries: ['fake tower builder'] }] })
+        : system.includes('You read one web page')
+          // A true quote (the page's first sentence) and one the page does not contain.
+          ? JSON.stringify({ notes: [{ fact: `Fact from ${body.model}.`, quote: page.split('\n\n').at(-1).split('. ')[0], question: 1 }, { fact: 'Invented.', quote: 'This sentence is not on the page at all.', question: 1 }] })
+          : system.includes('You outline a research report')
+            ? JSON.stringify({ sections: [{ heading: 'Height', notes: [1] }, { heading: 'Builder', notes: [2] }] })
+            : system.includes('You write a research report')
+              ? `Research report from ${body.model}: the tower is 300 metres tall [1], and it was built by a company [2].`
+              : system.includes("Split the user's message")
         ? JSON.stringify({ parts: [{ task: 'Explain what an API is', kind: 'general' }, { task: 'Write a haiku about APIs', kind: 'writing' }] })
         : system.includes('final writer') ? `Checked final answer from ${body.model}.`
           : system.includes('Answer only this part') ? `Part answer from ${body.model}.`
             : `Draft from ${body.model}.`;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.write(delta(text));
+      // "slowly" in the message: drafts think, write half, pause, then finish, so a test can watch
+      // them live. Short, because models on this machine share one queue with every other test.
+      const last = [...body.messages].reverse().find((m) => m.role === 'user');
+      if (JSON.stringify(last?.content ?? '').includes('slowly') && text.startsWith('Draft')) {
+        res.write(frame({ choices: [{ delta: { reasoning: `Considering it as ${body.model}.` } }] }));
+        await sleep(500);
+        res.write(delta(`${text} Working through each step`));
+        await sleep(1500);
+        res.write(delta(' with care before the check.'));
+      } else {
+        res.write(delta(text));
+      }
       res.write(frame({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 3 } }));
       entry.completed = true;
       res.end('data: [DONE]\n\n');

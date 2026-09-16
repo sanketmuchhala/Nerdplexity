@@ -25,10 +25,11 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 
 - **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
 - **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, or any OpenAI-compatible server, all in one catalog.
+- **Free Agent, the default.** For harder messages, the free models best at each kind of task draft or answer parts, and the strongest checks their work and writes one answer. You can choose how it works and which model does each part.
 - **Free Router.** Choose it like a model: each message goes to the best free model you have, and to the next one when a model is rate limited.
 - **Bench.** Graded questions from published datasets (code, math, instructions, tool calls, reading) run on your free models, paced for free limits. The Free Router ranks models with your results.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
-- **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
+- **Nothing hidden.** Each answer shows every tool call with its exact input and result, and measured timing and token usage. Answers from a model you pick name it; for the Free Agent and Free Router, Run history names every model asked.
 
 ## Features
 
@@ -98,13 +99,15 @@ Provider notes: OpenRouter free models have per-minute and per-day limits, and a
 
 ## Free Router and Bench
 
-**Free Router** is Nerdplexity's own router and the default model once you connect a provider with free models (it never replaces a model you picked). It sits at the top of the model picker with the Nerdplexity logo. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
+**Free Router** is Nerdplexity's own router. It sits in the model picker with the Nerdplexity logo, under the Free Agent. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
 
-**Free Agent** puts several free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; two specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. Simple messages still cost one request, and no message uses more than five. Every draft is shown with the answer.
+**Free Agent** is the default model once you connect a provider with free models (it never replaces a model you picked). It puts several different free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. It always uses at least two models (a simple message gets one draft checked by a second model), and while it works a live panel shows every model, its role, what it is thinking and writing, and what it hands to the next model. Under **Models → Let Nerdplexity choose** you decide how it works: Automatic, Quick (always one model), or Thorough (always drafts), how many drafts, and which model writes the final answer, plans, drafts, and answers each kind of part.
 
 **Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
 
-Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md), and [Bench](backend/docs/bench.md).
+**Deep research** is a Free Agent mode for questions that need an investigation. Turn it on in the composer (it needs an Exa key): the agent plans the research from several perspectives, searches the web, has several free models read the pages in parallel, keeps only the quotes it can find on the page, and writes a report that cites its sources as [1], [2], with a citation check at the end. The live panel shows every search, every source and what was kept from it, and which model did what.
+
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md) and its [architecture](backend/docs/free-agent-architecture.md), [Deep Research](backend/docs/deep-research.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 

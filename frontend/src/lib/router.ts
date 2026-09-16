@@ -21,19 +21,20 @@ export const routeStrategy = (ref?: Choice): 'free' | 'agent' => isAgent(ref) ? 
 
 /** The chat store actions needed to choose a model. */
 interface ChatActions {
-  saveSettings: (patch: { activeModel: ModelRef }) => Promise<void>;
+  saveSettings: (patch: { activeModel: ModelRef; agentDefault?: boolean }) => Promise<void>;
   activeConversation: () => { id: string; model?: string; messages: unknown[] } | null | undefined;
   setConversationModel: (id: string, ref: ModelRef) => Promise<void>;
 }
 
 /**
- * Make the Free Router the chosen model, and the model of the open thread if it is new and empty.
- * Callers use it only when no model has been chosen, so a person's choice is never replaced.
+ * Make the Free Agent (the default) the chosen model, and the model of the open thread if it is
+ * new and empty. Callers use it only when no model has been chosen, or once to move an automatic
+ * Free Router default to the Free Agent; a model a person picked is never replaced.
  */
-export async function chooseRouterByDefault(chat: ChatActions) {
-  await chat.saveSettings({ activeModel: ROUTER_REF });
+export async function chooseAgentByDefault(chat: ChatActions) {
+  await chat.saveSettings({ activeModel: AGENT_REF, agentDefault: true });
   const conversation = chat.activeConversation();
-  if (conversation && !conversation.model && conversation.messages.length === 0) await chat.setConversationModel(conversation.id, ROUTER_REF);
+  if (conversation && (!conversation.model || isRouter(conversation)) && conversation.messages.length === 0) await chat.setConversationModel(conversation.id, AGENT_REF);
 }
 
 /** The server's limits on one route. */

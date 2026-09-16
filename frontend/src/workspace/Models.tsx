@@ -40,7 +40,8 @@ import { WebSearchSettings } from './WebSearchSettings';
 import ModelLogo, { formatModelName } from './ModelLogo';
 import { WorkbenchDialog } from './WorkbenchDialog';
 import { costStatus } from '../lib/cost';
-import { chooseRouterByDefault } from '../lib/router';
+import { chooseAgentByDefault } from '../lib/router';
+import { AgentSettings } from './AgentSettings';
 import { DEFAULT_COMPATIBLE_URL, DEFAULT_OLLAMA_URL } from '../lib/db';
 import { sizeLabel, tokensLabel } from './api';
 import { apiUrl } from '../lib/backend';
@@ -348,9 +349,9 @@ function ConnectionForm({
         remember,
         billing,
       });
-      // The first connection with a free model makes the Free Router the default, unless a model is already chosen.
+      // The first connection with a free model makes the Free Agent the default, unless a model is already chosen.
       if (!initial && !useChat.getState().settings?.activeModel && checked.models.some(model => costStatus(connection, model, checked.execution).free)) {
-        await chooseRouterByDefault(useChat.getState());
+        await chooseAgentByDefault(useChat.getState());
       }
       onDone();
       void discover(connection.id);
@@ -721,6 +722,8 @@ export function Models({
           <HardDrive size={13} /> Keys stay in this browser
         </span>
       </div>
+
+      {!connectionsOnly && <AgentSettings onUse={ref => void use(ref)} />}
 
       <section className="np-panel" aria-labelledby="connections-title">
         <div className="np-section-title">

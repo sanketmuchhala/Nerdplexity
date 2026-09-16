@@ -15,6 +15,7 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Square,
+  Microscope,
   ThumbsDown,
   ThumbsUp,
   Workflow,
@@ -24,7 +25,7 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
-import { AGENT_NAME, isAgent, isRouter, ROUTER_NAME, routerName } from '../lib/router';
+import { isAgent, isRouter, routerName } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
 import { AgentActivity } from './AgentActivity';
 import { RouterMark } from './RouterMark';
@@ -45,7 +46,7 @@ import {
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
-import { autoWebSearch } from '../lib/searchKey';
+import { autoWebSearch, hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
@@ -133,6 +134,8 @@ export function ChatWorkspace({
   // Searches run on their own when a message needs current information; there is no Web button.
   const webAuto = autoWebSearch(settings?.webSearch);
   const documentsOn = enabledTools.includes('documents');
+  // Deep Research is a Free Agent mode, turned on per thread like a tool.
+  const researchOn = isAgent(ref) && enabledTools.includes('research');
   const preview = buildContext(
     conversation?.messages ?? [],
     input,
@@ -167,6 +170,10 @@ export function ChatWorkspace({
     const current = useChat.getState().activeConversation();
     if (current) await setAllowCharges(current.id, true);
   };
+  const providerOf = (connectionId: string) => {
+    const owner = connections.find((c) => c.id === connectionId);
+    return owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '';
+  };
   const nameOf = (connectionId: string) =>
     connections.find((c) => c.id === connectionId)?.name ??
     'removed connection';
@@ -199,6 +206,8 @@ export function ChatWorkspace({
         Math.min(textarea.current.scrollHeight, 180) + 'px';
     }
   }, [input]);
+  // A tool switched on just before sending (Deep research, Calculator) is saved before the message goes.
+  const toolSave = useRef<Promise<void> | null>(null);
   const submit = () => {
     if (!input.trim() || run.running || readingAttachments || !ready || preview.warnings.length)
       return;
@@ -206,20 +215,25 @@ export function ChatWorkspace({
     setInput('');
     setActionNotice('');
     sticky.current = true;
-    void run.send(prompt, documents);
+    void (toolSave.current ?? Promise.resolve()).then(() => run.send(prompt, documents));
   };
   /** Tools are a per-thread setting, so presets save them and they stay visible until turned off. */
   const setTool = async (tool: WorkbenchTool, on: boolean) => {
-    try {
-      if (!conversation) await newConversation();
-      const current = useChat.getState().activeConversation();
-      if (!current) throw new Error('Unable to create a thread.');
-      const now = workbenchSettings(current, settings);
-      await setWorkbench(current.id, { ...now, tools: on ? [...new Set([...now.tools, tool])] : now.tools.filter((t) => t !== tool) });
-      setActionError('');
-    } catch (error) {
-      setActionError((error as Error).message);
-    }
+    const save = (async () => {
+      try {
+        if (!conversation) await newConversation();
+        const current = useChat.getState().activeConversation();
+        if (!current) throw new Error('Unable to create a thread.');
+        const now = workbenchSettings(current, settings);
+        await setWorkbench(current.id, { ...now, tools: on ? [...new Set([...now.tools, tool])] : now.tools.filter((t) => t !== tool) });
+        setActionError('');
+      } catch (error) {
+        setActionError((error as Error).message);
+      }
+    })();
+    toolSave.current = save;
+    await save;
+    if (toolSave.current === save) toolSave.current = null;
   };
   const toggleTool = async (tool: WorkbenchTool) => {
     // Documents open their panel: the documents are shown even when this model cannot use them.
@@ -557,37 +571,34 @@ export function ChatWorkspace({
                   // Above a saved answer, the panels sit in the transcript column.
                   <div className="np-inline-tools">
                     {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
-                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} providerOf={providerOf} writerThinking={message.metadata.reasoning} />}
                     {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
                   </div>
                 )}
-                <Message
-                  message={{ ...message, timestamp: message.createdAt }}
-                  animate={!message.runId}
-                  model={message.role === 'assistant' ? answerModel(message.provenance) : undefined}
-                />
-                {message.role === 'assistant' &&
-                  (message.provenance ||
-                    message.runStatus ||
-                    message.finishReason === 'length' ||
-                    message.finishReason === 'max_tokens') && (
-                    <p
-                      className={`np-provenance ${message.runStatus ? 'partial' : ''}`}
-                    >
-                      {[
-                        message.provenance &&
-                          `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
-                        message.metadata?.agent ? `via ${AGENT_NAME}` : message.metadata?.route && `via ${ROUTER_NAME}`,
-                        message.runStatus &&
-                          RUN_STATUS_LABEL[message.runStatus],
-                        (message.finishReason === 'length' ||
-                          message.finishReason === 'max_tokens') &&
-                          'Stopped at the output limit',
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  )}
+                {(() => {
+                  // Answers from the Free Agent or Free Router are credited to Nerdplexity; their panels name
+                  // every model used. An answer from a model the user picked is credited to that model.
+                  const chosenByNerdplexity = !!(message.metadata?.agent || message.metadata?.route);
+                  const credit = message.role === 'assistant' ? [
+                    !chosenByNerdplexity && message.provenance &&
+                      `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
+                    message.runStatus && RUN_STATUS_LABEL[message.runStatus],
+                    (message.finishReason === 'length' || message.finishReason === 'max_tokens') && 'Stopped at the output limit',
+                  ].filter(Boolean) : [];
+                  return (
+                    <>
+                      <Message
+                        // The Free Agent's final writer shows its thinking in the agent panel, with the other models'.
+                        message={{ ...message, timestamp: message.createdAt, ...(message.metadata?.agent ? { metadata: { ...message.metadata, reasoning: undefined } } : {}) }}
+                        animate={!message.runId}
+                        model={message.role === 'assistant' && !chosenByNerdplexity ? answerModel(message.provenance) : undefined}
+                      />
+                      {credit.length > 0 && (
+                        <p className={`np-provenance ${message.runStatus ? 'partial' : ''}`}>{credit.join(' · ')}</p>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="np-message-actions">
                   <button
                     className="np-icon-button"
@@ -671,16 +682,16 @@ export function ChatWorkspace({
                   role: 'assistant',
                   content: run.partial || '',
                   timestamp: Date.now(),
-                  metadata: run.reasoning
+                  metadata: run.reasoning && !run.agent?.length
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
-                model={liveModel}
+                model={routed ? undefined : liveModel}
                 streaming={run.running}
                 status={run.running ? run.phase : undefined}
               >
                 {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} providerOf={providerOf} live={run.running} writerThinking={run.reasoning} />}
                 {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
               </Message>
             )}
@@ -902,6 +913,22 @@ export function ChatWorkspace({
                   <span className="np-mode-label">{name}</span>
                 </button>
               ))}
+              {isAgent(ref) && (
+                <button
+                  type="button"
+                  className={`np-mode ${researchOn ? 'selected' : ''}`}
+                  aria-pressed={researchOn}
+                  aria-label="Deep research"
+                  disabled={run.running || (!researchOn && !hasSearchKey())}
+                  title={hasSearchKey()
+                    ? 'Research the web for each message in this thread: a plan, several searches, sources read by several free models, and a cited report. Takes minutes and 15 to 25 requests.'
+                    : 'Add an Exa key under Connections to use Deep research'}
+                  onClick={() => void toggleTool('research')}
+                >
+                  <Microscope size={13} />
+                  <span className="np-mode-label">Deep research</span>
+                </button>
+              )}
             </div>
             <div className="np-composer-send">
               {local && (
@@ -949,8 +976,10 @@ export function ChatWorkspace({
                   .join(', ')}`,
               webAuto && 'Web search is automatic (Exa)',
               routed
-                ? isAgent(ref)
-                  ? `The Free Agent may ask several of your ${pool?.models ?? 0} free models per message (at most 5 requests) and writes one checked answer; prompts go only to the models it asks.`
+                ? researchOn
+                  ? `Deep research: the Free Agent plans, searches the web with Exa, has several of your ${pool?.models ?? 0} free models read the sources, and writes a report citing them. Takes minutes and 15 to 25 requests.`
+                  : isAgent(ref)
+                  ? `The Free Agent picks from your ${pool?.models ?? 0} free models for each part of an answer and has the strongest check the result; prompts go only to the models it asks.`
                   : `The Free Router picks one of ${pool?.models ?? 0} free models for each message; prompts go only to the model it picks.`
                 : !connection
                 ? 'Choose a model in Models.'

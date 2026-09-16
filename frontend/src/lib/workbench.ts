@@ -11,13 +11,16 @@ import { DOCUMENT_LIMITS, documentFileError, fileBase64, isPdf, pdfBytes, readDo
 import { documentContext } from './documentContext';
 
 /**
- * Tool groups a thread can enable; 'documents' is search plus read. 'web' is kept for threads and
- * presets saved before web search became automatic, and enables nothing.
+ * Tool groups a thread can enable; 'documents' is search plus read. 'research' makes the Free Agent
+ * run Deep Research and gives the model no tool. 'web' is kept for threads and presets saved before
+ * web search became automatic, and enables nothing.
  */
-export type WorkbenchTool = 'calculator' | 'documents' | 'web';
+export type WorkbenchTool = 'calculator' | 'documents' | 'research' | 'web';
 const WORKBENCH_TOOLS = new Map<string, ToolName[]>([
   ['calculator', ['calculator']],
   ['documents', ['search_documents', 'read_document']],
+  ['research', []],
+  ['web', []],
 ]);
 export const toolNamesFor = (tools: WorkbenchTool[] = []): ToolName[] => tools.flatMap(tool => WORKBENCH_TOOLS.get(tool) ?? []);
 export const usesDocumentTools = (tools: ToolName[]) => tools.some(name => name === 'search_documents' || name === 'read_document');
@@ -146,7 +149,7 @@ export function settingsErrors(settings: WorkbenchSettings): string[] {
   // Presets and threads saved before P6 have no tools field, which means none.
   const tools: unknown = settings.tools ?? [];
   if (!Array.isArray(tools) || tools.some(tool => !WORKBENCH_TOOLS.has(tool)))
-    errors.push('Choose tools from Calculator, Documents, and Web.');
+    errors.push('Choose tools from Calculator, Documents, and Deep research.');
   if (
     typeof settings.systemPrompt !== 'string' ||
     settings.systemPrompt.length > 20_000

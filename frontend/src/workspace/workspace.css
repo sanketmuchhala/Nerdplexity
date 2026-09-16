@@ -751,3 +751,59 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-agent-text pre { margin: 0; padding: 10px 12px; max-height: 260px; overflow: auto; background: var(--np-sidebar); color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .np-specialists td strong { display: block; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .np-specialists .np-specialist-why { white-space: normal; min-width: 220px; color: var(--np-muted); font-size: 10px; }
+
+/* Let Nerdplexity choose: the Free Agent and Free Router, and how the agent works */
+.np-agent-settings { margin-bottom: 24px; }
+.np-agent-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.np-agent-choice { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--np-line); border-radius: 10px; background: var(--np-bg); }
+.np-agent-choice.active { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-choice strong { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.np-agent-choice p { font-size: 11px; color: var(--np-muted); margin-top: 6px; line-height: 1.6; }
+.np-agent-choice .np-button { align-self: flex-start; }
+.np-agent-config { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--np-line); display: flex; flex-direction: column; gap: 16px; }
+.np-agent-config h3 { font-size: 12px; font-weight: 500; }
+.np-agent-behavior { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.np-agent-behavior label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--np-line); border-radius: 8px; cursor: pointer; }
+.np-agent-behavior label:has(input:checked) { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-behavior input { margin-top: 2px; accent-color: var(--np-accent); }
+.np-agent-behavior span { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--np-muted); line-height: 1.5; }
+.np-agent-behavior strong { font-size: 12px; font-weight: 500; color: var(--np-text); }
+.np-agent-drafts { max-width: 220px; }
+.np-agent-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.np-agent-role select { text-overflow: ellipsis; }
+.np-agent-note { font-size: 11px; color: var(--np-muted); line-height: 1.6; margin-top: -8px; }
+
+/* Free Agent panel: every model, its role, its live thinking and output, and the hand-offs */
+details.np-agent.live { border-color: rgba(var(--np-accent-rgb), .35); }
+.np-agent-avatars { display: inline-flex; align-items: center; margin-left: 4px; }
+.np-agent-avatars > span { display: inline-flex; margin-left: -4px; border-radius: 50%; box-shadow: 0 0 0 2px var(--np-panel, var(--np-bg)); }
+.np-agent-avatars > span:first-child { margin-left: 0; }
+.np-tool-body > p.np-agent-strategy { font-size: 11px; color: var(--np-text); }
+.np-agent-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 12px; padding: 8px 10px; border: 1px dashed var(--np-line); border-radius: 8px; font-size: 10px; }
+.np-agent-flow > svg { color: var(--np-accent); flex-shrink: 0; }
+.np-agent-flow-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.np-agent-flow-group em { font-style: normal; font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--np-muted); }
+.np-agent-who { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px 2px 3px; border: 1px solid var(--np-line); border-radius: 99px; background: var(--np-bg); color: var(--np-text); white-space: nowrap; }
+.np-agent-steps { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.np-agent-step { border: 1px solid var(--np-line); border-radius: 8px; padding: 9px 10px; font-size: 11px; overflow-wrap: anywhere; }
+.np-agent-step.running { border-color: rgba(var(--np-accent-rgb), .4); background: rgba(var(--np-accent-rgb), .03); }
+.np-agent-step.failed { border-color: #e5a29955; }
+.np-agent-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.np-agent-step-head > svg { color: var(--np-accent); flex-shrink: 0; }
+.np-agent-step.failed .np-agent-step-head > svg { color: #e5a299; }
+.np-agent-step-head strong { font-weight: 600; font-size: 11px; }
+.np-agent-model { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.np-agent-model small { font-family: inherit; color: var(--np-muted); font-size: 9px; }
+.np-agent-state { margin-left: auto; color: var(--np-muted); font-size: 9px; }
+.np-agent-step p { margin: 5px 0 0; font-size: 10px; line-height: 1.5; }
+.np-agent-why { color: var(--np-muted); }
+.np-agent-handoff { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 5px; color: var(--np-text); }
+.np-agent-handoff > svg { color: var(--np-accent); flex-shrink: 0; align-self: center; }
+.np-agent-handoff .np-agent-task { font-style: italic; }
+.np-agent-stream { margin-top: 6px; }
+.np-agent-stream > span { display: block; font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--np-accent); margin-bottom: 3px; }
+details.np-tool .np-agent-stream pre, .np-agent-stream pre { margin: 0; padding: 8px 10px; max-height: 180px; overflow: auto; background: var(--np-sidebar); border-radius: 6px; color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-agent-stream.thinking pre, .np-agent-text.thinking pre { color: var(--np-muted); font-style: italic; }
+.np-agent-step .np-agent-text { margin-top: 6px; }
+.np-agent-handoff a { display: inline-flex; align-items: center; gap: 3px; color: var(--np-accent); text-decoration: none; overflow-wrap: anywhere; }
+.np-agent-handoff a:hover { text-decoration: underline; }
