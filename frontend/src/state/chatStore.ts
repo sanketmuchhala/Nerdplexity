@@ -212,7 +212,12 @@ const useChat = create<ChatStore>((set, get) => ({
     const conversation = get().activeConversation();
     if (!conversation) throw new Error('Unable to create a thread.');
     const updated: Conversation = { ...conversation, connectionId: preset.model.connectionId, model: preset.model.modelId,
-      provider: providerFor(preset.model.connectionId, conversation.provider), workbench: structuredClone(preset.settings), updatedAt: Date.now() };
+      provider: providerFor(preset.model.connectionId, conversation.provider), workbench: {
+        ...structuredClone(preset.settings),
+        // A deliberately applied legacy preset keeps its explicit saved limits.
+        outputMode: preset.settings.outputMode ?? 'custom',
+        contextMode: preset.settings.contextMode ?? 'custom',
+      }, updatedAt: Date.now() };
     await store.conversations.update(updated.id, { connectionId: updated.connectionId, model: updated.model, provider: updated.provider, workbench: updated.workbench, updatedAt: updated.updatedAt });
     set(state => ({ conversations: state.conversations.map(c => c.id === updated.id ? updated : c) }));
   },
@@ -317,7 +322,13 @@ const useChat = create<ChatStore>((set, get) => ({
 
     try {
       // Publish the value only after it is durable. The server merges, so independent saves do not overwrite each other.
-      set({ settings: await store.settings.patch(partial) });
+      const settings = await store.settings.patch(partial);
+      set(state => ({
+        settings,
+        ...(partial.costPolicy === 'free-only'
+          ? { conversations: state.conversations.map(conversation => ({ ...conversation, allowCharges: false })) }
+          : {}),
+      }));
     } catch (error) {
       console.error('Failed to save settings:', (error as Error).message);
     }

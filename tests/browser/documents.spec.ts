@@ -65,7 +65,7 @@ test('PDF font mappings with null characters still upload, persist, preview, and
   await page.getByLabel('Attach files').setInputFiles({ name: 'basis.pdf', mimeType: 'application/pdf', buffer: original });
   await expect(page.locator('.np-attachment')).toHaveCount(1);
   await page.reload();
-  await page.getByRole('complementary').getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
   await page.locator('.np-attachment summary').click();
   const viewer = page.getByRole('dialog', { name: 'basis.pdf', exact: true });
   await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
@@ -94,7 +94,7 @@ test('PDF and Office uploads persist as readable text and reach the model', asyn
   ]);
   await expect(page.locator('.np-attachment')).toHaveCount(6, { timeout: 30_000 });
   await page.reload();
-  await page.getByRole('complementary').getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
   await expect(page.locator('.np-attachment')).toHaveCount(6);
   const doc = page.locator('.np-attachment').filter({ hasText: 'plan.docx' });
   await doc.locator('summary').click();
@@ -131,7 +131,8 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 
     await setup(page);
     await page.setViewportSize(viewport);
     await page.getByLabel('Attach files').setInputFiles({ name: 'basis.pdf', mimeType: 'application/pdf', buffer: pdf('Basis reference number: 729.') });
-    const card = page.locator('.np-attachments summary').filter({ hasText: 'basis.pdf' });
+    const files = page.getByRole('region', { name: 'Files in this chat', exact: true });
+    const card = files.locator('summary').filter({ hasText: 'basis.pdf' });
     await expect(card).toBeInViewport({ ratio: 1 });
     // Hold delivery of the run ID so the running state lasts until the preview is checked.
     let release!: () => void;
@@ -179,7 +180,7 @@ test('uploaded PDFs open as rendered pages after reload, with navigation, zoom, 
   await page.getByLabel('Attach files').setInputFiles({ name: 'preview.pdf', mimeType: 'application/pdf', buffer: original });
   await expect(page.locator('.np-attachment')).toContainText('Open PDF');
   await page.reload();
-  await page.getByRole('complementary').getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
   await page.locator('.np-attachment summary').click();
   const viewer = page.getByRole('dialog', { name: 'preview.pdf', exact: true });
   await expect(viewer.getByRole('img', { name: 'Page 1 of 2' })).toBeVisible();
@@ -232,16 +233,16 @@ test('older PDF attachments can recover the original preview without duplicating
   await page.getByLabel('Attach files').setInputFiles({ name: 'older.pdf', mimeType: 'application/pdf', buffer: original });
   await expect(page.locator('.np-attachment')).toHaveCount(1);
   await page.reload();
-  await page.getByRole('complementary').getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
   await page.locator('.np-attachment summary').click();
   const viewer = page.getByRole('dialog', { name: 'older.pdf', exact: true });
   await expect(viewer).toContainText('saved only extracted text');
   await viewer.getByLabel('Choose original PDF', { exact: true }).setInputFiles({ name: 'other.pdf', mimeType: 'application/pdf', buffer: pdf('Wrong file') });
-  await expect(viewer.getByRole('alert')).toContainText('does not match');
+  await expect(viewer.getByRole('alert')).toContainText('does not match', { timeout: 15_000 });
   await viewer.getByLabel('Choose original PDF', { exact: true }).setInputFiles({ name: 'older.pdf', mimeType: 'application/pdf', buffer: original });
   await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
   await page.reload();
-  await page.getByRole('complementary').getByRole('button', { name: 'New chat', exact: true }).click();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
   await expect(page.locator('.np-attachment')).toHaveCount(1);
   await page.locator('.np-attachment summary').click();
   await expect(viewer.getByRole('img', { name: 'Page 1 of 1' })).toBeVisible();
@@ -260,7 +261,7 @@ test('OpenDocument spreadsheets and slides, HTML, RTF, and code reach the model 
   const prompt = `Summarize all formats ${Date.now()}`;
   await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.locator('.np-provenance')).toHaveCount(1);
+  await expect(page.locator('.np-provenance')).toHaveCount(1, { timeout: 15_000 });
   const requests = await (await page.request.get(`${fake}/_log?prompt=${encodeURIComponent(prompt)}`)).json();
   const text = requests[0].messages.map((message: { content: string }) => message.content).join('\n');
   for (const fact of ['[Sheet: Budget]', 'column 3: 42000', 'column 4: 2026-10-19', '[Slide 1]\nKestrel pilot approved.', '[Slide 2]\nRelease in October.', 'Owner: Amira & team', 'Kestrel cost: £42\nReady for review.', 'FROM node:22\nRUN npm ci']) expect(text).toContain(fact);

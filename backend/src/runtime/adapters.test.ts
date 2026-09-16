@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AdapterEvent, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
+import { AdapterEvent, automaticMaxTokens, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
 import { resolveTarget } from './destinations.js';
 
 /** A streaming body delivered in tiny pieces so records and characters split across chunks. */
@@ -51,6 +51,16 @@ const failure = (error: unknown) => {
 
 const compat = { kind: 'openai-compatible', baseURL: 'https://api.example.com/v1', apiKey: 'sk-compat-secret' };
 const imageMessage = { role: 'user' as const, content: [{ type: 'text' as const, text: 'Describe' }, { type: 'image' as const, mimeType: 'image/png' as const, data: 'aW1n' }] };
+
+describe('automatic output limits', () => {
+  it('uses the model output limit and leaves room for the prompt and context margin', () => {
+    const base = request(compat, { maxTokens: undefined });
+    expect(automaticMaxTokens(base, { contextLength: 64_000, maxOutputTokens: 12_000 })).toBe(12_000);
+    const nearlyFull = request(compat, { maxTokens: undefined, messages: [{ role: 'user', content: 'x'.repeat(39_000) }] });
+    expect(automaticMaxTokens(nearlyFull, { contextLength: 10_000, maxOutputTokens: 8_000 })).toBe(50);
+    expect(automaticMaxTokens(base)).toBe(16_384);
+  });
+});
 
 describe('OpenAI-style streaming', () => {
   it('streams text and reasoning, and reads usage sent after the finish chunk', async () => {

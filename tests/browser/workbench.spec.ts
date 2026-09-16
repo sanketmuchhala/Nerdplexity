@@ -67,12 +67,33 @@ test('switches models inline with coherent history and preserved provenance', as
   expect(log[0].messages[1].content).toBe(first);
 });
 
+test('automatic output uses discovered model capacity and persists across reloads', async ({ page }) => {
+  await page.route('**/v1/models/discover', async route => {
+    const response = await route.fetch();
+    const catalog = await response.json();
+    if (catalog.ok) catalog.models = catalog.models.map((model: { id: string }) => ({ ...model, contextLength: 131_072, maxOutputTokens: 32_768 }));
+    await route.fulfill({ response, json: catalog });
+  });
+  await setup(page);
+  await page.getByRole('button', { name: 'Generation settings' }).click();
+  await expect(page.getByLabel('Output limit mode')).toHaveValue('auto');
+  await expect(page.getByLabel('Context budget mode')).toHaveValue('auto');
+  await expect(page.locator('.np-context-summary')).toContainText('32,768 output tokens');
+  await page.getByRole('button', { name: 'Apply to this thread' }).click();
+  await page.reload();
+  const text = unique('automatic output');
+  await send(page, text, 1);
+  const requests = await upstream(page, text);
+  expect(requests[0].maxTokens).toBe(32_768);
+});
+
 test('presets survive reload and retries retain the original input/settings snapshot', async ({
   page,
 }) => {
   await setup(page, 'limit-model');
   await page.getByRole('button', { name: 'Generation settings' }).click();
   await page.getByLabel('System instruction').fill('Original instruction');
+  await page.getByLabel('Output limit mode').selectOption('custom');
   await page.getByLabel('Maximum output tokens').fill('321');
   await page.getByLabel('Preset name').fill('Focused');
   await page.getByRole('button', { name: 'Save preset', exact: true }).click();
@@ -182,6 +203,8 @@ test('context limits trim whole old turns automatically, and export/import prese
   ).toContainText('Choose a model');
   await choose(page, 'fast-model');
   await page.getByRole('button', { name: 'Generation settings' }).click();
+  await page.getByLabel('Output limit mode').selectOption('custom');
+  await page.getByLabel('Context budget mode').selectOption('custom');
   await page.getByLabel('Maximum output tokens').fill('100');
   await page.getByLabel('Context budget', { exact: true }).fill('2048');
   await page.getByRole('button', { name: 'Apply to this thread' }).click();

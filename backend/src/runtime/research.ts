@@ -567,12 +567,12 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
       : 'The web search found no usable sources for this question. Answer from your own knowledge, say clearly at the start that no sources were found, and do not cite.';
     if (!allNotes.length) emit({ type: 'status', message: 'No usable sources were found, so this answer comes from what the models know.' });
     const writerMessages = withNote(messages, note);
-    const maxTokens = Math.max(run.request.maxTokens ?? 0, RESEARCH_LIMITS.reportTokens);
-    const writerRanking = rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens), kind: task.kind }, health, run.owner, bench);
+    const maxTokens = run.request.maxTokens === undefined ? undefined : Math.max(run.request.maxTokens, RESEARCH_LIMITS.reportTokens);
+    const writerRanking = rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens ?? RESEARCH_LIMITS.reportTokens), kind: task.kind }, health, run.owner, bench);
     const writers = withChoice(writerRanking.ranked, config.writer, 'writer').list;
     const started = Date.now();
     let report = '';
-    debug(`writing from ${allNotes.length} notes across ${sources.length} sources, up to ${maxTokens} tokens`);
+    debug(`writing from ${allNotes.length} notes across ${sources.length} sources${maxTokens === undefined ? ' with automatic output capacity' : `, up to ${maxTokens} tokens`}`);
     const result = await tryInOrder(writers, context({ messages: writerMessages, request: { ...run.request, maxTokens }, maxAttempts: RESEARCH_LIMITS.attempts.writer }), {
       trying: (entry: RankedCandidate, attempt, previous) => steps.step({
         id: 'writer', role: 'writer', status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model,

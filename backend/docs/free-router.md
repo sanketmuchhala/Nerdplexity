@@ -46,7 +46,7 @@ The Free Router can use `openrouter/free` as one of its candidates, always last 
 ## 2. Using it
 
 1. Connect at least one provider with free models. The quickest is OpenRouter with a free key: its catalog marks $0 models, which the router can use at once. Models on your computer (Ollama, LM Studio) are always free.
-2. For providers whose free plan is "an account with no payment method" (Groq, Gemini, Cerebras, Mistral, SambaNova, Hugging Face), set **Account billing** to **No billing enabled** when you add the connection. Nerdplexity cannot read billing settings, so it only uses those models after you say the account cannot be charged.
+2. Refresh the catalog. The router admits only local models and models whose provider catalog reports a zero price. An **Account billing** label is informational and does not make an unpriced model eligible.
 3. The [Free Agent](free-agent.md), which is built on the Free Router, is the **default model**: as soon as a connection has a free model and no model has been chosen, the app selects it (for the settings and for an empty new thread). To send each message to one model instead, open the model picker and choose **Free Router**, the second row, marked with the Nerdplexity logo, or choose it under **Models → Let Nerdplexity choose**. Its row says how many free models on how many connections it can use. Choosing any model keeps that choice; the default never replaces it. (Until 2026-09-14 the Free Router was the default; a settings value still holding that automatic default is switched to the Free Agent once. A Free Router chosen by hand after that stays.)
 4. Optional but recommended: run [Bench](bench.md) on a few models. The router then ranks by measured results instead of guesses from model names.
 
@@ -106,8 +106,7 @@ A model is in the pool only if **all** of these hold:
 `costStatus` (`frontend/src/lib/cost.ts`) is the same check the **Free only** setting uses. A model counts as free when it is:
 
 - **On this machine** (the connection's catalog reports `execution: 'local'`), or
-- **Listed at $0** by the provider's own catalog (`pricing: 'zero-price'`: OpenRouter `:free` models, `openrouter/free`, a Hugging Face provider marked `is_free`, or any catalog reporting `pricing.prompt = 0` and `pricing.completion = 0`), or
-- On an account you marked **No billing enabled**.
+- **Listed at $0** by the provider's own catalog (`pricing: 'zero-price'`: OpenRouter `:free` models, `openrouter/free`, a Hugging Face provider marked `is_free`, or any catalog reporting valid zero prices for every reported charge).
 
 `paid` and `unknown` prices are never included. That is what keeps a routed run from reaching a model that can charge you.
 
@@ -366,7 +365,7 @@ If the web app has no free models at all, it does not send anything and says: *"
 
 | Guarantee | Where |
 | --- | --- |
-| Never sends to a model with a paid or unknown price | `routerPool` only includes `costStatus(...).free` models; covered by `tests/browser/router.spec.ts` ("never a paid or unpriced one"). The server does not re-check prices; it trusts the pool the same way a single-model run trusts the chosen model. |
+| Never pays for an OpenRouter route in Free only | `routerPool` includes only local or catalog-verified $0 models. Every OpenRouter generation also sends a zero `provider.max_price` ceiling, including agent, research, tool, fallback, and Bench calls. Other remote providers must still report current zero pricing before dispatch. Covered by `cost.test.ts`, `modelPolicy.test.ts`, `adapters.test.ts`, and `router.spec.ts`. |
 | Every connection passes the destination policy | `resolveConnections` in `backend/src/routes/runs.ts` calls `resolveTarget` for each; hosted servers refuse private addresses as usual. |
 | Documents never go online | `validateRunRequest` keeps only local candidates when document tools are on. |
 | No two models in one answer | The commit point in `routedExecutor`: fallback only before any output. |

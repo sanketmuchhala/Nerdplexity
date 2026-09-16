@@ -91,7 +91,9 @@ Each connection says whether it is offline, rejected the key, has the wrong addr
 
 ## Free use
 
-Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), **Free plan** (you marked the account as having no billing), a catalog price, or **Price unknown**. Nerdplexity cannot see your billing settings; the billing choice on a connection is your statement.
+**Answer length is automatic by default.** Nerdplexity uses the selected model's available output and context capacity instead of imposing a 2,048-token answer cap. Generation settings still offer custom limits. Models and providers have finite output windows even when inference is free; if a response reaches one, **Continue** requests the next part.
+
+Models are labelled **On this machine** (no hosted fee), **Free model** (listed at $0), a catalog price, or **Price unknown**. Nerdplexity cannot verify an account-level billing label, so **Free only** does not treat that label as proof that a model costs $0.
 
 With **Free only** on, anything else, including a model ID typed by hand, is blocked before it is sent; you can pick a free model or allow charges for that one thread. When a free model you chose hits its limit, Nerdplexity explains whether shared upstream capacity or the account limit caused it and suggests `openrouter/free` and other free models. It never switches a model you chose on its own.
 

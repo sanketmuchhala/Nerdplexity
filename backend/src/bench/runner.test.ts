@@ -25,7 +25,10 @@ const groq = resolveTarget({ kind: 'groq', apiKey: 'gsk-test-key' });
 /** Answers by model and prompt, recording the order of requests. */
 function provider(answer: (model: string, prompt: string, body: any) => Response) {
   const asked: string[] = [];
-  const fn = (async (_url: RequestInfo | URL, init: RequestInit = {}) => {
+  const fn = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+    if (!init.body && String(url).endsWith('/models')) {
+      return new Response(JSON.stringify({ data: [{ id: 'groq-a', pricing: { prompt: '0', completion: '0' } }] }), { headers: { 'content-type': 'application/json' } });
+    }
     const body = JSON.parse(String(init.body));
     const prompt = body.messages[0].content;
     asked.push(`${body.model} ${prompt}`);

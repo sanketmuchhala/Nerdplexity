@@ -88,7 +88,13 @@ function authHeaders(kind: ConnectionKind, apiKey?: string): Record<string, stri
   if (!apiKey) return {};
   if (kind === 'gemini') return { 'x-goog-api-key': apiKey };
   if (kind === 'anthropic') return {};
-  return { Authorization: `Bearer ${apiKey}` };
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    ...(kind === 'openrouter' ? {
+      'HTTP-Referer': 'https://github.com/sanketmuchhala/Nerdplexity',
+      'X-OpenRouter-Title': 'Nerdplexity',
+    } : {}),
+  };
 }
 
 /** Validate a client-supplied connection target against the destination policy. */
@@ -98,10 +104,13 @@ export function resolveTarget(input: unknown): ResolvedTarget {
   if (!isConnectionKind(kind)) throw new DestinationError('Unknown connection type.');
   if (baseURL !== undefined && typeof baseURL !== 'string') throw new DestinationError('Server address must be text.');
   if (apiKey !== undefined && (typeof apiKey !== 'string' || apiKey.length > 1000)) throw new DestinationError('API key must be text.');
-  const key = apiKey?.trim() || undefined;
-  if (HOSTED[kind] && !key) throw new DestinationError('Add an API key for this provider.');
   const { baseURL: base, execution } = normalizeBase(kind, baseURL);
-  return { kind, baseURL: base, execution, apiKey: key, headers: authHeaders(kind, key) };
+  // A compatible connection to OpenRouter needs the same discovery and provider price
+  // ceiling as its named integration. Selecting a different label must not bypass policy.
+  const effectiveKind = kind === 'openai-compatible' && base === HOSTED.openrouter ? 'openrouter' : kind;
+  const key = apiKey?.trim() || undefined;
+  if (HOSTED[effectiveKind] && !key) throw new DestinationError('Add an API key for this provider.');
+  return { kind: effectiveKind, baseURL: base, execution, apiKey: key, headers: authHeaders(effectiveKind, key) };
 }
 
 /** Remove a key from text that may be shown to the user. */

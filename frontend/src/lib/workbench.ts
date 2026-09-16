@@ -29,7 +29,10 @@ export interface WorkbenchSettings {
   systemPrompt: string;
   temperature: number;
   temperatureMode: 'default' | 'custom';
+  /** Missing on legacy snapshots; their explicit numeric settings remain valid. */
+  outputMode?: 'auto' | 'custom';
   maxTokens: number;
+  contextMode?: 'auto' | 'custom';
   contextBudget: number;
   history: 'all' | 'recent';
   recentTurns: number;
@@ -81,6 +84,10 @@ Be honest about uncertainty and limitations. Never claim to have searched, opene
 For code, give complete and internally consistent snippets when practical and call out consequential assumptions. For factual claims that depend on current information, use available research tools when enabled; otherwise say that freshness was not verified. Do not invent citations.`;
 
 export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: DOCUMENT_LIMITS.textBytes, imageBytes: 2_000_000, totalBytes: 20_000_000 } as const;
+// A large model window should preserve conversation room, not copy an entire
+// document into every request. Focused excerpts can still find facts anywhere
+// in the saved text while keeping free-provider requests practical.
+const MAX_ATTACHMENT_CONTEXT_BYTES = 20_000;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
@@ -121,18 +128,23 @@ export function workbenchSettings(
   conversation?: Conversation | null,
   defaults?: AppSettings | null,
 ): WorkbenchSettings {
+  const maxTokens = conversation?.workbench?.maxTokens ?? conversation?.settings.max_tokens ?? defaults?.max_tokens ?? 2048;
+  const contextBudget = conversation?.workbench?.contextBudget ?? defaults?.num_ctx ?? 8192;
   return {
     systemPrompt: '',
     temperature:
       conversation?.settings.temperature ?? defaults?.temperature ?? 0.7,
     temperatureMode: 'default',
-    maxTokens:
-      conversation?.settings.max_tokens ?? defaults?.max_tokens ?? 2048,
-    contextBudget: defaults?.num_ctx ?? 8192,
+    maxTokens,
+    contextBudget,
     history: 'all',
     recentTurns: 6,
     tools: [],
     ...conversation?.workbench,
+    // The previous app defaults imposed 2K output / 8K context on every model.
+    // Upgrade those defaults while retaining deliberately different values.
+    outputMode: conversation?.workbench?.outputMode ?? (maxTokens === 2048 ? 'auto' : 'custom'),
+    contextMode: conversation?.workbench?.contextMode ?? (contextBudget === 8192 ? 'auto' : 'custom'),
   };
 }
 
@@ -151,6 +163,10 @@ export function estimateTokens(messages: RunMessage[]): number {
 
 export function settingsErrors(settings: WorkbenchSettings): string[] {
   const errors: string[] = [];
+  if (settings.outputMode !== undefined && !['auto', 'custom'].includes(settings.outputMode))
+    errors.push('Choose automatic output or a custom output limit.');
+  if (settings.contextMode !== undefined && !['auto', 'custom'].includes(settings.contextMode))
+    errors.push('Choose automatic context or a custom context budget.');
   // Presets and threads saved before P6 have no tools field, which means none.
   const tools: unknown = settings.tools ?? [];
   if (!Array.isArray(tools) || tools.some(tool => !WORKBENCH_TOOLS.has(tool)))
@@ -222,12 +238,18 @@ export function buildContext(
       : []),
   ];
   const currentPrompt: RunMessage[] = prompt.trim() ? [{ role: 'user', content: userContent }] : [];
+  const automaticOutput = settings.outputMode === 'auto';
+  const automaticContext = settings.contextMode === 'auto';
   const budget = Math.min(
-    settings.contextBudget,
+    automaticContext && connection?.kind !== 'ollama' ? (model?.contextLength ?? 65_536) : settings.contextBudget,
     model?.contextLength ?? Infinity,
   );
-  const effectiveMaxTokens = Math.min(settings.maxTokens, model?.maxOutputTokens ?? Infinity);
-  const inputBudget = budget - effectiveMaxTokens;
+  const customMaxTokens = Math.min(settings.maxTokens, model?.maxOutputTokens ?? Infinity);
+  // Preserve useful input first. Reserving the full catalog output maximum up
+  // front would throw away history simply because a model can write a long answer.
+  const minimumOutput = Math.min(4096, Math.floor(budget / 4), model?.maxOutputTokens ?? Infinity);
+  const safetyMargin = automaticOutput ? Math.min(2048, Math.ceil(budget * 0.02)) : 0;
+  const inputBudget = budget - (automaticOutput ? minimumOutput : customMaxTokens) - safetyMargin;
   const baseTokens = estimateTokens([...fixedBeforeDialog, ...currentPrompt]);
   const turns: RunMessage[][] = [];
   for (const message of included.map(({ role, content }) => ({ role, content }))) {
@@ -245,7 +267,7 @@ export function buildContext(
     recentTokens += tokens;
   }
   const previousQuestion = [...dialog].reverse().find(message => message.role === 'user' && typeof message.content === 'string')?.content ?? '';
-  const attached = documentContext(textAttachments, `${previousQuestion}\n${prompt}`, Math.min(180_000, (remainingTokens - recentTokens) * 3));
+  const attached = documentContext(textAttachments, `${previousQuestion}\n${prompt}`, Math.min(MAX_ATTACHMENT_CONTEXT_BYTES, (remainingTokens - recentTokens) * 3));
   if (attached.content) fixedBeforeDialog.push({ role: 'system', content: attached.content });
   // Trim only whole historical turns. Product/user instructions, attachments,
   // and the current prompt always survive so a long thread cannot change the
@@ -258,15 +280,22 @@ export function buildContext(
   const keptDialog = keptTurns.flat();
   const messages: RunMessage[] = [...fixedBeforeDialog, ...keptDialog, ...currentPrompt];
   const estimatedTokens = estimateTokens(messages);
+  // A routed/unknown model is resolved by the server when the concrete model is
+  // selected. Omitting maxTokens also avoids imposing a stale provider default.
+  const effectiveMaxTokens = automaticOutput
+    ? (model?.contextLength || model?.maxOutputTokens
+      ? Math.max(1, Math.min(model?.maxOutputTokens ?? 128_000, 128_000, budget - estimatedTokens - safetyMargin))
+      : undefined)
+    : customMaxTokens;
   const omittedMessages = dialog.length - keptDialog.length;
   // Gemini's catalog describes its input limit; conservatively reserve output in the workbench budget anyway.
   const warnings = settingsErrors(settings);
   const notices: string[] = [...attached.notices];
   if (omittedMessages > dialog.length - included.length)
     notices.push(`${omittedMessages.toLocaleString()} older message${omittedMessages === 1 ? '' : 's'} will be omitted to fit the model's context window.`);
-  if (effectiveMaxTokens < settings.maxTokens)
+  if (!automaticOutput && effectiveMaxTokens !== undefined && effectiveMaxTokens < settings.maxTokens)
     notices.push(`Maximum output was reduced to ${effectiveMaxTokens.toLocaleString()} tokens to match this model's reported limit.`);
-  if (estimatedTokens + effectiveMaxTokens > budget)
+  if (estimatedTokens + (effectiveMaxTokens ?? minimumOutput) > budget)
     warnings.push(
       'The instructions, attachments, and current prompt exceed the context budget even after older turns are omitted. Reduce attachments or output, or increase the budget.',
     );
@@ -294,7 +323,7 @@ export function buildContext(
   )
     warnings.push('Use a temperature of 0–1 for this connection.');
   const effective: InputSnapshot['settings'] = {
-    maxTokens: effectiveMaxTokens,
+    ...(effectiveMaxTokens === undefined ? {} : { maxTokens: effectiveMaxTokens }),
     ...(settings.temperatureMode === 'custom'
       ? { temperature: settings.temperature }
       : {}),

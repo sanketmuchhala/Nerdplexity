@@ -210,7 +210,9 @@ export function dataRouter(db: Database, user: RequestHandler): Router {
   router.patch('/settings', handle(async (req, res) => {
     const patch = body(validate.settingsValue, req, res);
     if (!patch) return;
-    res.json(await store.patchSettings(db, uid(req), patch));
+    const saved = await store.patchSettings(db, uid(req), patch);
+    if (patch.costPolicy === 'free-only') await threads.clearChargePermissions(db, uid(req));
+    res.json(saved);
   }));
 
   return router;

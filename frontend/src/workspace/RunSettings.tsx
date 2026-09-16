@@ -218,21 +218,29 @@ export function RunSettings({
             </label>
           )}
           <label className="np-field">
-            <span>Maximum output tokens</span>
-            <input
-              aria-label="Maximum output tokens"
-              type="number"
-              min={1}
-              max={model?.maxOutputTokens ?? 128_000}
-              required
-              value={draft.maxTokens}
-              onChange={(e) => update('maxTokens', Number(e.target.value))}
-            />
+            <span>Answer length</span>
+            <select aria-label="Output limit mode" value={draft.outputMode ?? 'custom'} onChange={(e) => update('outputMode', e.target.value as 'auto' | 'custom')}>
+              <option value="auto">Automatic — use available model capacity</option>
+              <option value="custom">Custom output limit</option>
+            </select>
           </label>
+          {draft.outputMode === 'auto' ? <p className="np-dialog-note">Answers can use the model’s available output and context capacity. Providers still enforce their own limits; a higher maximum does not force a longer answer.</p> : (
+            <label className="np-field">
+              <span>Maximum output tokens</span>
+              <input aria-label="Maximum output tokens" type="number" min={1} max={Math.min(model?.maxOutputTokens ?? 128_000, 128_000)} required value={draft.maxTokens} onChange={(e) => update('maxTokens', Number(e.target.value))} />
+            </label>
+          )}
         </section>
         <section>
           <h3>Context included</h3>
           <label className="np-field">
+            <span>Context capacity</span>
+            <select aria-label="Context budget mode" value={draft.contextMode ?? 'custom'} onChange={(e) => update('contextMode', e.target.value as 'auto' | 'custom')}>
+              <option value="auto">Automatic — use model context</option>
+              <option value="custom">Custom context budget</option>
+            </select>
+          </label>
+          {draft.contextMode === 'auto' ? <p className="np-dialog-note">{connection?.kind === 'ollama' ? `Local runtime context stays at ${preview.budget.toLocaleString()} tokens to respect your memory settings.` : preview.limitKnown ? `This model reports ${preview.budget.toLocaleString()} tokens of context.` : 'The server checks the selected model’s limits. The request preview uses a 65,536-token estimate until a model is known.'}</p> : <label className="np-field">
             <span>
               Context budget
               {!model?.contextLength ? ' (model limit unknown)' : ''}
@@ -246,7 +254,7 @@ export function RunSettings({
               value={draft.contextBudget}
               onChange={(e) => update('contextBudget', Number(e.target.value))}
             />
-          </label>
+          </label>}
           <label className="np-field">
             <span>Conversation history</span>
             <select
@@ -282,7 +290,7 @@ export function RunSettings({
           <div className="np-context-summary">
             <strong>
               ~{preview.estimatedTokens.toLocaleString()} input +{' '}
-              {(preview.effective.maxTokens ?? draft.maxTokens).toLocaleString()} output reserved
+              {preview.effective.maxTokens === undefined ? 'automatic output capacity' : `up to ${preview.effective.maxTokens.toLocaleString()} output tokens`}
             </strong>
             <p>
               {preview.omittedMessages} earlier messages omitted from this

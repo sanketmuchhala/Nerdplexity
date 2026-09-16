@@ -10,12 +10,12 @@ import {
   FileText,
   GitBranch,
   Lightbulb,
-  Microscope,
   Paperclip,
   Pencil,
   RotateCcw,
   SlidersHorizontal,
   Square,
+  Microscope,
   ThumbsDown,
   ThumbsUp,
   Workflow,
@@ -25,7 +25,7 @@ import useChat from '../state/chatStore';
 import type { WorkspaceDocument } from '../lib/db';
 import { Message } from '../components/Message';
 import { hasKey } from '../lib/credentials';
-import { AGENT_NAME, isAgent, isRouter, ROUTER_NAME, routerName } from '../lib/router';
+import { isAgent, isRouter, routerName } from '../lib/router';
 import { RouteActivity } from './RouteActivity';
 import { AgentActivity } from './AgentActivity';
 import { RouterMark } from './RouterMark';
@@ -44,13 +44,14 @@ import {
   workbenchSettings,
   type WorkbenchTool,
 } from '../lib/workbench';
-import { PdfPreview } from './PdfPreview';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
 import { autoWebSearch, hasSearchKey } from '../lib/searchKey';
 import { ModelPicker } from './ModelPicker';
 import { RunSettings } from './RunSettings';
 import { WorkbenchDialog } from './WorkbenchDialog';
+import { PdfPreview } from './PdfPreview';
+import * as store from '../lib/store';
 
 const RUN_STATUS_LABEL = {
   canceled: 'Stopped · partial answer',
@@ -107,11 +108,12 @@ export function ChatWorkspace({
     content: string;
   } | null>(null);
   const [rename, setRename] = useState<string | null>(null);
-  const [previewPdfId, setPreviewPdfId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const branchDraft = useRef<string | null>(null);
   const attachmentInput = useRef<HTMLInputElement>(null);
+  const [readingAttachments, setReadingAttachments] = useState(false);
+  const [previewPdfId, setPreviewPdfId] = useState<string | null>(null);
   const discovered = ref ? latestResult(catalog[ref.connectionId]) : undefined;
   const descriptor = discovered?.ok
     ? discovered.models.find((m) => m.id === model)
@@ -132,6 +134,7 @@ export function ChatWorkspace({
   // Searches run on their own when a message needs current information; there is no Web button.
   const webAuto = autoWebSearch(settings?.webSearch);
   const documentsOn = enabledTools.includes('documents');
+  // Deep Research is a Free Agent mode, turned on per thread like a tool.
   const researchOn = isAgent(ref) && enabledTools.includes('research');
   const preview = buildContext(
     conversation?.messages ?? [],
@@ -153,7 +156,7 @@ export function ChatWorkspace({
     (conversation?.messages ?? []).some((m) => m.runId === run.streamRunId);
   const messages = conversation?.messages || [];
   const empty = messages.length === 0;
-  const freeOnly = settings?.costPolicy === 'free-only';
+  const freeOnly = settings?.costPolicy !== 'any';
   const blockedReason =
     model && connection
       ? policyBlock(
@@ -166,6 +169,10 @@ export function ChatWorkspace({
     if (!conversation) await newConversation();
     const current = useChat.getState().activeConversation();
     if (current) await setAllowCharges(current.id, true);
+  };
+  const providerOf = (connectionId: string) => {
+    const owner = connections.find((c) => c.id === connectionId);
+    return owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : '';
   };
   const nameOf = (connectionId: string) =>
     connections.find((c) => c.id === connectionId)?.name ??
@@ -182,8 +189,14 @@ export function ChatWorkspace({
     : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
   const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
   const liveModel = liveListed && { ...liveListed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) };
+  // Moving to another thread shows that thread's draft. A thread created for the message being
+  // typed (by turning a tool on, or by sending) keeps the text: it belongs to this message.
+  const shownConversation = useRef(conversation?.id);
   useEffect(() => {
-    setInput(branchDraft.current ?? '');
+    const previous = shownConversation.current;
+    shownConversation.current = conversation?.id;
+    const createdForThisMessage = !previous && conversation && conversation.messages.length === 0;
+    if (!createdForThisMessage) setInput(branchDraft.current ?? '');
     branchDraft.current = null;
     setActionError('');
     sticky.current = true;
@@ -199,26 +212,34 @@ export function ChatWorkspace({
         Math.min(textarea.current.scrollHeight, 180) + 'px';
     }
   }, [input]);
+  // A tool switched on just before sending (Deep research, Calculator) is saved before the message goes.
+  const toolSave = useRef<Promise<void> | null>(null);
   const submit = () => {
-    if (!input.trim() || run.running || !ready || preview.warnings.length)
+    if (!input.trim() || run.running || readingAttachments || !ready || preview.warnings.length)
       return;
     const prompt = input.trim();
     setInput('');
+    setActionNotice('');
     sticky.current = true;
-    void run.send(prompt, documents);
+    void (toolSave.current ?? Promise.resolve()).then(() => run.send(prompt, documents));
   };
   /** Tools are a per-thread setting, so presets save them and they stay visible until turned off. */
   const setTool = async (tool: WorkbenchTool, on: boolean) => {
-    try {
-      if (!conversation) await newConversation();
-      const current = useChat.getState().activeConversation();
-      if (!current) throw new Error('Unable to create a thread.');
-      const now = workbenchSettings(current, settings);
-      await setWorkbench(current.id, { ...now, tools: on ? [...new Set([...now.tools, tool])] : now.tools.filter((t) => t !== tool) });
-      setActionError('');
-    } catch (error) {
-      setActionError((error as Error).message);
-    }
+    const save = (async () => {
+      try {
+        if (!conversation) await newConversation();
+        const current = useChat.getState().activeConversation();
+        if (!current) throw new Error('Unable to create a thread.');
+        const now = workbenchSettings(current, settings);
+        await setWorkbench(current.id, { ...now, tools: on ? [...new Set([...now.tools, tool])] : now.tools.filter((t) => t !== tool) });
+        setActionError('');
+      } catch (error) {
+        setActionError((error as Error).message);
+      }
+    })();
+    toolSave.current = save;
+    await save;
+    if (toolSave.current === save) toolSave.current = null;
   };
   const toggleTool = async (tool: WorkbenchTool) => {
     // Documents open their panel: the documents are shown even when this model cannot use them.
@@ -262,15 +283,18 @@ export function ChatWorkspace({
     <div className="np-chat">
       <div className="np-chat-toolbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button
-            style={{ fontWeight: 500, fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--np-text)' }}
-            onClick={() => { if (conversation) setRename(conversation.title); }}
-            title={empty ? 'New chat' : 'Rename thread'}
-            disabled={empty}
-          >
-            {empty ? 'New chat' : conversation!.title}
-            {!empty && <Pencil size={11} />}
-          </button>
+          {empty ? (
+            <span className="np-chat-title">New chat</span>
+          ) : (
+            <button
+              className="np-chat-title"
+              onClick={() => setRename(conversation!.title)}
+              title="Rename thread"
+            >
+              {conversation!.title}
+              <Pencil size={11} />
+            </button>
+          )}
           {conversation?.branchOf && (
             <span className="np-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <GitBranch size={11} />
@@ -319,13 +343,12 @@ export function ChatWorkspace({
               className="np-icon-button"
               aria-label="Export thread"
               title="Export thread"
-              onClick={() => {
-                if (conversation)
-                  exportText(
-                    'nerdplexity-thread.json',
-                    exportConversation(conversation),
-                    'application/json',
-                  );
+              onClick={async () => {
+                if (!conversation) return;
+                try {
+                  const exported = await store.conversations.export(conversation.id);
+                  exportText('nerdplexity-thread.json', exportConversation(exported), 'application/json');
+                } catch (error) { setActionError(`Unable to export this thread. ${(error as Error).message}`); }
               }}
             >
               <Download size={16} />
@@ -448,6 +471,50 @@ export function ChatWorkspace({
         </WorkbenchDialog>
       )}
 
+      {!!conversation?.attachments?.length && (
+        <section className="np-thread-files" aria-label="Files in this chat">
+          <header><h2>Files in this chat <span>({conversation.attachments.length})</span></h2><span>Included with each prompt</span></header>
+          <div className="np-attachments" aria-label="Thread attachments">
+            {conversation.attachments.map((file) => {
+              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
+              return (
+              <details key={file.id} className="np-attachment">
+                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
+                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
+                  <span>{file.name}</span>
+                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
+                </summary>
+                <div>
+                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
+                  <div className="np-attachment-actions" style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                    <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                      <X size={12} /> Remove from context
+                    </button>
+                    {file.fileData && (
+                      <a
+                        className="np-button ghost small"
+                        href={`data:${file.mimeType};base64,${file.fileData}`}
+                        download={file.name}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <Download size={12} /> View original
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </details>
+            ); })}
+          </div>
+        </section>
+      )}
+      {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
+        <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
+          useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
+        }} />
+      ))}
+
       <div
         className={`np-chat-scroll ${empty ? 'empty' : ''}`}
         ref={scroll}
@@ -506,37 +573,34 @@ export function ChatWorkspace({
                   // Above a saved answer, the panels sit in the transcript column.
                   <div className="np-inline-tools">
                     {message.metadata.route && <RouteActivity steps={message.metadata.route.steps} task={message.metadata.route.task} nameOf={nameOf} />}
-                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} />}
+                    {message.metadata.agent && <AgentActivity steps={message.metadata.agent.steps} calls={message.metadata.agent.calls} nameOf={nameOf} providerOf={providerOf} writerThinking={message.metadata.reasoning} />}
                     {(message.metadata.tools || message.metadata.activities) && <ToolActivity tools={message.metadata.tools ?? []} activities={message.metadata.activities} />}
                   </div>
                 )}
-                <Message
-                  message={{ ...message, timestamp: message.createdAt }}
-                  animate={!message.runId}
-                  model={message.role === 'assistant' ? answerModel(message.provenance) : undefined}
-                />
-                {message.role === 'assistant' &&
-                  (message.provenance ||
-                    message.runStatus ||
-                    message.finishReason === 'length' ||
-                    message.finishReason === 'max_tokens') && (
-                    <p
-                      className={`np-provenance ${message.runStatus ? 'partial' : ''}`}
-                    >
-                      {[
-                        message.provenance &&
-                          `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
-                        message.metadata?.agent ? `via ${AGENT_NAME}` : message.metadata?.route && `via ${ROUTER_NAME}`,
-                        message.runStatus &&
-                          RUN_STATUS_LABEL[message.runStatus],
-                        (message.finishReason === 'length' ||
-                          message.finishReason === 'max_tokens') &&
-                          'Stopped at the output limit',
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  )}
+                {(() => {
+                  // Answers from the Free Agent or Free Router are credited to Nerdplexity; their panels name
+                  // every model used. An answer from a model the user picked is credited to that model.
+                  const chosenByNerdplexity = !!(message.metadata?.agent || message.metadata?.route);
+                  const credit = message.role === 'assistant' ? [
+                    !chosenByNerdplexity && message.provenance &&
+                      `${message.provenance.modelId} · ${connections.find((c) => c.id === message.provenance!.connectionId)?.name ?? 'removed connection'}`,
+                    message.runStatus && RUN_STATUS_LABEL[message.runStatus],
+                    (message.finishReason === 'length' || message.finishReason === 'max_tokens') && 'Stopped at the output limit',
+                  ].filter(Boolean) : [];
+                  return (
+                    <>
+                      <Message
+                        // The Free Agent's final writer shows its thinking in the agent panel, with the other models'.
+                        message={{ ...message, timestamp: message.createdAt, ...(message.metadata?.agent ? { metadata: { ...message.metadata, reasoning: undefined } } : {}) }}
+                        animate={!message.runId}
+                        model={message.role === 'assistant' && !chosenByNerdplexity ? answerModel(message.provenance) : undefined}
+                      />
+                      {credit.length > 0 && (
+                        <p className={`np-provenance ${message.runStatus ? 'partial' : ''}`}>{credit.join(' · ')}</p>
+                      )}
+                    </>
+                  );
+                })()}
                 <div className="np-message-actions">
                   <button
                     className="np-icon-button"
@@ -620,16 +684,16 @@ export function ChatWorkspace({
                   role: 'assistant',
                   content: run.partial || '',
                   timestamp: Date.now(),
-                  metadata: run.reasoning
+                  metadata: run.reasoning && !run.agent?.length
                     ? { reasoning: run.reasoning }
                     : undefined,
                 }}
-                model={liveModel}
+                model={routed ? undefined : liveModel}
                 streaming={run.running}
                 status={run.running ? run.phase : undefined}
               >
                 {run.route?.length > 0 && <RouteActivity steps={run.route} nameOf={nameOf} live={run.running} />}
-                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} />}
+                {run.agent?.length > 0 && <AgentActivity steps={run.agent} nameOf={nameOf} providerOf={providerOf} live={run.running} writerThinking={run.reasoning} />}
                 {(run.tools?.length > 0 || run.activities?.length > 0) && <ToolActivity tools={run.tools} activities={run.activities} />}
               </Message>
             )}
@@ -674,17 +738,6 @@ export function ChatWorkspace({
         {preview.warnings.length > 0 && (
           <div className="np-policy-block" role="alert">
             <span>{preview.warnings[0]}</span>
-            <button
-              className="np-button small"
-              onClick={() => setShowControls(true)}
-            >
-              Review context
-            </button>
-          </div>
-        )}
-        {preview.notices.length > 0 && (
-          <div className="np-policy-block" role="status">
-            <span>{preview.notices[0]}</span>
             <button
               className="np-button small"
               onClick={() => setShowControls(true)}
@@ -763,27 +816,6 @@ export function ChatWorkspace({
             </div>
           </div>
         )}
-        {!!conversation?.attachments?.length && (
-          <div className="np-attachments" aria-label="Thread attachments">
-            {conversation.attachments.map((file) => {
-              const pdf = file.hasPdf || file.mimeType === 'application/pdf' || /\.pdf$/i.test(file.name);
-              return (
-              <details key={file.id} className="np-attachment">
-                <summary onClick={pdf ? event => { event.preventDefault(); setPreviewPdfId(file.id); } : undefined}>
-                  {file.kind === 'image' ? <Paperclip size={13} /> : <FileText size={13} />}
-                  <span>{file.name}</span>
-                  <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · {pdf ? 'Open PDF' : 'inspect'}</small>
-                </summary>
-                <div>
-                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
-                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
-                    <X size={12} /> Remove from context
-                  </button>
-                </div>
-              </details>
-            )})}
-          </div>
-        )}
         <form
           className="np-composer"
           onSubmit={(e) => {
@@ -818,10 +850,11 @@ export function ChatWorkspace({
               <button
                 type="button"
                 className="np-mode"
-                disabled={run.running}
+                disabled={run.running || readingAttachments}
+                title="Attach documents, text, code, or images. Documents up to 20 MB are read before sending."
                 onClick={() => attachmentInput.current?.click()}
               >
-                <Paperclip size={13} /> <span className="np-mode-label">Attach</span>
+                <Paperclip size={13} /> <span className="np-mode-label">{readingAttachments ? 'Reading…' : 'Attach'}</span>
               </button>
               <input
                 ref={attachmentInput}
@@ -829,39 +862,37 @@ export function ChatWorkspace({
                 tabIndex={-1}
                 type="file"
                 multiple
-                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,text/*,.md,.markdown,.csv,.json,.jsonl,.log,.xml,.yaml,.yml,.toml,.ini,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.rs,.go,.java,.kt,.c,.h,.cpp,.hpp,.cs,.php,.swift,.sql,.sh,.zsh,.fish,.html,.css,.scss,.less,.vue,.svelte"
+                disabled={run.running || readingAttachments}
                 aria-label="Attach files"
                 onChange={async (event) => {
                   const control = event.currentTarget;
                   const files = [...(control.files ?? [])];
+                  if (!files.length) return;
+                  setReadingAttachments(true);
+                  setActionError('');
+                  setActionNotice('Reading documents…');
+                  let attached = 0;
+                  const failures: string[] = [];
                   try {
                     if (!conversation) await newConversation();
                     const current = useChat.getState().activeConversation();
                     if (!current) throw new Error('Unable to create a thread.');
                     let existing = current.attachments ?? [];
-                    let failed = 0;
-                    const errors: string[] = [];
                     for (const file of files) {
                       try {
                         const attachment = await attachmentFromFile(file, existing);
                         await addAttachment(current.id, attachment);
                         existing = [...existing, attachment];
-                      } catch (e) {
-                        failed++;
-                        console.error('Attachment failed:', e);
-                        errors.push((e as Error).message);
-                      }
+                        attached++;
+                      } catch (error) { failures.push(`${file.name}: ${(error as Error).message}`); }
                     }
-                    if (errors.length > 0) {
-                      setActionError(errors.join('\n'));
-                    }
-                    const successes = files.length - failed;
-                    if (successes > 0) {
-                      setActionNotice(`${successes} file${successes === 1 ? '' : 's'} attached to this thread.`);
-                    }
+                    setActionNotice(attached ? `${attached} file${attached === 1 ? '' : 's'} attached and ready. Documents are sent as extracted text to the model you choose.` : '');
+                    if (failures.length) setActionError(failures.join(' '));
                   } catch (error) {
+                    setActionNotice('');
                     setActionError((error as Error).message);
                   } finally {
+                    setReadingAttachments(false);
                     control.value = '';
                   }
                 }}
@@ -925,7 +956,7 @@ export function ChatWorkspace({
                   aria-label="Send message"
                   title="Send message"
                   disabled={
-                    !input.trim() || !ready || preview.warnings.length > 0
+                    !input.trim() || readingAttachments || !ready || preview.warnings.length > 0
                   }
                 >
                   <ArrowUp size={18} />
@@ -934,6 +965,7 @@ export function ChatWorkspace({
             </div>
           </div>
         </form>
+        {preview.notices.filter(message => message.includes('stays attached')).map(message => <p key={message} className="np-dialog-note" role="status">{message}</p>)}
         <div className="np-composer-footnote">
           <span>
             {[
@@ -963,11 +995,6 @@ export function ChatWorkspace({
           <span>Shift + Enter for a new line</span>
         </div>
       </div>
-      {conversation && conversation.attachments?.filter(file => file.id === previewPdfId).map(file => (
-        <PdfPreview key={`${conversation.id}:${file.id}`} conversationId={conversation.id} file={file} onClose={() => setPreviewPdfId(null)} removingDisabled={run.running} onRemove={() => removeAttachment(conversation.id, file.id)} onRestored={() => {
-          useChat.setState(state => ({ conversations: state.conversations.map(thread => thread.id === conversation.id ? { ...thread, attachments: thread.attachments?.map(item => item.id === file.id ? { ...item, hasPdf: true } : item) } : thread) }));
-        }} />
-      ))}
     </div>
   );
 }

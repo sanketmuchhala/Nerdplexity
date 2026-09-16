@@ -400,6 +400,12 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-context-trigger > span:last-child { display: flex; align-items: center; gap: 7px; }
 .np-action-notice { font-size: 11px; color: var(--np-accent); }
 .np-attachments { display: flex; flex-wrap: wrap; gap: 7px; padding-bottom: 9px; }
+.np-thread-files { flex: 0 0 auto; min-height: 0; width: 100%; max-width: 840px; margin: 0 auto; padding: 8px 20px; border-bottom: 1px solid var(--np-line); }
+.np-thread-files > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 8px; }
+.np-thread-files h2 { color: var(--np-text); font-size: 12px; font-weight: 500; }
+.np-thread-files h2 span, .np-thread-files > header > span { color: var(--np-muted); font-size: 10px; }
+.np-thread-files .np-attachments { max-height: min(24dvh, 220px); overflow: auto; padding: 2px 2px 8px; }
+@media (max-width: 760px) { .np-thread-files { padding: 6px 14px; } }
 .np-attachment { max-width: min(100%, 360px); border: 1px solid var(--np-line); border-radius: 7px; background: var(--np-raised); font-size: 10px; color: var(--np-muted); }
 .np-attachment summary { display: flex; align-items: center; gap: 6px; padding: 7px 9px; cursor: pointer; list-style: none; }
 .np-attachment summary span { color: var(--np-text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -407,6 +413,19 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-attachment > div { padding: 0 9px 9px; }
 .np-attachment pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-block: 1px solid var(--np-line); padding: 8px 0; margin-bottom: 8px; color: var(--np-muted); }
 .np-attachment-image { display: block; max-width: 100%; max-height: 220px; object-fit: contain; margin: 2px auto 9px; border-radius: 5px; }
+.np-dialog.np-pdf-dialog { width: min(1100px, calc(100% - 24px)); }
+.np-pdf-dialog h2 { overflow-wrap: anywhere; }
+.np-pdf-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; font-size: 12px; }
+.np-pdf-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.np-pdf-viewport { overflow: auto; max-height: 65dvh; min-height: 120px; background: #292b30; border-radius: 8px; padding: 16px; }
+.np-pdf-viewport canvas { display: block; margin: auto; background: white; box-shadow: 0 2px 12px #0005; }
+.np-pdf-text { margin-top: 14px; font-size: 12px; }
+.np-pdf-text summary { cursor: pointer; padding: 8px 0; }
+.np-pdf-text pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-pdf-restore { padding: 12px 0; font-size: 13px; line-height: 1.6; }
+.np-pdf-restore label { position: relative; margin-top: 12px; }
+.np-pdf-restore input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.np-pdf-restore label:focus-within { outline: 2px solid var(--np-accent); outline-offset: 3px; }
 .np-close-nav { display: none; }
 .np-runtime-summary > div { min-width: 0; }
 .np-runtime-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -448,7 +467,6 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
   .np-sidebar { visibility: hidden; }
   .np-sidebar.open { visibility: visible; }
   .np-close-nav { display: inline-flex; position: absolute; right: 12px; top: 12px; }
-  .np-menu { display: inline-flex; }
 }
 @media (max-width: 600px) {
   .np-dialog, .np-dialog.sheet { width: calc(100% - 16px); margin: auto; max-height: calc(100dvh - 16px); height: auto; }
@@ -712,16 +730,130 @@ details.np-tool .np-agent-text pre { margin: 0; padding: 10px 12px; }
 .np-specialists td strong { display: block; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
 .np-specialists .np-specialist-why { white-space: normal; min-width: 220px; color: var(--np-muted); font-size: 10px; }
 
+/* Let Nerdplexity choose: the Free Agent and Free Router, and how the agent works */
+.np-agent-settings { margin-bottom: 24px; }
+.np-agent-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.np-agent-choice { display: flex; flex-direction: column; justify-content: space-between; gap: 14px; padding: 16px; border: 1px solid var(--np-line); border-radius: 10px; background: var(--np-bg); }
+.np-agent-choice.active { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-choice strong { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.np-agent-choice p { font-size: 11px; color: var(--np-muted); margin-top: 6px; line-height: 1.6; }
+.np-agent-choice .np-button { align-self: flex-start; }
+.np-agent-config { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--np-line); display: flex; flex-direction: column; gap: 16px; }
+.np-agent-config h3 { font-size: 12px; font-weight: 500; }
+.np-agent-behavior { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.np-agent-behavior label { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--np-line); border-radius: 8px; cursor: pointer; }
+.np-agent-behavior label:has(input:checked) { border-color: rgba(var(--np-accent-rgb), .45); background: rgba(var(--np-accent-rgb), .04); }
+.np-agent-behavior input { margin-top: 2px; accent-color: var(--np-accent); }
+.np-agent-behavior span { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--np-muted); line-height: 1.5; }
+.np-agent-behavior strong { font-size: 12px; font-weight: 500; color: var(--np-text); }
+.np-agent-drafts { max-width: 220px; }
+.np-agent-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.np-agent-role select { text-overflow: ellipsis; }
+.np-agent-note { font-size: 11px; color: var(--np-muted); line-height: 1.6; margin-top: -8px; }
+
+/* Free Agent panel: every model, its role, its live thinking and output, and the hand-offs */
+details.np-agent.live { border-color: rgba(var(--np-accent-rgb), .35); }
+.np-agent-avatars { display: inline-flex; align-items: center; margin-left: 4px; }
+.np-agent-avatars > span { display: inline-flex; margin-left: -4px; border-radius: 50%; box-shadow: 0 0 0 2px var(--np-panel, var(--np-bg)); }
+.np-agent-avatars > span:first-child { margin-left: 0; }
+.np-tool-body > p.np-agent-strategy { font-size: 11px; color: var(--np-text); }
+.np-agent-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 12px; padding: 8px 10px; border: 1px dashed var(--np-line); border-radius: 8px; font-size: 10px; }
+.np-agent-flow > svg { color: var(--np-accent); flex-shrink: 0; }
+.np-agent-flow-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.np-agent-flow-group em { font-style: normal; font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--np-muted); }
+.np-agent-who { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px 2px 3px; border: 1px solid var(--np-line); border-radius: 99px; background: var(--np-bg); color: var(--np-text); white-space: nowrap; }
+.np-agent-steps { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.np-agent-step { border: 1px solid var(--np-line); border-radius: 8px; padding: 9px 10px; font-size: 11px; overflow-wrap: anywhere; }
+.np-agent-step.running { border-color: rgba(var(--np-accent-rgb), .4); background: rgba(var(--np-accent-rgb), .03); }
+.np-agent-step.failed { border-color: #e5a29955; }
+.np-agent-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.np-agent-step-head > svg { color: var(--np-accent); flex-shrink: 0; }
+.np-agent-step.failed .np-agent-step-head > svg { color: #e5a299; }
+.np-agent-step-head strong { font-weight: 600; font-size: 11px; }
+.np-agent-model { display: inline-flex; align-items: center; gap: 5px; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.np-agent-model small { font-family: inherit; color: var(--np-muted); font-size: 9px; }
+.np-agent-state { margin-left: auto; color: var(--np-muted); font-size: 9px; }
+.np-agent-step p { margin: 5px 0 0; font-size: 10px; line-height: 1.5; }
+.np-agent-why { color: var(--np-muted); }
+.np-agent-handoff { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 5px; color: var(--np-text); }
+.np-agent-handoff > svg { color: var(--np-accent); flex-shrink: 0; align-self: center; }
+.np-agent-handoff .np-agent-task { font-style: italic; }
+.np-agent-stream { margin-top: 6px; }
+.np-agent-stream > span { display: block; font-size: 9px; letter-spacing: .05em; text-transform: uppercase; color: var(--np-accent); margin-bottom: 3px; }
+details.np-tool .np-agent-stream pre, .np-agent-stream pre { margin: 0; padding: 8px 10px; max-height: 180px; overflow: auto; background: var(--np-sidebar); border-radius: 6px; color: var(--np-text); font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.np-agent-stream.thinking pre, .np-agent-text.thinking pre { color: var(--np-muted); font-style: italic; }
+.np-agent-step .np-agent-text { margin-top: 6px; }
+.np-agent-handoff a { display: inline-flex; align-items: center; gap: 3px; color: var(--np-accent); text-decoration: none; overflow-wrap: anywhere; }
+.np-agent-handoff a:hover { text-decoration: underline; }
+
 .np-welcome-minimal { width: 100%; max-width: 710px; margin: 0 auto; text-align: center; padding: 40px 24px 26px; animation: np-appear .4s ease both; }
 .np-welcome-minimal h1 { font-size: 32px; font-weight: 500; margin-bottom: 12px; }
 .np-welcome-minimal p { font-size: 14px; color: var(--np-muted); margin-bottom: 24px; }
+.np-chat-title { font-weight: 500; font-size: 13px; background: none; border: none; display: flex; align-items: center; gap: 6px; color: var(--np-text); min-width: 0; }
+button.np-chat-title { cursor: pointer; }
 
+@media (max-width: 1100px) {
+  .np-sidebar { width: 220px; flex-basis: 220px; padding-inline: 12px; }
+  .np-page { padding: 32px 26px 50px; }
+  .np-page-heading { align-items: flex-start; }
+  .np-page-heading > .np-label { display: none; }
+  .np-generation-controls { gap: 15px; flex-wrap: wrap; }
+  .np-runtime-option { padding: 18px 14px; gap: 10px; }
+  .np-context-banner { flex-wrap: wrap; }
+  .np-context-banner .np-label { margin-left: 37px; }
+}
 
-.np-pdf-viewer { display: flex; flex-direction: column; width: 80vw; max-width: 900px; height: 75vh; }
-.np-pdf-iframe { flex: 1; border: none; width: 100%; }
-.np-pdf-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--np-line); background: var(--np-bg); margin: 0 -24px -24px; }
-.np-attachment-pdf-actions { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+@media (max-width: 760px) {
+  .np-sidebar { position: fixed; top: 0; bottom: 0; left: 0; z-index: 70; transform: translateX(-100%); transition: transform .2s; width: 260px; }
+  .np-sidebar.open { transform: translateX(0); }
+  .np-sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 60; background: #0009; }
+  .np-menu { display: inline-flex; }
+  .np-topbar { padding: 0 14px; height: 55px; }
+  .np-topbar > div { gap: 8px; }
+  .np-top-note { display: none; }
+  .np-chat-toolbar { padding: 0 18px; flex-basis: 50px; }
+  .np-chat-toolbar > div:first-child { gap: 9px !important; min-width: 0; }
+  .np-chat-title { max-width: 28vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-model-source { display: none; }
+  .np-model-switch > span:nth-child(2) { max-width: 40vw; }
+  .np-welcome-minimal { padding: 12px 18px 20px; }
+  .np-welcome-minimal h1 { font-size: 27px; }
+  .np-welcome-minimal p { font-size: 12px; }
+  .np-suggestions { gap: 7px; margin-top: 25px; }
+  .np-suggestions button { flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 12px 10px; font-size: 9px; gap: 12px; }
+  .np-suggestions button > svg:last-child { display: none; }
+  .np-composer-area { padding: 12px 14px 17px; }
+  .np-composer-footnote { font-size: 8px; }
+  .np-composer-footnote > span:last-child { display: none; }
+  .np-local-label { display: none; }
+  .np-composer textarea { min-height: 68px; font-size: 16px; padding: 13px 14px 5px; }
+  .np-page { padding: 29px 18px 40px; }
+  .np-page-heading { flex-direction: column; gap: 17px; margin-bottom: 25px; }
+  .np-page h1 { font-size: 29px; }
+  .np-page-heading p { font-size: 11px; }
+  .np-runtime-options { grid-template-columns: 1fr; gap: 10px; }
+  .np-runtime-option { padding: 17px; }
+  .np-panel { padding: 18px; }
+  .np-inline-form { flex-direction: column; align-items: stretch; }
+  .np-field input { font-size: 16px; }
+  .np-model-title { align-items: flex-start; flex-direction: column; }
+  .np-search { width: 100%; }
+  .np-bottom-note { flex-direction: column; align-items: flex-start; }
+  .np-context-banner { padding: 17px; gap: 12px; }
+  .np-context-banner .np-label { margin-left: 32px; }
+  .np-document-grid { grid-template-columns: 1fr; }
+  .np-editor-footer { flex-wrap: wrap; }
+  .np-stats > div { padding: 17px 10px; }
+  .np-stats strong { font-size: 25px; }
+  .np-stats small { font-size: 8px; }
+  .np-run-row { padding: 12px; gap: 9px; flex-wrap: wrap; }
+  .np-run-row > div { flex-basis: calc(100% - 40px); }
+  .np-run-row .np-label { margin-left: auto; }
+  .np-run-duration { padding-left: 27px; }
+  .np-run-detail dl { flex-wrap: wrap; gap: 16px; }
+  .np-history-delete { opacity: .65; }
+}
 
-
-.np-attachment-pdf-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; padding: 12px 0; border-block: 1px solid var(--np-line); margin-bottom: 8px; }
-.np-attachment-pdf-actions p { color: var(--np-text); margin: 0; font-weight: 500; font-size: 11px; }
+@media (prefers-reduced-motion: reduce) {
+  .np-app *, .np-app *::before, .np-app *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
