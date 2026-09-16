@@ -885,3 +885,13 @@ button.np-chat-title { cursor: pointer; }
 .np-composer-area .np-thread-files { background: transparent; border: none; padding: 0 0 10px 0; max-height: 200px; overflow-y: auto; }
 .np-composer-area .np-attachments { display: flex; gap: 8px; flex-wrap: wrap; padding: 0; }
 .np-composer-area .np-attachment { flex: 1 1 auto; max-width: none; min-width: 200px; }
+
+/* PR 3: Research PR - Compact Progress */
+.np-agent-steps { display: flex; flex-direction: column; gap: 8px; }
+.np-agent-step { padding: 8px 10px; border-radius: 8px; background: var(--np-bg); border: 1px solid var(--np-border); }
+.np-agent-step.done { padding: 4px 10px; opacity: 0.85; border: 1px solid transparent; }
+.np-agent-step.done .np-agent-handoff { display: none; } /* Hide verbose handoffs for completed tasks */
+.np-agent-step.done:hover .np-agent-handoff { display: block; } /* Show on hover */
+.np-agent-step.running { border: 1px solid var(--np-accent); box-shadow: 0 0 0 1px var(--np-accent); }
+
+/* Live cooldown & Diagnostics already implemented in PR1 */
