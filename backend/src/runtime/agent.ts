@@ -412,7 +412,8 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const writerMessages = note ? withNote(messages, note) : messages;
     const writerTask = profileTask(writerMessages, run.tools, run.request.maxTokens);
     // Drafts count toward context, so rank again for the longer request; the strongest fitting model writes.
-    const writers = withChoice(rankCandidates(run.candidates, { ...writerTask, kind: task.kind }, health, run.owner, bench).ranked, config.writer, 'writer').list;
+    const writerRanking = rankCandidates(run.candidates, { ...writerTask, kind: task.kind }, health, run.owner, bench);
+    const writers = withChoice(writerRanking.ranked, config.writer, 'writer').list;
     const started = Date.now();
     let answered = false;
     const result = await tryInOrder(writers, context({
@@ -427,7 +428,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     if (!result.ok) {
       // No writer could answer. A draft is still an answer: show the first one rather than nothing.
       const fallback = drafts.find(draft => draft.text.trim());
-      if (!fallback || answered) throw noneLeft({ ranked: writers, excluded: {} }, result.attempts, health.now(), result.last as ProviderError | undefined);
+      if (!fallback || answered) throw noneLeft({ ...writerRanking, ranked: writers }, result.attempts, health.now(), result.last as ProviderError | undefined);
       // The draft's own step names the model that wrote it.
       emit({ type: 'status', message: 'No model could check and rewrite the drafts, so this is one unchecked draft.' });
       emit({ type: 'delta', text: fallback.text });

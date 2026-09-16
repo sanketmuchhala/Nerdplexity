@@ -3,7 +3,7 @@ import type { RunEnvelope, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import { ProviderFailure } from './adapters.js';
 import { RunRegistry, type ProgressPayload } from './runs.js';
-import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun } from './router.js';
+import { accountOf, benchIndex, MAX_ATTEMPTS, parameterBillions, profileTask, rankCandidates, routedExecutor, RouterHealth, type RouteCandidate, type RoutedRun, fitOutput, promptTokens, RESERVED_OUTPUT } from './router.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const sse = (records: unknown[], done = true) => records.map(r => `data: ${JSON.stringify(r)}\n\n`).join('') + (done ? 'data: [DONE]\n\n' : '');
@@ -40,6 +40,28 @@ async function execute(run: Partial<RoutedRun> & { candidates: RouteCandidate[] 
   catch (e) { thrown = e; }
   return { result, thrown, events, routes: events.filter(e => e.type === 'route'), text: events.flatMap(e => e.type === 'delta' ? [e.text] : []).join('') };
 }
+
+describe('fitting a long answer to a model', () => {
+  const fits = (asked: number, extra: Partial<RouteCandidate>, chars = 4000) =>
+    fitOutput(asked, { ...candidate('m', { contextLength: undefined }), ...extra }, ask('x'.repeat(chars)));
+
+  it('asks a model for no more output than it can give, instead of leaving it out', () => {
+    // 4,000 characters is about 1,000 tokens of prompt.
+    expect(fits(8000, { contextLength: 8192 })).toBe(8192 - 1000 - 256);
+    expect(fits(8000, { contextLength: 131_072 })).toBeUndefined();
+    expect(fits(8000, { contextLength: 131_072, maxOutputTokens: 4096 })).toBe(4096);
+    expect(fits(2048, { contextLength: 131_072 })).toBeUndefined();
+    expect(fits(8000, {})).toBeUndefined();
+  });
+
+  it('judges what fits on a reserve, so a long answer does not rule out every smaller model', () => {
+    const long = [{ role: 'user' as const, content: 'x'.repeat(4000) }];
+    // Asking for 8,000 tokens of output does not push the request past a 8k model's context.
+    expect(profileTask(long, [], 8000).estimatedTokens).toBe(1000 + RESERVED_OUTPUT);
+    expect(rankCandidates([candidate('small', { contextLength: 8192 })], profileTask(long, [], 8000), new RouterHealth(), 'u').ranked).toHaveLength(1);
+    expect(promptTokens(long)).toBe(1000);
+  });
+});
 
 describe('task profile', () => {
   it('classifies the latest request and what a model must support', () => {

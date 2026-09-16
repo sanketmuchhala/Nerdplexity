@@ -27,6 +27,13 @@ export interface TaskProfile {
 /** Models sent the request at most this many times per run. */
 export const MAX_ATTEMPTS = 4;
 
+/**
+ * Output reserved when checking whether a request fits a model. A larger request is not refused:
+ * it is trimmed to what the model can take (`fitOutput`), so asking for a long answer does not
+ * leave every smaller model out.
+ */
+export const RESERVED_OUTPUT = 4096;
+
 /** Failures that happen before the model answers and may not happen on another model. A refusal is the model's decision and is never routed around. */
 const FALLBACK = new Set<ProviderErrorCategory>(['quota', 'unavailable', 'transport', 'timeout', 'invalid-request', 'context', 'auth']);
 
@@ -55,7 +62,29 @@ export function profileTask(messages: RunMessage[], tools: ToolName[], maxTokens
     characters += textOf(message.content).length;
     if (Array.isArray(message.content)) images += message.content.filter(part => part.type === 'image').length;
   }
-  return { kind, vision: images > 0, tools: tools.length > 0, estimatedTokens: Math.ceil(characters / 4) + images * 1000 + maxTokens };
+  return { kind, vision: images > 0, tools: tools.length > 0, estimatedTokens: Math.ceil(characters / 4) + images * 1000 + Math.min(maxTokens, RESERVED_OUTPUT) };
+}
+
+/** The prompt's size in tokens, estimated at four characters per token plus 1,000 an image. */
+export function promptTokens(messages: RunMessage[]): number {
+  let characters = 0;
+  let images = 0;
+  for (const message of messages) {
+    characters += textOf(message.content).length;
+    if (Array.isArray(message.content)) images += message.content.filter(part => part.type === 'image').length;
+  }
+  return Math.ceil(characters / 4) + images * 1000;
+}
+
+/**
+ * The output limit to send this model: what was asked, capped by what the provider allows and by
+ * what is left of the model's context after the prompt. Undefined when the request fits as it is.
+ */
+export function fitOutput(asked: number | undefined, candidate: RouteCandidate, messages: RunMessage[]): number | undefined {
+  if (!asked) return undefined;
+  const room = candidate.contextLength ? candidate.contextLength - promptTokens(messages) - 256 : Infinity;
+  const fitted = Math.min(asked, candidate.maxOutputTokens ?? Infinity, room);
+  return fitted < asked ? Math.max(256, Math.floor(fitted)) : undefined;
 }
 
 /** Total parameters in billions from a model ID ("llama-3.3-70b", "mixtral-8x7b"). "a12b" is an active count and is ignored. */
@@ -358,7 +387,12 @@ export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext,
     if (ctx.blockedAccounts.has(account) || ctx.health.coolingUntil(account, candidate.model)) continue;
     attempts++;
     hooks.trying?.(entry, attempts, previous);
-    const request: ModelRequest = { ...ctx.request, target: candidate.target, model: candidate.model, messages: ctx.messages as ModelMessage[], waitOnRateLimit: false, freeOnly: true };
+    // Ask for no more output than this model can give, so a long answer is trimmed, not refused.
+    const fitted = fitOutput(ctx.request.maxTokens, candidate, ctx.messages);
+    const request: ModelRequest = {
+      ...ctx.request, ...(fitted !== undefined ? { maxTokens: fitted } : {}),
+      target: candidate.target, model: candidate.model, messages: ctx.messages as ModelMessage[], waitOnRateLimit: false, freeOnly: true,
+    };
     const sentAt = Date.now();
     let answeredAt: number | undefined;
     let text = '';

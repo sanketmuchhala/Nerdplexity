@@ -88,6 +88,8 @@ export interface RouteModel {
   displayName?: string;
   capabilities?: { tools: Capability; vision: Capability };
   contextLength?: number;
+  /** The most output tokens the provider allows in one answer, when the catalog says. */
+  maxOutputTokens?: number;
 }
 
 /**

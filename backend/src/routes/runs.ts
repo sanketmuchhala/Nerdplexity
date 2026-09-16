@@ -54,11 +54,13 @@ export function validateRoute(route: any): RouteCandidate[] {
     if (seen.has(key)) throw new Error(`Route model ${entry.model} is listed twice.`);
     seen.add(key);
     const contextLength = Number.isInteger(entry.contextLength) && entry.contextLength > 0 ? entry.contextLength : undefined;
+    const maxOutputTokens = Number.isInteger(entry.maxOutputTokens) && entry.maxOutputTokens > 0 ? entry.maxOutputTokens : undefined;
     return {
       connectionId: entry.connectionId, model: entry.model, target,
       ...(typeof entry.displayName === 'string' ? { displayName: entry.displayName.slice(0, 200) } : {}),
       capabilities: { tools: capability(entry.capabilities?.tools), vision: capability(entry.capabilities?.vision) },
       ...(contextLength ? { contextLength } : {}),
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
     };
   });
 }

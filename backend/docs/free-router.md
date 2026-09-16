@@ -154,7 +154,7 @@ The order matters: "Write a Python script" is `code`, not `writing`, because `co
 
 - `vision`: any message in the request (not only the latest) contains an image. Thread image attachments are sent with every turn, so they count.
 - `tools`: the run has any tool enabled (calculator, documents, web search).
-- `estimatedTokens` = ⌈characters in all messages ÷ 4⌉ + 1,000 per image + the answer's `maxTokens` (2,048 when not set).
+- `estimatedTokens` = ⌈characters in all messages ÷ 4⌉ + 1,000 per image + room for the answer: the request's `maxTokens` (2,048 when not set), but at most `RESERVED_OUTPUT` (4,096). A request for a longer answer does not rule a model out; the answer is trimmed to fit it instead (below).
 
 ## 6. Step 2: leaving models out
 
@@ -164,10 +164,12 @@ A candidate is removed before scoring when:
 | --- | --- |
 | The message has an image and the catalog says the model has **no** image input (`vision: false`) | cannot read images |
 | Tools are on and the catalog says the model has **no** tool support (`tools: false`) | cannot use tools |
-| The model's context length is known and smaller than `estimatedTokens` | context too small |
+| The model's context length is known and smaller than `estimatedTokens` (prompt plus at most 4,096 reserved for the answer) | context too small |
 | The model, or its whole account, is cooling down (section 9) | cooling down after a failure |
 
 "Unknown" capabilities (`null`) do not remove a model; they lower its score instead. The counts are kept for the message shown when nothing is left (section 12).
+
+**The answer is trimmed to the model, not the other way round** (`fitOutput`). Before a model is sent the request, the output limit is lowered to the smallest of: what was asked, the model's own maximum output when the catalog says, and what is left of its context after the prompt (less 256 tokens). So a request for a long answer, such as a Deep Research report asking for 8,000 tokens, still runs on a model with a smaller context or output cap, and providers do not reject it for asking too much.
 
 ## 7. Step 3: scoring
 
