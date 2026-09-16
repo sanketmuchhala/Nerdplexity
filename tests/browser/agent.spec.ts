@@ -189,7 +189,10 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await expect(flow).toContainText('Read 2 sources');
   await expect(flow).toContainText('Writes the report');
   // Each reader kept its true quote and dropped the invented one.
-  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('Kept 1 note; dropped 1 whose quote is not on the page');
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('Kept 1 note');
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 1' })).toContainText('dropped 1 the page does not say');
+  // A page with no text of its own is still read, through the search engine's extract.
+  await expect(panel.locator('.np-agent-step').filter({ hasText: 'Source 2' })).toContainText('Kept 1 note');
   await expect(panel.locator('.np-agent-step').filter({ hasText: 'Citation check' })).toContainText('2 citations to 2 of 2 sources; each names a source with checked notes');
 
   // Only checked quotes reached the writer.

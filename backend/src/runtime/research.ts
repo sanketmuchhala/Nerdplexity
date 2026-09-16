@@ -28,9 +28,16 @@ export const RESEARCH_LIMITS = {
   readerTokens: 1000,
   outlineTokens: 800,
   /** Output reserved for the report, when the user's own limit is lower. */
-  reportTokens: 4000,
+  reportTokens: 8000,
+  /** Times the report may be continued after hitting the model's output limit. */
+  continuations: 3,
+  /** Notes taken from the search engine's extracts when a reader finds none. */
+  extractNotes: 3,
   quote: { min: 12, max: 400 },
 } as const;
+
+/** NERDPLEXITY_DEBUG_RESEARCH=1 prints the queries, what each search and reader returned, and continuations. */
+const debug = (line: string) => { if (process.env.NERDPLEXITY_DEBUG_RESEARCH) console.log(`[research] ${line}`); };
 
 export const RESEARCH_DEPTHS: readonly ResearchDepth[] = ['quick', 'standard', 'deep'];
 
@@ -45,9 +52,46 @@ export interface ResearchPlan {
 const PLANNER_PROMPT = (queries: number) => [
   "You plan web research that will answer the user's question.",
   'First list 3 to 5 distinct perspectives on the topic: people or fields that would look at it differently.',
-  `Then write up to 6 sub-questions that together answer the question, drawing on those perspectives, each with one or two web search queries (at most ${queries} queries in total).`,
+  `Then write ${Math.max(2, Math.min(6, queries - 1))} to 6 sub-questions that together answer the question, drawing on those perspectives, each with one web search query (at most ${queries} queries in total).`,
+  `A query is what you would type into a search engine: a natural-language phrase of 3 to ${QUERY_WORDS} words, each covering a different part of the question.`,
+  "Never use the user's whole message as a query, and never repeat the same query twice.",
   'Reply with JSON only, no other text: {"perspectives":["..."],"questions":[{"question":"...","queries":["..."]}]}',
 ].join('\n');
+
+/** Longest a search query may be: Exa reads a phrase, not a page. */
+const QUERY_WORDS = 14;
+const QUERY_CHARS = 180;
+
+/** A message turned into something worth searching for: one line, no markdown, a few words. */
+export function searchPhrase(text: string, words = QUERY_WORDS): string {
+  const line = text.replace(/[`*_>#\[\]]/g, ' ').replace(/^\s*[-*\d.)]+\s+/gm, ' ').replace(/\s+/g, ' ').trim();
+  return line.split(' ').slice(0, words).join(' ').slice(0, QUERY_CHARS).trim();
+}
+
+/**
+ * Queries for a message the planner could not split: its questions, else its opening sentences,
+ * each shortened to a search phrase. A long message is never sent to the search engine whole.
+ */
+export function fallbackQueries(question: string, max: number): string[] {
+  const sentences = question.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 12);
+  const asked = sentences.filter(s => s.endsWith('?'));
+  const chosen = (asked.length ? asked : sentences).slice(0, Math.min(3, Math.max(1, max)));
+  const queries: string[] = [];
+  for (const sentence of chosen.length ? chosen : [question]) {
+    const phrase = searchPhrase(sentence);
+    if (phrase.length >= 8 && !queries.some(q => q.toLowerCase() === phrase.toLowerCase())) queries.push(phrase);
+  }
+  return queries.length ? queries : [searchPhrase(question)];
+}
+
+const RECENT = /\b(latest|newest|current|currently|recent|recently|today|this (year|month|week)|right now|up to date|as of|so far in \d{4}|state of the art)\b/i;
+/** Pages from the last 18 months when the question asks about now, else no date limit. */
+export function recencySince(question: string, now = new Date()): string | undefined {
+  if (!RECENT.test(question) && !new RegExp(`\\b${now.getFullYear()}\\b`).test(question)) return undefined;
+  const since = new Date(now);
+  since.setMonth(since.getMonth() - 18);
+  return since.toISOString().slice(0, 10);
+}
 
 const jsonIn = (reply: string): any => {
   const found = /\{[\s\S]*\}/.exec(reply)?.[0];
@@ -63,7 +107,12 @@ export function parseResearchPlan(reply: string | undefined, question: string, m
   const seen = new Set<string>();
   const questions = (Array.isArray(data?.questions) ? data.questions : []).slice(0, 6).flatMap((entry: any) => {
     if (typeof entry?.question !== 'string' || !entry.question.trim()) return [];
-    const queries = texts(entry.queries, 2, 300).filter(q => { const key = q.toLowerCase(); if (seen.has(key)) return false; seen.add(key); return true; });
+    const queries = texts(entry.queries, 2, 400).map(q => searchPhrase(q)).filter(q => {
+      const key = q.toLowerCase();
+      if (q.length < 8 || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     return queries.length ? [{ question: entry.question.trim().slice(0, 400), queries }] : [];
   });
   // Keep the query budget, taking the first query of every sub-question before any second one.
@@ -71,7 +120,8 @@ export function parseResearchPlan(reply: string | undefined, question: string, m
   const firsts = questions.map((q: ResearchPlan['questions'][number]) => ({ ...q, queries: left-- > 0 ? q.queries.slice(0, 1) : [] }));
   for (const [i, q] of questions.entries()) if (q.queries[1] && left-- > 0) firsts[i].queries.push(q.queries[1]);
   const kept = firsts.filter((q: ResearchPlan['questions'][number]) => q.queries.length);
-  if (!kept.length) return { perspectives: [], questions: [{ question: question.slice(0, 400), queries: [question.slice(0, 300)] }] };
+  // Without a usable plan, search for the message's own questions rather than the whole message.
+  if (!kept.length) return { perspectives: [], questions: fallbackQueries(question, maxQueries).map(query => ({ question: query, queries: [query] })) };
   return { perspectives: texts(data?.perspectives, 5, 200), questions: kept };
 }
 
@@ -139,25 +189,101 @@ const READER_PROMPT = (question: string, plan: ResearchPlan) => [
   'Sub-questions:',
   ...plan.questions.map((q, i) => `${i + 1}. ${q.question}`),
   '',
-  `For each useful fact, copy a short quote from the page that states it: one sentence or less, copied exactly, character for character. At most ${RESEARCH_LIMITS.notesPerSource} facts.`,
-  'Reply with JSON only, no other text: {"notes":[{"fact":"...","quote":"...","question":1}]}',
+  `Write up to ${RESEARCH_LIMITS.notesPerSource} short facts, each with numbers, names, and dates where the page gives them.`,
+  'With each fact, copy the sentence from the page that states it. Copy it from the page rather than writing your own.',
+  'Reply as JSON: {"notes":[{"fact":"...","quote":"...","question":1}]}',
+  'If JSON is awkward, write one fact per line instead, as: fact -- "sentence copied from the page"',
   'If the page does not help, reply {"notes":[]}.',
 ].join('\n');
 
-/** A reader's notes, keeping only those whose quote is in the page. */
-export function readNotes(reply: string, page: string): { kept: Omit<Note, 'id' | 'source'>[]; dropped: number } {
+const STOPWORDS = new Set('the a an and or of to in on for with that this it is are was were be been as at by from into over under after before their its his her they them we you your our not no than then there here which who whom what when where how why can could may might will would should must have has had do does did'.split(' '));
+const keywords = (text: string) => new Set(normalize(text).split(/[^a-z0-9%$.-]+/).filter(word => word.length > 2 && !STOPWORDS.has(word)));
+
+/** Sentences of a page, long enough to stand as a quote. */
+const sentences = (text: string) => text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s.length >= RESEARCH_LIMITS.quote.min);
+
+/**
+ * The page's own words for a note. A quote copied from the page is kept as it is; a quote the model
+ * reworded is replaced by the page sentence that says the same thing, so every note stays verbatim.
+ * Nothing is kept when the page does not say it.
+ */
+export function quoteFromPage(quote: string, fact: string, page: string): { quote: string; repaired: boolean } | undefined {
+  if (quoteInPage(quote, page)) return { quote: quote.slice(0, RESEARCH_LIMITS.quote.max), repaired: false };
+  const wanted = keywords(`${quote} ${fact}`);
+  if (wanted.size < 2) return undefined;
+  let best: { sentence: string; shared: number; score: number } | undefined;
+  for (const sentence of sentences(page)) {
+    const words = keywords(sentence);
+    if (!words.size) continue;
+    let shared = 0;
+    for (const word of wanted) if (words.has(word)) shared++;
+    // Overlap against the shorter side, so a reworded note still matches the sentence it came from.
+    const score = shared / Math.min(wanted.size, words.size);
+    if (!best || score > best.score) best = { sentence, shared, score };
+  }
+  // The sentence must carry most of the note's distinctive words, and several of them.
+  const same = best && best.shared >= 3 && best.score >= 0.6 && best.shared / wanted.size >= 0.35;
+  return same && best ? { quote: best.sentence.slice(0, RESEARCH_LIMITS.quote.max), repaired: true } : undefined;
+}
+
+/** Facts written as lines ("fact -- \"quote\"", "- fact: \"quote\"") when a model will not write JSON. */
+function notesFromLines(reply: string): { fact: string; quote: string }[] {
+  const notes: { fact: string; quote: string }[] = [];
+  for (const line of reply.split('\n').map(l => l.trim()).filter(Boolean)) {
+    const match = /^[-*\d.)\s]*(.+?)\s*(?:--|—|–|:)\s*["\u201c](.+?)["\u201d]\s*$/.exec(line) ?? /^[-*\d.)\s]*(.+?)\s*(?:--|—|–)\s*(.+)$/.exec(line);
+    if (match && match[1].trim().length > 3 && match[2].trim().length >= RESEARCH_LIMITS.quote.min) notes.push({ fact: match[1].trim(), quote: match[2].trim() });
+  }
+  return notes;
+}
+
+export interface ReadResult {
+  kept: Omit<Note, 'id' | 'source'>[];
+  dropped: number;
+  /** Quotes the model reworded that were matched back to a page sentence. */
+  repaired: number;
+  /** The notes came from the search extract, because the reader found none. */
+  fromExtract: boolean;
+}
+
+/**
+ * A reader's notes, in JSON or as lines, keeping only what the page says (section 6 of the docs).
+ * When a reader finds nothing usable, the search engine's own extracts of the page stand in, so a
+ * page that was worth finding is not thrown away because one model would not follow the format.
+ */
+export function readNotes(reply: string, page: WebPage): ReadResult {
   const data = jsonIn(reply);
-  const notes = (Array.isArray(data?.notes) ? data.notes : []).slice(0, RESEARCH_LIMITS.notesPerSource);
+  const raw: any[] = Array.isArray(data?.notes) && data.notes.length ? data.notes : notesFromLines(reply);
+  const text = readable(page);
   const kept: Omit<Note, 'id' | 'source'>[] = [];
   let dropped = 0;
-  for (const note of notes) {
-    if (typeof note?.fact !== 'string' || typeof note?.quote !== 'string' || !note.fact.trim()) { dropped++; continue; }
-    const quote = note.quote.trim().slice(0, RESEARCH_LIMITS.quote.max);
-    if (!quoteInPage(quote, page)) { dropped++; continue; }
-    kept.push({ fact: note.fact.trim().slice(0, 500), quote, ...(Number.isInteger(note.question) ? { question: note.question } : {}) });
+  let repaired = 0;
+  for (const note of raw.slice(0, RESEARCH_LIMITS.notesPerSource)) {
+    const fact = typeof note?.fact === 'string' ? note.fact.trim() : '';
+    const said = typeof note?.quote === 'string' ? note.quote.trim() : '';
+    if (!fact || !said) { dropped++; continue; }
+    const found = quoteFromPage(said, fact, text);
+    if (!found) { dropped++; continue; }
+    if (found.repaired) repaired++;
+    kept.push({ fact: fact.slice(0, 500), quote: found.quote, ...(Number.isInteger(note.question) ? { question: note.question } : {}) });
   }
-  return { kept, dropped };
+  if (kept.length) return { kept, dropped, repaired, fromExtract: false };
+  const extracts = extractNotes(page);
+  return { kept: extracts, dropped, repaired, fromExtract: extracts.length > 0 };
 }
+
+/** The search engine's extracts of a page, as notes: its own words, so they are quotable. */
+export function extractNotes(page: WebPage): Omit<Note, 'id' | 'source'>[] {
+  const pieces = page.highlights.length ? page.highlights : sentences(page.text).slice(0, 2);
+  return pieces.slice(0, RESEARCH_LIMITS.extractNotes).flatMap(piece => {
+    const quote = piece.trim().slice(0, RESEARCH_LIMITS.quote.max);
+    if (quote.length < RESEARCH_LIMITS.quote.min) return [];
+    const fact = sentences(quote)[0] ?? quote;
+    return [{ fact: `From the page: ${fact.slice(0, 400)}`, quote }];
+  });
+}
+
+/** What a reader reads: the page's text, or the search engine's extracts when there is none. */
+export const readable = (page: WebPage) => page.text.trim() ? page.text : page.highlights.join('\n\n');
 
 // ---------------------------------------------------------------------------
 // Outline, report, and the citation check
@@ -176,6 +302,15 @@ export function parseOutline(reply: string | undefined, noteIds: Set<number>): {
       : []);
   return sections.length ? sections : undefined;
 }
+
+/** How much of a cut-off report is sent back with the request to continue it. */
+const CARRY_CHARS = 6000;
+
+const CONTINUE_PROMPT = [
+  'Continue the report from exactly where it stopped, even if that is in the middle of a sentence, a list, or a table row.',
+  'Do not repeat anything already written, do not start again, and do not add a preamble.',
+  'Keep the same format, headings, and citation style, and finish any table that is open.',
+].join('\n');
 
 const REPORT_PROMPT = [
   "You write a research report that answers the user's latest message, using only the notes below. Each note was checked: its quote appears on the source page.",
@@ -269,15 +404,23 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
 
     // Search: every query, a few at a time.
     const queries = plan.questions.flatMap(q => q.queries);
+    const since = recencySince(question);
+    debug(`${queries.length} queries${since ? ` since ${since}` : ''}: ${queries.map(q => JSON.stringify(q)).join(', ')}`);
     const results = await pool(queries, RESEARCH_LIMITS.searchesAtOnce, async (query, i) => {
       const id = `search-${i + 1}`;
-      steps.step({ id, role: 'searcher', status: 'running', task: query, reason: 'Searching the web with Exa' });
+      steps.step({ id, role: 'searcher', status: 'running', task: query, reason: `Searching the web with Exa${since ? `, pages since ${since}` : ''}` });
       try {
-        const pages = await exaPages(query, budget.perQuery, apiKey, RESEARCH_LIMITS.pageChars, signal, fetchImpl);
-        steps.step({ id, role: 'searcher', status: 'done', task: query, reason: `${pages.length} page${pages.length === 1 ? '' : 's'} with text` });
+        const pages = await exaPages(query, budget.perQuery, apiKey, RESEARCH_LIMITS.pageChars, signal, fetchImpl, since ? { since } : {});
+        const chars = pages.reduce((n, page) => n + readable(page).length, 0);
+        debug(`search ${i + 1} ${JSON.stringify(query)}: ${pages.length} pages, ${chars} characters${pages.some(p => !p.text.trim()) ? ' (some from extracts only)' : ''}`);
+        steps.step({
+          id, role: 'searcher', status: 'done', task: query,
+          reason: pages.length ? `${pages.length} page${pages.length === 1 ? '' : 's'}, ${Math.round(chars / 1000)}k characters to read` : 'No pages with readable text',
+        });
         return pages;
       } catch (error) {
         if (signal.aborted) throw error;
+        debug(`search ${i + 1} ${JSON.stringify(query)} failed: ${(error as Error).message}`);
         steps.step({ id, role: 'searcher', status: 'failed', task: query, reason: (error as Error).message });
         return [];
       }
@@ -287,22 +430,30 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     // Read: several models in parallel, each starting on a different one; only quotes in the page are kept.
     const readers = ranked(table.extraction).length ? ranked(table.extraction) : ranked(table[task.kind]);
     const read = await pool(pages, RESEARCH_LIMITS.readersAtOnce, async (page, i) => {
-      let found: ReturnType<typeof readNotes> = { kept: [], dropped: 0 };
+      const empty: ReadResult = { kept: [], dropped: 0, repaired: 0, fromExtract: false };
+      let found: ReadResult = empty;
       const done = await steps.run(`read-${i + 1}`, 'reader', rotate(readers, i), {
         messages: [
           { role: 'system', content: READER_PROMPT(question, plan) },
-          { role: 'user', content: `Page: ${page.title}\nURL: ${page.url}${page.published ? `\nPublished: ${page.published}` : ''}\n\n${page.text}` },
+          { role: 'user', content: `Page: ${page.title}\nURL: ${page.url}${page.published ? `\nPublished: ${page.published}` : ''}\n\n${readable(page)}` },
         ],
         request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0 },
         maxAttempts: RESEARCH_LIMITS.attempts.reader,
       }, { task: page.title, url: page.url }, text => {
-        found = readNotes(text, page.text);
+        found = readNotes(text, page);
+        debug(`read ${i + 1} ${page.url}: ${readable(page).length} characters in, ${found.kept.length} notes kept, ${found.dropped} dropped, ${found.repaired} matched to the page${found.fromExtract ? ', from the search extract' : ''}`);
         return {
           text: found.kept.map(note => `- ${note.fact}\n  "${note.quote}"`).join('\n') || '(nothing on this page helps)',
-          reason: `Kept ${found.kept.length} note${found.kept.length === 1 ? '' : 's'}${found.dropped ? `; dropped ${found.dropped} whose quote is not on the page` : ''}`,
+          reason: [
+            `Kept ${found.kept.length} note${found.kept.length === 1 ? '' : 's'}`,
+            found.fromExtract ? ' from the search extract, because the reader found none' : '',
+            found.repaired ? `; ${found.repaired} quote${found.repaired === 1 ? '' : 's'} matched to the page text` : '',
+            found.dropped ? `; dropped ${found.dropped} the page does not say` : '',
+          ].join(''),
         };
       });
-      return done ? found : { kept: [], dropped: 0 };
+      // A reader that failed outright still leaves the search extract to fall back on.
+      return done ? found : { ...empty, kept: extractNotes(page), fromExtract: true };
     });
 
     // Number the sources that gave notes, in reading order; the report cites these numbers.
@@ -353,6 +504,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     const writers = withChoice(rankCandidates(run.candidates, { ...profileTask(writerMessages, [], maxTokens), kind: task.kind }, health, run.owner, bench).ranked, config.writer, 'writer').list;
     const started = Date.now();
     let report = '';
+    debug(`writing from ${allNotes.length} notes across ${sources.length} sources, up to ${maxTokens} tokens`);
     const result = await tryInOrder(writers, context({ messages: writerMessages, request: { ...run.request, maxTokens }, maxAttempts: RESEARCH_LIMITS.attempts.writer }), {
       trying: (entry: RankedCandidate, attempt, previous) => steps.step({
         id: 'writer', role: 'writer', status: 'running', connectionId: entry.candidate.connectionId, model: entry.candidate.model,
@@ -365,7 +517,38 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     if (!result.ok) throw noneLeft({ ranked: writers, excluded: {} }, result.attempts, health.now(), result.last);
     steps.usages.push(result.done.usage);
     const { candidate } = result.ranked;
-    steps.step({ id: 'writer', role: 'writer', status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: allNotes.length ? `Wrote the report from ${allNotes.length} checked notes.` : 'Answered without sources.', durationMs: Date.now() - started });
+
+    // A report cut off at the output limit is continued from where it stopped, rather than left
+    // mid-sentence or mid-table.
+    let finishReason = result.done.finishReason;
+    let continued = 0;
+    while (finishReason === 'length' && continued < RESEARCH_LIMITS.continuations && !signal.aborted) {
+      continued++;
+      debug(`report hit the output limit; continuation ${continued} of ${RESEARCH_LIMITS.continuations}`);
+      steps.step({
+        id: 'writer', role: 'writer', status: 'running', connectionId: candidate.connectionId, model: candidate.model,
+        reason: `The report reached the model's output limit; continuing it (${continued} of ${RESEARCH_LIMITS.continuations}).`,
+      });
+      const carry = report.length > CARRY_CHARS ? `[earlier part of the report omitted]\n\n${report.slice(-CARRY_CHARS)}` : report;
+      const next = await tryInOrder([result.ranked], context({
+        messages: [...writerMessages, { role: 'assistant', content: carry }, { role: 'user', content: CONTINUE_PROMPT }],
+        request: { ...run.request, maxTokens }, maxAttempts: 1,
+      }), { event: event => { if (event.type === 'delta') report += event.text; emit(event); } });
+      steps.addCalls(next.attempts);
+      if (!next.ok) break;
+      steps.usages.push(next.done.usage);
+      finishReason = next.done.finishReason;
+    }
+
+    steps.step({
+      id: 'writer', role: 'writer', status: 'done', connectionId: candidate.connectionId, model: candidate.model,
+      reason: [
+        allNotes.length ? `Wrote the report from ${allNotes.length} checked notes.` : 'Answered without sources.',
+        continued ? ` Continued ${continued} time${continued === 1 ? '' : 's'} after reaching the output limit.` : '',
+        finishReason === 'length' ? ' It is still cut off at the limit.' : '',
+      ].join(''),
+      durationMs: Date.now() - started,
+    });
 
     // Check the citations by matching: each [n] must name a source that gave checked notes.
     if (sources.length) {
@@ -382,7 +565,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
 
     const usage = sumUsage(steps.usages);
     return {
-      ...(usage ? { usage } : {}), finishReason: result.done.finishReason,
+      ...(usage ? { usage } : {}), finishReason,
       agent: { mode: 'research', task: task.kind, calls: steps.calls, writer: { connectionId: candidate.connectionId, model: candidate.model }, sources },
     };
   };
