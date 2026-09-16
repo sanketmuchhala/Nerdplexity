@@ -376,7 +376,8 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     const config = run.agent ?? {};
     const blockedAccounts = new Set<string>();
     const context = (overrides: Partial<AttemptContext>): AttemptContext => ({
-      owner: run.owner, health, request: run.request, messages, tools: [], documents: [], signal, fetchImpl, enqueue, maxAttempts: 1, blockedAccounts, ...overrides,
+      owner: run.owner, health, request: run.request, messages, tools: [], documents: [], signal, fetchImpl, enqueue,
+      maxAttempts: 1, blockedAccounts, ...(deps.pacer ? { pacer: deps.pacer } : {}), ...overrides,
     });
     const steps = stepRunner(emit, signal, context);
     const notes: string[] = [];

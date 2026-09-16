@@ -335,7 +335,7 @@ export function agentExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const blockedAccounts = new Set<string>();
     const context = (overrides: Partial<AttemptContext>): AttemptContext => ({
       owner: run.owner, health, request: run.request, messages, tools: [], documents: run.documents, search: run.search,
-      signal, fetchImpl, enqueue, maxAttempts: 1, blockedAccounts, ...overrides,
+      signal, fetchImpl, enqueue, maxAttempts: 1, blockedAccounts, ...(deps.pacer ? { pacer: deps.pacer } : {}), ...overrides,
     });
     const steps = stepRunner(emit, signal, context);
     const { step } = steps;

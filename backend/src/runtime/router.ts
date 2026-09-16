@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { AgentConfig, ResearchDepth, BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
+import type { AgentConfig, ConnectionKind, ExecutionLocation, ResearchDepth, BenchCategory, BenchScore, ProviderError, ProviderErrorCategory, RouteModel, RouteOutcome, RunMessage, TaskKind, ToolName } from '@app/types';
 import { AdapterEvent, ModelMessage, ModelRequest, ProviderFailure, streamModel } from './adapters.js';
 import { ResolvedTarget } from './destinations.js';
 import { runWithTools } from './toolLoop.js';
@@ -168,6 +168,47 @@ export class RouterHealth {
   }
 }
 
+/**
+ * Requests a free account allows in a minute, as the providers publish them. Used to space requests
+ * out, not to count them: the aim is to stay under the limit rather than discover it by being
+ * refused, because one refusal on a shared free-model limit cools every model on the account.
+ */
+const PER_MINUTE: Partial<Record<ConnectionKind, number>> = {
+  openrouter: 20, groq: 30, cerebras: 5, gemini: 15, mistral: 60, sambanova: 20, huggingface: 30, deepseek: 60, openai: 60, anthropic: 60,
+};
+const DEFAULT_PER_MINUTE = 20;
+
+const sleepUntil = (ms: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, ms);
+  const stop = () => { clearTimeout(timer); reject(signal.reason ?? new Error('Canceled')); };
+  signal.addEventListener('abort', stop, { once: true });
+});
+
+/**
+ * Spaces requests to one account, so parallel steps (drafts, research readers) do not arrive as a
+ * burst that the provider rate limits. Models on this machine are not spaced; they queue instead.
+ */
+export class AccountPacer {
+  private nextAt = new Map<string, number>();
+
+  constructor(private now: () => number = Date.now, private sleep = sleepUntil) {}
+
+  /** The gap this provider's free limit implies between two requests. */
+  gap(kind: ConnectionKind, execution: ExecutionLocation): number {
+    return execution === 'local' ? 0 : Math.ceil(60_000 / (PER_MINUTE[kind] ?? DEFAULT_PER_MINUTE));
+  }
+
+  /** Waits until this account's next slot, and books it. */
+  async take(account: string, kind: ConnectionKind, execution: ExecutionLocation, signal: AbortSignal): Promise<void> {
+    const gap = this.gap(kind, execution);
+    if (!gap) return;
+    const now = this.now();
+    const at = Math.max(now, this.nextAt.get(account) ?? 0);
+    this.nextAt.set(account, at + gap);
+    if (at > now) await this.sleep(at - now, signal);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Ranking
 
@@ -306,6 +347,8 @@ export interface RoutedRun {
 
 export interface RouterDeps {
   health: RouterHealth;
+  /** Spaces requests to each account, shared by every run on this server. */
+  pacer?: AccountPacer;
   /** This user's Bench results, when any. */
   bench?: BenchIndex;
   fetchImpl?: FetchFn;
@@ -325,10 +368,13 @@ function seconds(ms: number) {
 export function noneLeft(ranking: Ranking, tried: number, now: number, last?: ProviderError): ProviderFailure {
   const reasons = Object.entries(ranking.excluded).map(([reason, count]) => `${count} ${reason}`);
   const wait = ranking.nextAvailableAt !== undefined ? ranking.nextAvailableAt - now : undefined;
+  const cooling = Object.keys(ranking.excluded).length === 1 && ranking.excluded['cooling down after a failure'] > 0;
   const parts = [
     tried ? `${tried} free model${tried === 1 ? '' : 's'} failed${last ? ` (last: ${last.message})` : ''}.` : 'No free model can take this request.',
     reasons.length ? `Left out: ${reasons.join(', ')}.` : '',
     wait !== undefined ? `The next one is available in ${seconds(wait)}.` : '',
+    // Free models share their provider's limits, so one account can run out all at once.
+    cooling ? 'Free models have per-minute and daily limits on each account; connecting another provider (Groq, Cerebras, Gemini) spreads the load.' : '',
   ];
   return new ProviderFailure({
     category: last?.category ?? (wait !== undefined ? 'quota' : 'invalid-request'),
@@ -355,6 +401,8 @@ export interface AttemptContext {
   maxAttempts: number;
   /** Accounts found unusable earlier in this run (a bad key, an account-wide limit), shared between steps. */
   blockedAccounts: Set<string>;
+  /** Spaces requests to one account; without it they are sent as fast as they are made. */
+  pacer?: AccountPacer;
 }
 
 export interface AttemptHooks {
@@ -387,6 +435,8 @@ export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext,
     if (ctx.blockedAccounts.has(account) || ctx.health.coolingUntil(account, candidate.model)) continue;
     attempts++;
     hooks.trying?.(entry, attempts, previous);
+    // Wait for this account's next slot, so parallel steps do not arrive as a burst.
+    await ctx.pacer?.take(account, candidate.target.kind, candidate.target.execution, ctx.signal);
     // Ask for no more output than this model can give, so a long answer is trimmed, not refused.
     const fitted = fitOutput(ctx.request.maxTokens, candidate, ctx.messages);
     const request: ModelRequest = {
@@ -441,7 +491,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const ranking = rankCandidates(run.candidates, task, health, run.owner, bench);
     const result = await tryInOrder(ranking.ranked, {
       owner: run.owner, health, request: run.request, messages, tools: run.tools, documents: run.documents, search: run.search,
-      signal, fetchImpl, enqueue, maxAttempts: MAX_ATTEMPTS, blockedAccounts: new Set(),
+      signal, fetchImpl, enqueue, maxAttempts: MAX_ATTEMPTS, blockedAccounts: new Set(), ...(deps.pacer ? { pacer: deps.pacer } : {}),
     }, {
       trying: ({ candidate, why }, attempt, previous) => {
         const lead = attempt === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;
