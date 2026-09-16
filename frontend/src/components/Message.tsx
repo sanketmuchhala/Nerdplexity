@@ -121,7 +121,7 @@ export function Message({ message, animate = true, model, streaming = false, sta
               if (!host) { try { host = new URL(src.url).hostname.replace('www.',''); } catch { host = src.url; } }
               return (
                 <a key={i} href={src.url} target="_blank" rel="noopener noreferrer"
-                  className="flex-shrink-0 flex items-center gap-1.5 text-[11px] rounded-full transition-all"
+                  id={`source-${i+1}`} className="flex-shrink-0 flex items-center gap-1.5 text-[11px] rounded-full transition-all np-source-chip"
                   style={{ padding: '3px 10px 3px 6px', background: 'var(--s2)', border: '1px solid var(--b-hi)', color: 'var(--t3)' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ACCENT(.3); (e.currentTarget as HTMLElement).style.color = 'var(--t1)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--b-hi)'; (e.currentTarget as HTMLElement).style.color = 'var(--t3)'; }}
@@ -154,7 +154,12 @@ export function Message({ message, animate = true, model, streaming = false, sta
  * provider text that reaches dangerouslySetInnerHTML is code-block content after Prism, which
  * escapes it; Message.test.tsx checks that. */
 const markdownComponents: Components = {
-  a: ({ href, children, ...props }: any) => <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+  a: ({ href, children, ...props }: any) => {
+    if (href?.startsWith('#source-')) {
+      return <a {...props} href={href} className="np-citation" style={{ textDecoration: 'none', verticalAlign: 'super', fontSize: '0.8em', margin: '0 2px', color: 'var(--np-accent)' }}>{children}</a>;
+    }
+    return <a {...props} href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  },
   img: ({ alt }: any) => <span className="np-markdown-image">[Image: {alt || 'unnamed'}]</span>,
   // Wide tables scroll inside their own box instead of widening the page.
   table: ({ children }: any) => <div className="np-markdown-table"><table>{children}</table></div>,
@@ -190,5 +195,7 @@ export function MarkdownContent({ content }: { content: string }) {
 }
 
 function formatContent(content: string) {
+  // Evidence PR: claim-to-evidence navigation
+  content = content.replace(/\[([0-9]+)\]/g, '[[$1]](#source-$1)');
   return <MarkdownContent content={content} />;
 }
