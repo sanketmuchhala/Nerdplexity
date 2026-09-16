@@ -3,7 +3,7 @@ import type { AgentStep, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import type { ProgressPayload } from './runs.js';
 import { RouterHealth, type RouteCandidate } from './router.js';
-import { checkCitations, extractNotes, fallbackQueries, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, researchExecutor, searchPhrase } from './research.js';
+import { checkCitations, extractNotes, fallbackQueries, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const target = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
@@ -109,11 +109,36 @@ describe('Deep Research parts', () => {
     expect(quoteInPage('330 metres', page)).toBe(false);
   });
 
-  it('takes sources in turn from each search, once each', () => {
+  it('takes sources in turn from each search, once each, and spreads them across websites', () => {
     const page = (url: string) => ({ title: url, url, text: 'x', highlights: [] });
-    const picked = pickSources([[page('https://a.com/1?utm_source=z'), page('https://a.com/2')], [page('https://www.a.com/1/#top'), page('https://b.com/1')]], 10);
-    expect(picked.map(p => p.url)).toEqual(['https://a.com/1?utm_source=z', 'https://a.com/2', 'https://b.com/1']);
-    expect(pickSources([[page('https://a.com/1'), page('https://a.com/2')], [page('https://b.com/1')]], 2).map(p => p.url)).toEqual(['https://a.com/1', 'https://b.com/1']);
+    const search = (query: string, ...pages: ReturnType<typeof page>[]) => ({ query, question: `about ${query}`, pages });
+    const picked = pickSources([
+      search('one', page('https://a.com/1?utm_source=z'), page('https://a.com/2')),
+      search('two', page('https://www.a.com/1/#top'), page('https://b.com/1')),
+    ], 10);
+    expect(picked.map(p => p.page.url)).toEqual(['https://a.com/1?utm_source=z', 'https://a.com/2', 'https://b.com/1']);
+    // Each source remembers the search that found it, for its reader.
+    expect(picked[2]).toMatchObject({ query: 'two', question: 'about two' });
+    expect(pickSources([search('one', page('https://a.com/1'), page('https://a.com/2')), search('two', page('https://b.com/1'))], 2).map(p => p.page.url))
+      .toEqual(['https://a.com/1', 'https://b.com/1']);
+
+    // At most two from one website while others remain; the rest of the budget is filled anyway.
+    const oneSite = [search('q', page('https://a.com/1'), page('https://a.com/2'), page('https://a.com/3'), page('https://a.com/4')), search('r', page('https://b.com/1'))];
+    expect(pickSources(oneSite, 3).map(p => p.page.url)).toEqual(['https://a.com/1', 'https://b.com/1', 'https://a.com/2']);
+    expect(pickSources(oneSite, 5).map(p => p.page.url)).toHaveLength(5);
+  });
+
+  it('reads the part of a long page that is about the question', () => {
+    const filler = 'Unrelated background about the building trade and its history. '.repeat(40);
+    const wanted = 'Tickets to the summit cost 29.40 euros for adults, and the lift runs every ten minutes.';
+    const page = `An introduction to the tower.\n\n${filler}\n\n${wanted}\n\n${filler}`;
+    const slice = relevantSlice(page, 'What do summit tickets cost?', 1200);
+    expect(slice).toContain(wanted);
+    expect(slice).toContain('An introduction to the tower.');
+    expect(slice.length).toBeLessThanOrEqual(1200);
+    expect(slice).toContain('[...]');
+    // A page that already fits is left alone.
+    expect(relevantSlice('short page', 'anything', 1200)).toBe('short page');
   });
 
   it('reads citations like [2], [2][5], [2, 5], and [2-4], and ignores Markdown links', () => {
@@ -180,7 +205,7 @@ describe('Deep Research runs', () => {
 
     // Three searches, asking Exa for page text.
     expect(world.searches.map(s => s.query)).toEqual(['eiffel height', 'eiffel history', 'eiffel visitors']);
-    expect(world.searches[0].contents).toEqual({ text: { maxCharacters: 12_000 }, highlights: { query: 'eiffel height', numSentences: 3, highlightsPerUrl: 5 } });
+    expect(world.searches[0].contents).toEqual({ text: { maxCharacters: 30_000 }, highlights: { query: 'eiffel height', numSentences: 3, highlightsPerUrl: 5 } });
     expect(world.searches[0].startPublishedDate).toBeUndefined();
     // Four distinct pages with text were read (the duplicate and the textless page were not), by different models first.
     const readers = world.calls.filter(c => c.role === 'reader');
@@ -212,6 +237,40 @@ describe('Deep Research runs', () => {
     const order = [...new Set(steps.map(s => s.id.replace(/-\d+$/, '')))];
     expect(order).toEqual(['strategy', 'planner', 'search', 'read', 'outline', 'writer', 'check']);
     expect(result.agent).toMatchObject({ mode: 'research', calls: 1 + 5 + 1 + 1 });
+  });
+
+  it('tells each reader which search found its page, and keeps one copy of a repeated fact', async () => {
+    // Both pages say the same sentence; the tower page also says something of its own.
+    const world = fakeWorld();
+    const readerPrompts: string[] = [];
+    const shared = 'The tower is 330 metres tall, including its antennas.';
+    const fn = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+      const body = JSON.parse(String(init.body));
+      if (String(url).includes('api.exa.ai')) {
+        const pages = body.query === 'eiffel height'
+          ? [{ title: 'Height', url: 'https://a.example/height', text: `${shared} It was completed in 1889.` }]
+          : [{ title: 'Copy', url: 'https://b.example/copy', text: `${shared} Nothing else here.` }];
+        return new Response(JSON.stringify({ results: pages }), { headers: { 'content-type': 'application/json' } });
+      }
+      const system = body.messages.filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
+      if (system.includes('You read one web page')) {
+        readerPrompts.push(system);
+        const notes = [{ fact: 'It is 330 m tall.', quote: shared }];
+        if (String(body.messages.at(-1).content).includes('1889')) notes.push({ fact: 'Completed in 1889.', quote: 'It was completed in 1889.' });
+        return sse(JSON.stringify({ notes }));
+      }
+      return world.fn(url, init);
+    }) as typeof fetch;
+
+    const { result, steps } = await runResearch(fn);
+    // Each reader was told the search and the sub-question behind its page.
+    expect(readerPrompts).toHaveLength(2);
+    expect(readerPrompts[0]).toContain('This page was found by searching for "eiffel height", for the sub-question: How tall is it?');
+    expect(readerPrompts[1]).toContain('This page was found by searching for "eiffel history"');
+    const sources = result.agent?.sources ?? [];
+    // The second page repeated the first page's sentence, so it gave nothing new and is not a source.
+    expect(sources.map(s => [s.title, s.notes])).toEqual([['Height', 2]]);
+    expect(steps.some(step => step.role === 'reader' && /Kept 1 note|Kept 2 notes/.test(step.reason))).toBe(true);
   });
 
   it('continues a report that stops at the output limit, and says so', async () => {

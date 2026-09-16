@@ -73,7 +73,7 @@ Model requests per run, when every model answers first time: 1 (plan) + one per 
 
 Those requests are spaced to each provider's free limit ([Free Router, section 9](free-router.md#9-spacing-health-and-cooldowns)), so a standard run on a single OpenRouter account takes about a minute of waiting alone, at roughly one request every three seconds. Connecting a second provider halves that, because accounts are paced independently.
 
-Other limits (`RESEARCH_LIMITS`): 12,000 characters of page text per reader; at most 6 notes per page; 4 readers and 3 searches at once; 800 output tokens for the plan and the outline, 1,000 per reader; at least 8,000 for the report (more if your setting is higher), continued up to 3 times if the model still stops at its limit (section 7). Asking for 8,000 tokens does not rule out smaller models: each model is sent the largest answer it can give ([Free Router, section 6](free-router.md#6-step-2-leaving-models-out)), and the continuation picks up the rest.
+Other limits (`RESEARCH_LIMITS`): 30,000 characters fetched per page and 12,000 given to a reader, at most 2 sources from one website; at most 6 notes per page; 4 readers and 3 searches at once; 800 output tokens for the plan and the outline, 1,000 per reader; at least 8,000 for the report (more if your setting is higher), continued up to 3 times if the model still stops at its limit (section 7). Asking for 8,000 tokens does not rule out smaller models: each model is sent the largest answer it can give ([Free Router, section 6](free-router.md#6-step-2-leaving-models-out)), and the continuation picks up the rest.
 
 ## 4. Plan
 
@@ -100,11 +100,13 @@ A query is a search phrase, not a message: `searchPhrase` strips markdown and li
 
 Each query goes to Exa's search with `contents: { text: { maxCharacters: 12000 }, highlights: { query, numSentences: 3, highlightsPerUrl: 5 } }`, so a result carries the page text and Exa's own extracts for the query (`exaPages` in `webSearch.ts`). A page is kept when it has either; one with neither has nothing to read. Searches run three at a time.
 
-`pickSources` takes pages in turn from each query's results (the first result of every query, then the second of every query, and so on), so each query contributes, until the budget is reached. The same page is read once even under different URLs: `pageKey` ignores `www.`, fragments, trailing slashes, and tracking parameters (`utm_*`, `ref`, `fbclid`, `gclid`).
+`pickSources` takes pages in turn from each query's results (the first result of every query, then the second of every query, and so on), so each query contributes, until the budget is reached. The same page is read once even under different URLs: `pageKey` ignores `www.`, fragments, trailing slashes, and tracking parameters (`utm_*`, `ref`, `fbclid`, `gclid`). At most **two sources come from one website**, so a single site cannot supply the whole report; if that leaves the budget unfilled, the rest is taken without the limit rather than reading less. Each source remembers the query and sub-question that found it.
 
-Sources are numbered after reading: only pages that gave at least one checked note get a number, in reading order. The report cites these numbers, and the app shows the sources in the same order.
+Sources are numbered after reading: only pages that gave at least one checked note get a number, in reading order. **A fact already taken from an earlier source is not taken again** (notes are compared by their quote), so the report does not repeat itself and a page that only echoes another is not a source. The report cites these numbers, and the app shows the sources in the same order.
 
 ## 6. Reading, and checking quotes
+
+**The part of the page that is about the question.** The search returns up to 30,000 characters, and a reader is given at most 12,000. Rather than the first 12,000, `relevantSlice` cuts the page into blocks, keeps those with most of the question's distinctive words (the opening block always, since it says what the page is), and joins them in their original order, marking gaps with `[...]`. So the useful section of a long page is not lost to truncation.
 
 Each page goes to a reader with this instruction (the page itself is the user message):
 
@@ -119,6 +121,8 @@ Reply as JSON: {"notes":[{"fact":"...","quote":"...","question":1}]}
 If JSON is awkward, write one fact per line instead, as: fact -- "sentence copied from the page"
 If the page does not help, reply {"notes":[]}.
 ```
+
+The reader is also told which query found this page and for which sub-question, so it looks there first and takes anything else that answers another sub-question.
 
 Readers run four at a time. Reader *i* starts on the *i*-th structured-output model in the ranking, so parallel readers spread over models and providers, and each falls back to the next model if its first fails before answering.
 
