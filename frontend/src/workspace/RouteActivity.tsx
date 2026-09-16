@@ -25,7 +25,7 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
         <p>The router {task ? `classified this as ${TASK[task]} and ` : ''}sends the message to the best free model that can take it, trying the next one only when a model fails before answering.</p>
         <ol className="np-route-steps">
           {attempts.map(({ step, failure }) => (
-            <li key={step.attempt} className={failure ? 'np-route-failed' : undefined}>
+            <li key={step.attempt} className={failure ? 'np-route-failed' : undefined} style={failure && step !== last.step ? { display: 'none' } : undefined}>
               {failure ? <AlertTriangle size={12} aria-hidden /> : <Check size={12} aria-hidden />}
               <strong>{step.model}</strong>
               <small>{nameOf(step.connectionId)} · {failure ? 'failed' : live && step === last.step ? 'answering' : 'answered'}</small>
@@ -34,6 +34,22 @@ export function RouteActivity({ steps, task, nameOf, live = false }: { steps: Ro
             </li>
           ))}
         </ol>
+        {fallbacks > 0 && (
+          <details className="np-route-diagnostics">
+            <summary>View {fallbacks} recovered failure{fallbacks === 1 ? '' : 's'}</summary>
+            <ol className="np-route-steps">
+              {attempts.filter(a => a.failure && a.step !== last.step).map(({ step, failure }) => (
+                <li key={step.attempt} className="np-route-failed">
+                  <AlertTriangle size={12} aria-hidden />
+                  <strong>{step.model}</strong>
+                  <small>{nameOf(step.connectionId)} · failed</small>
+                  <span>{step.reason}</span>
+                  {failure && <span className="np-route-error">{failure.reason}</span>}
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
       </div>
     </details>
   );

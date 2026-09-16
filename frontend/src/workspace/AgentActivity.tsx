@@ -131,7 +131,7 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
           )}
 
           <ol className="np-agent-steps">
-            {work.map(step => {
+            {work.filter(step => step.status !== 'failed' || step === work[work.length - 1]).map(step => {
               const running = live && step.status === 'running';
               const thinking = step.role === 'writer' ? writerThinking : step.reasoning;
               return (
@@ -192,6 +192,34 @@ export function AgentActivity({ steps, nameOf, providerOf = nameOf, calls, live 
               );
             })}
           </ol>
+          {work.some(step => step.status === 'failed' && step !== work[work.length - 1]) && (
+            <details className="np-route-diagnostics" style={{ marginTop: '10px' }}>
+              <summary>View {work.filter(step => step.status === 'failed' && step !== work[work.length - 1]).length} recovered failure{work.filter(step => step.status === 'failed' && step !== work[work.length - 1]).length === 1 ? '' : 's'}</summary>
+              <ol className="np-agent-steps" style={{ marginTop: '10px' }}>
+                {work.filter(step => step.status === 'failed' && step !== work[work.length - 1]).map(step => {
+                  
+                  return (
+                    <li key={step.id} className="np-agent-step failed">
+                      <div className="np-agent-step-head">
+                        <AlertTriangle size={12} aria-hidden />
+                        <strong>{research && step.role === 'writer' ? 'Report' : roleLabel(step)}</strong>
+                        {step.model && (
+                          <span className="np-agent-model">
+                            {logo(step)}
+                            <span title={step.model}>{step.model}</span>
+                            {step.connectionId && <small>{nameOf(step.connectionId)}</small>}
+                          </span>
+                        )}
+                        <small className="np-agent-state">failed</small>
+                      </div>
+                      {step.reason && <p className="np-route-error">{step.reason}</p>}
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
+          )}
+
         </div>
       </details>
     </div>

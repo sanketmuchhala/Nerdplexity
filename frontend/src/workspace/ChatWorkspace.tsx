@@ -53,6 +53,26 @@ import { WorkbenchDialog } from './WorkbenchDialog';
 import { PdfPreview } from './PdfPreview';
 import * as store from '../lib/store';
 
+function RetryCountdown({ ms, onZero }: { ms: number; onZero?: () => void }) {
+  const [left, setLeft] = useState(ms);
+  useEffect(() => {
+    const end = Date.now() + ms;
+    const t = setInterval(() => {
+      const remaining = end - Date.now();
+      if (remaining <= 0) {
+        clearInterval(t);
+        setLeft(0);
+        onZero?.();
+      } else {
+        setLeft(remaining);
+      }
+    }, 100);
+    return () => clearInterval(t);
+  }, [ms, onZero]);
+  if (left <= 0) return null;
+  return <> Try again in {Math.ceil(left / 1000)}s.</>;
+}
+
 const RUN_STATUS_LABEL = {
   canceled: 'Stopped · partial answer',
   failed: 'Failed · partial answer',
@@ -781,8 +801,7 @@ export function ChatWorkspace({
           <div className="np-error np-chat-error" role="alert">
             <span>
               {run.error.message}
-              {run.error.retryAfterMs !== undefined &&
-                ` Try again in ${Math.ceil(run.error.retryAfterMs / 1000)}s.`}
+              {run.error.retryAfterMs !== undefined && <RetryCountdown ms={run.error.retryAfterMs} onZero={() => {}} />}
             </span>
             {run.error.suggestions?.map((ref) => (
               <button
