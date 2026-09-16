@@ -37,6 +37,7 @@ export const attachment = z.object({
   mimeType: text(200),
   size: z.number().int().min(0),
   content: text(20_000_000),
+  fileData: text(20_000_000).optional(),
   kind: z.enum(['text', 'image']),
   pdfBase64: pdfBase64.optional(),
   createdAt: time,

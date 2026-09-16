@@ -100,16 +100,21 @@ export async function attachmentFromFile(file: File, current: ThreadAttachment[]
   if (error) throw new Error(error);
   const image = IMAGE_TYPES.has(file.type);
   let content: string;
+  let fileData: string | undefined;
   if (image) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = '';
     for (let offset = 0; offset < bytes.length; offset += 32_768)
       binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
     content = btoa(binary);
-  } else content = await readDocument(file);
+    fileData = content;
+  } else {
+    content = await readDocument(file);
+    fileData = await fileBase64(file);
+  }
   if (current.reduce((n, item) => n + new TextEncoder().encode(item.content).length, 0) + new TextEncoder().encode(content).length > 8_000_000)
     throw new Error('Keep extracted text and encoded images under 8 MB total per thread.');
-  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now(), ...(isPdf(file) ? { hasPdf: true, pdfBase64: await fileBase64(file) } : {}) };
+  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, fileData, kind: image ? 'image' : 'text', createdAt: Date.now(), ...(isPdf(file) ? { hasPdf: true, pdfBase64: fileData } : {}) };
 }
 
 export function workbenchSettings(
@@ -314,7 +319,7 @@ export function exportConversation(conversation: Conversation): string {
       format: 'nerdplexity-thread',
       version: 4,
       title: conversation.title,
-      attachments: (conversation.attachments ?? []).map(({ name, mimeType, size, content, kind, createdAt, pdfBase64 }) => ({ name, mimeType, size, content, kind, createdAt, ...(pdfBase64 ? { pdfBase64 } : {}) })),
+      attachments: (conversation.attachments ?? []).map(({ name, mimeType, size, content, kind, createdAt, pdfBase64, fileData }) => ({ name, mimeType, size, content, kind, createdAt, ...(pdfBase64 ? { pdfBase64 } : {}), ...(fileData ? { fileData } : {}) })),
       messages: conversation.messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -413,7 +418,7 @@ export function parseConversation(
     if (file.pdfBase64 !== undefined && (image || typeof file.pdfBase64 !== 'string')) throw new Error('An attachment has invalid PDF data.');
     const original = typeof file.pdfBase64 === 'string' ? pdfBytes(file.pdfBase64) : undefined;
     const size = original?.length ?? (image ? Math.floor(file.content.length * 3 / 4) : encodedSize);
-    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now(), ...(original ? { hasPdf: true, pdfBase64: file.pdfBase64 as string } : {}) };
+    return { id: crypto.randomUUID(), name: file.name, mimeType: typeof file.mimeType === 'string' ? file.mimeType.slice(0, 100) : 'text/plain', size, content: file.content, kind: image ? 'image' : 'text', createdAt: typeof file.createdAt === 'number' && Number.isFinite(file.createdAt) ? file.createdAt : Date.now(), fileData: typeof file.fileData === 'string' ? file.fileData : undefined, ...(original ? { hasPdf: true, pdfBase64: file.pdfBase64 as string } : {}) };
   });
   if (attachments.reduce((n, file) => n + new TextEncoder().encode(file.content).length, 0) > 8_000_000) throw new Error('Extracted text and encoded images exceed 8 MB total.');
   if (attachments.filter(file => file.kind === 'image').reduce((n, file) => n + file.size, 0) > 5_000_000) throw new Error('Images exceed 5 MB total.');

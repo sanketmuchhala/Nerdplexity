@@ -12,6 +12,7 @@ export interface ThreadAttachment {
   mimeType: string;
   size: number;
   content: string;
+  fileData?: string;
   kind: 'text' | 'image';
   /** Original PDF is fetched only when opened. The bytes appear on upload/export only. */
   hasPdf?: boolean;
