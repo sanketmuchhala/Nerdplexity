@@ -143,7 +143,7 @@ test('editing and regenerating create branches without changing the original thr
     .getByRole('button', { name: 'Regenerate message 2', exact: true })
     .click();
   await expect(page.locator('.np-provenance')).toHaveCount(1);
-  await expect(page.locator('.np-thread-heading')).toContainText(
+  await expect(page.locator('.np-chat-toolbar')).toContainText(
     'Branch · original retained',
   );
   await expect
@@ -174,7 +174,7 @@ test('context limits trim whole old turns automatically, and export/import prese
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(data)),
   });
-  await expect(page.locator('.np-thread-heading')).toContainText(
+  await expect(page.locator('.np-chat-toolbar')).toContainText(
     'Long imported thread',
   );
   await expect(

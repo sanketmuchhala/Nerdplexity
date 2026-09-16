@@ -142,6 +142,7 @@ async function ask(
     target, model, messages: [{ role: 'user', content: item.prompt }], maxTokens: MAX_TOKENS[item.category], temperature: 0,
     // Bench handles rate limits itself, visibly, instead of the adapter's short silent waits.
     waitOnRateLimit: false,
+    freeOnly: true,
     ...(item.tools ? { tools: item.tools } : {}),
   };
   const send = async (): Promise<Outcome> => {

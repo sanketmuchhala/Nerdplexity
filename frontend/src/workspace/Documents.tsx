@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { FileText, Plus, Save, Trash2, Upload } from 'lucide-react';
 import type { WorkspaceDocument } from '../lib/db';
 import * as store from '../lib/store';
+import { readDocument } from '../lib/documents';
 
 export function Documents({ documents, refresh }: { documents: WorkspaceDocument[]; refresh: () => Promise<void> }) {
   const [editing, setEditing] = useState<WorkspaceDocument | null>(null);
@@ -13,16 +14,19 @@ export function Documents({ documents, refresh }: { documents: WorkspaceDocument
   const importFile = async (file?: File) => {
     if (!file) return;
     setError(''); setNotice('');
-    if (file.size > 100_000 || !/\.(md|txt|csv|json|log)$/i.test(file.name)) { setError('Choose a text, Markdown, CSV, JSON, or log file under 100 KB.'); return; }
-    try { setEditing({ id: crypto.randomUUID(), title: file.name, content: await file.text(), updatedAt: Date.now() }); }
-    catch { setError('Unable to read that file.'); }
+    try {
+      const content = await readDocument(file);
+      setEditing({ id: crypto.randomUUID(), title: file.name, content, updatedAt: Date.now() });
+    } catch (e: any) {
+      setError(e.message || 'Unable to read that file.');
+    }
   };
   const save = async () => {
     if (!editing) return;
     setError(''); setNotice('');
     const others = documents.filter(d => d.id !== editing.id);
     if (!editing.title.trim() || !editing.content.trim()) { setError('Add a title and some content.'); return; }
-    if (editing.content.length > 100_000 || others.length >= 20 || others.reduce((sum, doc) => sum + doc.content.length, 0) + editing.content.length > 400_000) { setError('Workspace limit: 20 documents, 100,000 characters per document, 400,000 total.'); return; }
+    if (editing.content.length > 2_000_000 || others.length >= 20 || others.reduce((sum, doc) => sum + doc.content.length, 0) + editing.content.length > 4_000_000) { setError('Workspace limit: 20 documents, 2,000,000 characters per document, 4,000,000 total.'); return; }
     setSaving(true);
     try { await store.documents.put({ ...editing, title: editing.title.trim(), updatedAt: Date.now() }); await refresh(); setEditing(null); setNotice('Document saved. Turn on the Documents tool in a thread that uses a model on this machine.'); }
     catch (reason) { setError(`Unable to save. ${(reason as Error).message}`); }
@@ -42,8 +46,8 @@ export function Documents({ documents, refresh }: { documents: WorkspaceDocument
       <label className="np-field"><span>Content</span><textarea value={editing.content} onChange={e => setEditing({ ...editing, content: e.target.value })} placeholder="Paste notes, documentation, or source material…" rows={17}/></label>
       <div className="np-editor-footer"><span>{editing.content.length.toLocaleString()} characters</span><button className="np-button ghost" onClick={() => setEditing(null)}>Cancel</button><button className="np-button primary" onClick={() => void save()} disabled={saving}><Save size={14}/>{saving ? 'Saving' : 'Save document'}</button></div>
     </section> : <>
-      <input ref={input} type="file" accept=".md,.txt,.csv,.json,.log" className="np-visually-hidden" onChange={e => { void importFile(e.target.files?.[0]); e.target.value = ''; }}/>
-      <button className="np-import" onClick={() => input.current?.click()}><Upload size={22}/><strong>Bring in a document</strong><span>Markdown, text, CSV, JSON, or logs · up to 100 KB</span></button>
+      <input aria-label="Import document" ref={input} type="file" className="np-visually-hidden" onChange={e => { void importFile(e.target.files?.[0]); e.target.value = ''; }}/>
+      <button className="np-import" onClick={() => input.current?.click()}><Upload size={22}/><strong>Bring in a document</strong><span>PDF, Word, Excel, text, data, or source code · up to 20 MB</span></button>
       <div className="np-document-grid">{documents.map(doc => <article className="np-document" key={doc.id}><FileText size={20}/><button className="np-document-open" onClick={() => { setEditing(doc); setNotice(''); }}><h3>{doc.title}</h3><p>{doc.content.slice(0, 160)}</p><span>Updated {new Date(doc.updatedAt).toLocaleDateString()} · {doc.content.length.toLocaleString()} characters</span></button><button className="np-icon-button" title={`Delete ${doc.title}`} aria-label={`Delete ${doc.title}`} onClick={() => void remove(doc)}><Trash2 size={14}/></button></article>)}</div>
       {!documents.length && <div className="np-empty-panel"><h3>Your next answer starts with better context.</h3><p>Add a project brief, meeting notes, or a README. Then turn on Documents in a local thread and ask about it.</p></div>}
     </>}

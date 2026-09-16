@@ -66,6 +66,7 @@ const LIMITS = [['temperature', 0, 2, false], ['maxTokens', 1, 128_000, true], [
 
 export function validateRunRequest(body: any): ValidRun {
   if (!body || typeof body !== 'object') throw new Error('Request body is required.');
+  if (body.costPolicy !== undefined && !['free-only', 'any'].includes(body.costPolicy)) throw new Error('Choose a valid model cost policy.');
   if (typeof body.idempotencyKey !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(body.idempotencyKey)) throw new Error('A valid idempotency key is required.');
   let candidates = body.route !== undefined ? validateRoute(body.route) : undefined;
   const target: ResolvedTarget = candidates ? candidates[0].target : resolveTarget(body.target);
@@ -107,6 +108,7 @@ export function validateRunRequest(body: any): ValidRun {
     ...(candidates ? { route: { candidates, strategy: body.route.strategy } } : {}),
     request: {
       target, model: candidates ? '' : body.model,
+      freeOnly: !!candidates || body.costPolicy !== 'any',
       messages: messages.map(({ role, content }: RunMessage) => ({ role, content: structuredClone(content) })),
       temperature: settings.temperature, maxTokens: settings.maxTokens, numCtx: settings.numCtx,
     },

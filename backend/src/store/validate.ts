@@ -30,7 +30,7 @@ export const attachment = z.object({
   mimeType: text(200),
   size: z.number().int().min(0),
   content: text(20_000_000),
-  kind: z.enum(['text', 'image']),
+  kind: z.enum(['text', 'image', 'pdf']),
   createdAt: time,
 });
 export type AttachmentInput = z.infer<typeof attachment>;

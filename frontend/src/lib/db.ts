@@ -12,7 +12,7 @@ export interface ThreadAttachment {
   mimeType: string;
   size: number;
   content: string;
-  kind: 'text' | 'image';
+  kind: 'text' | 'image' | 'pdf';
   createdAt: number;
 }
 /** 'stopped' is the legacy name for 'canceled'. 'interrupted' means the client lost the run. */

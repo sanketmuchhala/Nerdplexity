@@ -42,6 +42,7 @@ import {
   exportConversation,
   workbenchSettings,
   type WorkbenchTool,
+  pdfBlobUrls,
 } from '../lib/workbench';
 import { ToolActivity } from './ToolActivity';
 import { DocumentsPanel } from './DocumentsPanel';
@@ -105,6 +106,7 @@ export function ChatWorkspace({
     content: string;
   } | null>(null);
   const [rename, setRename] = useState<string | null>(null);
+  const [viewPdf, setViewPdf] = useState<{ id: string, name: string, url: string } | null>(null);
   const [actionError, setActionError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
   const branchDraft = useRef<string | null>(null);
@@ -257,8 +259,25 @@ export function ChatWorkspace({
   return (
     <div className="np-chat">
       <div className="np-chat-toolbar">
-        <button
-          className="np-model-switch"
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button
+            style={{ fontWeight: 500, fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--np-text)' }}
+            onClick={() => { if (conversation) setRename(conversation.title); }}
+            title={empty ? 'New chat' : 'Rename thread'}
+            disabled={empty}
+          >
+            {empty ? 'New chat' : conversation!.title}
+            {!empty && <Pencil size={11} />}
+          </button>
+          {conversation?.branchOf && (
+            <span className="np-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <GitBranch size={11} />
+              Branch
+            </span>
+          )}
+          <div style={{ width: '1px', height: '14px', background: 'var(--np-line)' }} />
+          <button
+            className="np-model-switch"
           aria-label="Choose model"
           disabled={run.running}
           onClick={() => setShowPicker(true)}
@@ -272,6 +291,7 @@ export function ChatWorkspace({
           </span>
           <ArrowRight size={13} />
         </button>
+        </div>
         <div className="np-toolbar-actions">
           {freeOnly && (
             <button
@@ -321,23 +341,7 @@ export function ChatWorkspace({
           </button>
         </div>
       </div>
-      {conversation && (
-        <div className="np-thread-heading">
-          <button
-            aria-label="Rename thread"
-            onClick={() => setRename(conversation.title)}
-          >
-            <span>{conversation.title}</span>
-            <Pencil size={12} />
-          </button>
-          {conversation.branchOf && (
-            <span className="np-label">
-              <GitBranch size={12} />
-              Branch · original retained
-            </span>
-          )}
-        </div>
-      )}
+      
       {showDocs && (
         <DocumentsPanel
           documents={documents}
@@ -455,31 +459,9 @@ export function ChatWorkspace({
         }}
       >
         {empty ? (
-          <div className="np-welcome">
-            <div className="np-orbit" aria-hidden="true">
-              <div className="np-orbit-ring one" />
-              <div className="np-orbit-ring two" />
-              <div className="np-orbit-ring three" />
-              <span className="np-orbit-point a" />
-              <span className="np-orbit-point b" />
-              <span className="np-orbit-point c" />
-              <div className="np-orbit-center">
-                <img src="/brand/nerdplexity-mark.svg" alt="" />
-              </div>
-              <span className="np-orbit-caption">LOCAL INTELLIGENCE</span>
-            </div>
-            <div className="np-welcome-label">
-              <span /> A little more independent.
-            </div>
-            <h1>
-              Your models.
-              <br />
-              <span>Your possibilities.</span>
-            </h1>
-            <p>
-              Think, build, and work with your own AI.
-              <br />A quiet space for intelligence that runs on your terms.
-            </p>
+          <div className="np-welcome-minimal">
+            <h1>Nerdplexity</h1>
+            <p>A quiet space for intelligence that runs on your terms.</p>
             <div className="np-suggestions">
               {suggestions.map(({ icon: Icon, title, text }) => (
                 <button
@@ -498,7 +480,6 @@ export function ChatWorkspace({
                 >
                   <Icon size={18} />
                   <span>{title}</span>
-                  <ArrowRight size={13} />
                 </button>
               ))}
             </div>
@@ -672,7 +653,7 @@ export function ChatWorkspace({
       )}
       <div className="np-composer-area">
         {actionError && (
-          <p className="np-error" role="alert">
+          <div className="np-error" role="alert" style={{ whiteSpace: 'pre-line' }}>
             {actionError}
             <button
               className="np-icon-button"
@@ -681,7 +662,7 @@ export function ChatWorkspace({
             >
               <X size={14} />
             </button>
-          </p>
+          </div>
         )}
         {actionNotice && (
           <p className="np-action-notice" role="status">
@@ -691,6 +672,17 @@ export function ChatWorkspace({
         {preview.warnings.length > 0 && (
           <div className="np-policy-block" role="alert">
             <span>{preview.warnings[0]}</span>
+            <button
+              className="np-button small"
+              onClick={() => setShowControls(true)}
+            >
+              Review context
+            </button>
+          </div>
+        )}
+        {preview.notices.length > 0 && (
+          <div className="np-policy-block" role="status">
+            <span>{preview.notices[0]}</span>
             <button
               className="np-button small"
               onClick={() => setShowControls(true)}
@@ -779,8 +771,26 @@ export function ChatWorkspace({
                   <small>{Math.max(1, Math.ceil(file.size / 1024))} KB · inspect</small>
                 </summary>
                 <div>
-                  {file.kind === 'image' ? <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} /> : <pre>{file.content}</pre>}
-                  <button type="button" className="np-button ghost small" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
+                  {file.kind === 'image' ? (
+                    <img className="np-attachment-image" src={`data:${file.mimeType};base64,${file.content}`} alt={file.name} />
+                  ) : file.kind === 'pdf' ? (
+                    pdfBlobUrls.has(file.id) ? (
+                      <div className="np-attachment-pdf-actions">
+                        <p>PDF Document</p>
+                        <button type="button" className="np-button primary small" onClick={() => setViewPdf({ id: file.id, name: file.name, url: pdfBlobUrls.get(file.id)! })}>
+                          Open PDF
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="np-attachment-pdf-actions">
+                        <p>PDF Document (Text Only)</p>
+                        <p className="np-text-small">This document was uploaded in a previous session. Re-upload it to view the original PDF.</p>
+                      </div>
+                    )
+                  ) : (
+                    <pre>{file.content}</pre>
+                  )}
+                  <button type="button" className="np-button ghost small np-remove-attachment" disabled={run.running} onClick={() => void removeAttachment(conversation.id, file.id)}>
                     <X size={12} /> Remove from context
                   </button>
                 </div>
@@ -833,7 +843,7 @@ export function ChatWorkspace({
                 tabIndex={-1}
                 type="file"
                 multiple
-                accept="image/png,image/jpeg,image/webp,image/gif,text/*,.md,.markdown,.csv,.json,.jsonl,.log,.xml,.yaml,.yml,.toml,.ini,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.rs,.go,.java,.kt,.c,.h,.cpp,.hpp,.cs,.php,.swift,.sql,.sh,.zsh,.fish,.html,.css,.scss,.less,.vue,.svelte"
+                accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf,text/*,.md,.markdown,.csv,.json,.jsonl,.log,.xml,.yaml,.yml,.toml,.ini,.js,.jsx,.ts,.tsx,.mjs,.cjs,.py,.rb,.rs,.go,.java,.kt,.c,.h,.cpp,.hpp,.cs,.php,.swift,.sql,.sh,.zsh,.fish,.html,.css,.scss,.less,.vue,.svelte"
                 aria-label="Attach files"
                 onChange={async (event) => {
                   const control = event.currentTarget;
@@ -843,12 +853,26 @@ export function ChatWorkspace({
                     const current = useChat.getState().activeConversation();
                     if (!current) throw new Error('Unable to create a thread.');
                     let existing = current.attachments ?? [];
+                    let failed = 0;
+                    const errors: string[] = [];
                     for (const file of files) {
-                      const attachment = await attachmentFromFile(file, existing);
-                      await addAttachment(current.id, attachment);
-                      existing = [...existing, attachment];
+                      try {
+                        const attachment = await attachmentFromFile(file, existing);
+                        await addAttachment(current.id, attachment);
+                        existing = [...existing, attachment];
+                      } catch (e) {
+                        failed++;
+                        console.error('Attachment failed:', e);
+                        errors.push((e as Error).message);
+                      }
                     }
-                    setActionNotice(`${files.length} file${files.length === 1 ? '' : 's'} attached to this thread.`);
+                    if (errors.length > 0) {
+                      setActionError(errors.join('\n'));
+                    }
+                    const successes = files.length - failed;
+                    if (successes > 0) {
+                      setActionNotice(`${successes} file${successes === 1 ? '' : 's'} attached to this thread.`);
+                    }
                   } catch (error) {
                     setActionError((error as Error).message);
                   } finally {
@@ -935,6 +959,23 @@ export function ChatWorkspace({
           <span>Shift + Enter for a new line</span>
         </div>
       </div>
+      {viewPdf && (
+        <WorkbenchDialog title={viewPdf.name} onClose={() => setViewPdf(null)}>
+          <div className="np-pdf-viewer">
+            <iframe
+              src={viewPdf.url}
+              title={viewPdf.name}
+              className="np-pdf-iframe"
+            />
+            <div className="np-pdf-footer">
+               <a href={viewPdf.url} download={viewPdf.name} className="np-button ghost small">Download</a>
+               <button className="np-button primary small" onClick={() => {
+                 window.open(viewPdf.url, '_blank');
+               }}>Open in browser</button>
+            </div>
+          </div>
+        </WorkbenchDialog>
+      )}
     </div>
   );
 }

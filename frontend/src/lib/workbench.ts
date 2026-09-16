@@ -7,6 +7,7 @@ import type {
   ToolName,
 } from '@app/types';
 import type { AppSettings, Conversation, Message, ThreadAttachment } from './db';
+import { documentContext } from './documentContext';
 
 /**
  * Tool groups a thread can enable; 'documents' is search plus read. 'web' is kept for threads and
@@ -53,7 +54,7 @@ export interface InputSnapshot {
     notices?: string[];
   };
   documents: { id: string; title: string; content: string }[];
-  attachments?: { id: string; name: string; mimeType: string; size: number; content: string; kind: 'text' | 'image' }[];
+  attachments?: { id: string; name: string; mimeType: string; size: number; content: string; kind: 'text' | 'image' | 'pdf' }[];
   /** Tools the model was allowed to call. Absent on runs saved before P6. */
   tools?: ToolName[];
 }
@@ -75,37 +76,49 @@ Be honest about uncertainty and limitations. Never claim to have searched, opene
 
 For code, give complete and internally consistent snippets when practical and call out consequential assumptions. For factual claims that depend on current information, use available research tools when enabled; otherwise say that freshness was not verified. Do not invent citations.`;
 
-export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 100_000, imageBytes: 2_000_000, totalBytes: 5_000_000 } as const;
+import { readDocument } from './documents';
+
+export const ATTACHMENT_LIMITS = { count: 8, images: 4, textBytes: 2_000_000, imageBytes: 2_000_000, pdfBytes: 2_000_000, totalBytes: 25_000_000 } as const;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'csv', 'json', 'jsonl', 'log', 'xml', 'yaml', 'yml', 'toml', 'ini', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rb', 'rs', 'go', 'java', 'kt', 'c', 'h', 'cpp', 'hpp', 'cs', 'php', 'swift', 'sql', 'sh', 'zsh', 'fish', 'html', 'css', 'scss', 'less', 'vue', 'svelte']);
 
 export function validateAttachment(file: Pick<File, 'name' | 'size' | 'type'>, current: ThreadAttachment[]): string | null {
   const extension = file.name.toLowerCase().split('.').pop() ?? '';
   const image = IMAGE_TYPES.has(file.type);
+  const pdf = file.type === 'application/pdf' || extension === 'pdf';
   if (!file.name.trim() || file.name.length > 200) return 'Use a file name under 200 characters.';
-  if (!image && !file.type.startsWith('text/') && !TEXT_EXTENSIONS.has(extension)) return 'Attach a supported image, text, Markdown, data, or source-code file.';
-  if (!image && file.size > ATTACHMENT_LIMITS.textBytes) return 'Keep each text attachment under 100 KB.';
+  if (!image && !pdf && !file.type.startsWith('text/') && !TEXT_EXTENSIONS.has(extension) && !['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/vnd.oasis.opendocument.text', 'application/vnd.oasis.opendocument.spreadsheet', 'application/vnd.oasis.opendocument.presentation', 'application/epub+zip', 'application/rtf', 'application/octet-stream'].includes(file.type)) return 'Attach a supported image, text, PDF, Markdown, data, or source-code file.';
+  if (!image && file.size > ATTACHMENT_LIMITS.textBytes) return 'Keep each text attachment under 2 MB.';
   if (image && file.size > ATTACHMENT_LIMITS.imageBytes) return 'Keep each image attachment under 2 MB.';
   if (current.length >= ATTACHMENT_LIMITS.count) return 'Attach up to 8 files to a thread.';
   if (image && current.filter(item => item.kind === 'image').length >= ATTACHMENT_LIMITS.images) return 'Attach up to 4 images to a thread.';
-  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 5 MB total.';
+  if (current.reduce((n, item) => n + item.size, 0) + file.size > ATTACHMENT_LIMITS.totalBytes) return 'Keep thread attachments under 25 MB total.';
   return null;
 }
+
+export const pdfBlobUrls = new Map<string, string>();
 
 export async function attachmentFromFile(file: File, current: ThreadAttachment[]): Promise<ThreadAttachment> {
   const error = validateAttachment(file, current);
   if (error) throw new Error(error);
   const image = IMAGE_TYPES.has(file.type);
+  const pdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const id = crypto.randomUUID();
   let content: string;
+  let kind: 'text' | 'image' | 'pdf' = image ? 'image' : pdf ? 'pdf' : 'text';
   if (image) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     let binary = '';
     for (let offset = 0; offset < bytes.length; offset += 32_768)
       binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
     content = btoa(binary);
-  } else content = await file.text();
-  if (!image && content.includes('\0')) throw new Error('This file does not appear to be plain text.');
-  return { id: crypto.randomUUID(), name: file.name, mimeType: file.type || 'text/plain', size: file.size, content, kind: image ? 'image' : 'text', createdAt: Date.now() };
+  } else {
+    content = await readDocument(file);
+    if (pdf) {
+      pdfBlobUrls.set(id, URL.createObjectURL(file));
+    }
+  }
+  return { id, name: file.name, mimeType: file.type || (pdf ? 'application/pdf' : 'text/plain'), size: file.size, content, kind, createdAt: Date.now() };
 }
 
 export function workbenchSettings(
@@ -211,10 +224,8 @@ export function buildContext(
     ...(settings.systemPrompt.trim()
       ? [{ role: 'system' as const, content: `User-provided instructions for this thread:\n\n${settings.systemPrompt}` }]
       : []),
-    ...(textAttachments.length
-      ? [{ role: 'system' as const, content: `Attached files (user-provided context):\n\n${textAttachments.map((file) => `--- BEGIN FILE: ${file.name} ---\n${file.content}\n--- END FILE: ${file.name} ---`).join('\n\n')}` }]
-      : []),
   ];
+  
   const currentPrompt: RunMessage[] = prompt.trim() ? [{ role: 'user', content: userContent }] : [];
   const budget = Math.min(
     settings.contextBudget,
@@ -222,6 +233,12 @@ export function buildContext(
   );
   const effectiveMaxTokens = Math.min(settings.maxTokens, model?.maxOutputTokens ?? Infinity);
   const inputBudget = budget - effectiveMaxTokens;
+
+  const docContext = documentContext(textAttachments, prompt, Math.max(1000, (inputBudget - 2000) * 3));
+  if (docContext.content) {
+    fixedBeforeDialog.push({ role: 'system' as const, content: docContext.content });
+  }
+
   // Trim only whole historical turns. Product/user instructions, attachments,
   // and the current prompt always survive so a long thread cannot change the
   // meaning of the request through partial-message truncation.
@@ -241,7 +258,7 @@ export function buildContext(
   const omittedMessages = dialog.length - keptDialog.length;
   // Gemini's catalog describes its input limit; conservatively reserve output in the workbench budget anyway.
   const warnings = settingsErrors(settings);
-  const notices: string[] = [];
+  const notices: string[] = [...docContext.notices];
   if (omittedMessages > dialog.length - included.length)
     notices.push(`${omittedMessages.toLocaleString()} older message${omittedMessages === 1 ? '' : 's'} will be omitted to fit the model's context window.`);
   if (effectiveMaxTokens < settings.maxTokens)
@@ -252,7 +269,7 @@ export function buildContext(
     );
   if (
     messages.length > 200 ||
-    messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : m.content.reduce((sum, part) => sum + (part.type === 'text' ? part.text.length : 0), 0)), 0) > 200_000
+    messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : m.content.reduce((sum, part) => sum + (part.type === 'text' ? part.text.length : 0), 0)), 0) > 6_000_000
   )
     warnings.push(
       'This request exceeds the app’s message or text limit. Include fewer recent turns.',
