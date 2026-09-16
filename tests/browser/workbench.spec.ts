@@ -435,7 +435,7 @@ test('calculator tool: the exact call and result stay separate from model text a
 
 test('malformed tool arguments are returned to the model and the run still completes', async ({ page }) => {
   await setup(page, 'tool-model');
-  await page.getByRole('button', { name: 'Tools' }).click();
+    await page.locator('summary[aria-label="Tools"]').click();
   await page.getByRole('button', { name: 'Calculator tool' }).click();
   const text = unique('malformed request');
   await send(page, text, 1);
@@ -455,8 +455,7 @@ test('document tools search, then read, local workspace documents in a multi-ste
   await expect(page.getByRole('status')).toContainText('Document saved');
   await setup(page, 'tool-model');
   // Documents opens its panel: the documents, and the switch that lets this thread use them.
-  await page.getByRole('button', { name: 'Tools' }).click();
-  await page.getByRole('button', { name: 'Tools' }).click();
+      await page.locator('summary[aria-label="Tools"]').click();
   await page.getByRole('button', { name: 'Documents tool' }).click();
   const panel = page.getByRole('dialog', { name: 'Documents' });
   await expect(panel.getByText('Launch notes')).toBeVisible();
@@ -486,10 +485,9 @@ test('web search runs on its own when a message needs current information, shows
   const exaLog = async () => (await page.request.get(`${fake}/_exa_log`)).json();
   await setup(page, 'fast-model');
   // There is no Web button: search is automatic once an Exa key is saved in Connections.
-  await page.getByRole('button', { name: 'Tools' }).click();
+    await page.locator('summary[aria-label="Tools"]').click();
   await expect(page.getByRole('button', { name: 'Web tool' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Tools' }).click();
-  await expect(page.locator('.np-composer-footnote')).not.toContainText('Web search');
+    await expect(page.locator('.np-composer-footnote')).not.toContainText('Web search');
   await page.getByRole('navigation', { name: 'Settings navigation' }).getByRole('button', { name: 'Connections' }).click();
   await page.getByLabel('Exa API key').fill(key);
   await page.getByRole('button', { name: 'Save key' }).click();
@@ -539,8 +537,7 @@ test('web search runs on its own when a message needs current information, shows
 
 test('Documents opens the documents, not the model picker, even before a model is chosen', async ({ page }) => {
   await page.goto('/app');
-  await page.getByRole('button', { name: 'Tools' }).click();
-  await page.getByRole('button', { name: 'Tools' }).click();
+      await page.locator('summary[aria-label="Tools"]').click();
   await page.getByRole('button', { name: 'Documents tool' }).click();
   const panel = page.getByRole('dialog', { name: 'Documents' });
   await expect(panel).toContainText('Your workspace is empty.');
