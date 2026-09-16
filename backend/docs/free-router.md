@@ -263,7 +263,15 @@ The router walks the sorted list:
 
 **Tools.** With tools on, each attempt runs the whole bounded tool loop ([Tools](tools.md)). The first tool call counts as output, so a failure after a tool ran does not move to another model.
 
-## 9. Health and cooldowns
+## 9. Spacing, health, and cooldowns
+
+### Spacing requests to an account
+
+Free models share their provider's limits: OpenRouter's free models allow about 20 requests a minute for the whole account, Groq 30, Cerebras 5. A Free Agent message sends several requests at once, and a Deep Research run sends 10 to 25, so a burst can be refused, and one refusal on a shared free-model limit cools every model on that account at once.
+
+`AccountPacer` (one per server, shared by every run) therefore books a slot before each request: one request per account every `60,000 / requests-per-minute` milliseconds, so OpenRouter is asked at most every 3 seconds, Groq every 2, Cerebras every 12. Parallel steps wait their turn rather than arriving together; models on this machine are not spaced, because the local queue already serializes them. Different accounts run independently, so connecting more providers makes a run faster as well as more reliable.
+
+### Health
 
 `RouterHealth` keeps what recent runs showed about each model. It lives in the server's memory: one instance per server process, shared by all routed runs, empty after a restart.
 

@@ -5,7 +5,7 @@ import { ModelRequest, streamModel } from '../runtime/adapters.js';
 import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
 import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
-import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
+import { AccountPacer, BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 import { withWebResults } from '../runtime/autoSearch.js';
 import { agentExecutor, agentSettings } from '../runtime/agent.js';
 import { RESEARCH_DEPTHS, researchExecutor } from '../runtime/research.js';
@@ -132,7 +132,7 @@ export function validateRunRequest(body: any): ValidRun {
   };
 }
 
-function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex): RunExecutor {
+function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex, pacer?: AccountPacer): RunExecutor {
   if (run.route) {
     const { target: _target, model: _model, messages, ...request } = run.request;
     const routed = {
@@ -141,7 +141,7 @@ function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, ow
       ...(run.route.agent ? { agent: run.route.agent } : {}),
       ...(run.route.research ? { research: run.route.research } : {}),
     };
-    const deps = { health, fetchImpl, ...(bench ? { bench } : {}) };
+    const deps = { health, fetchImpl, ...(bench ? { bench } : {}), ...(pacer ? { pacer } : {}) };
     return run.route.strategy === 'research' ? researchExecutor(routed, deps) : run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
   }
   return async ({ signal, emit }) => {
@@ -163,6 +163,8 @@ export function runsRouter(
   registry: RunRegistry, fetchImpl: FetchFn = fetch, health = new RouterHealth(),
   /** The user's Bench scores, which the Free Router ranks models with. */
   scores?: (owner: string) => Promise<BenchScore[]>,
+  /** Spaces requests to each provider account, shared by every run. */
+  pacer = new AccountPacer(),
 ): Router {
   const router = Router();
 
@@ -176,7 +178,7 @@ export function runsRouter(
     bench.then(index => {
       // A routed run queues only its attempts on local models, not the whole run.
       const local = !run.route && run.request.target.execution === 'local';
-      const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner, index), owner);
+      const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner, index, pacer), owner);
       res.status(started.existing ? 200 : 201).json(started);
     }).catch(next);
   });
