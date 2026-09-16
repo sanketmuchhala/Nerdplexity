@@ -167,7 +167,9 @@ test('Deep research plans, searches, has several models read the sources, and wr
   await page.getByRole('button', { name: 'Save key' }).click();
   await expect(page.locator('.np-web-search')).toContainText('Key saved for this tab');
   await chooseAgent(page);
-  // Type, switch Deep research on, and send at once: the message waits for the setting to be saved.
+  // Type before any thread exists, switch Deep research on (which creates one), and send at once:
+  // the text survives the new thread, and the message waits for the setting to be saved.
+  await page.getByRole('button', { name: 'New thread' }).click();
   const text = prompt('How tall is the fake tower and who built it?');
   await page.getByRole('textbox', { name: 'Message' }).fill(text);
   await page.getByRole('button', { name: 'Deep research' }).click();
