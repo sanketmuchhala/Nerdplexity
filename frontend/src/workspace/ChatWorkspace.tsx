@@ -189,8 +189,14 @@ export function ChatWorkspace({
     : ref && model ? { connectionId: ref.connectionId, modelId: model } : undefined;
   const liveListed = liveRef ? answerModel({ connectionId: liveRef.connectionId, modelId: run.selectedModel || liveRef.modelId }) : undefined;
   const liveModel = liveListed && { ...liveListed, ...(run.selectedProvider ? { provider: run.selectedProvider } : {}) };
+  // Moving to another thread shows that thread's draft. A thread created for the message being
+  // typed (by turning a tool on, or by sending) keeps the text: it belongs to this message.
+  const shownConversation = useRef(conversation?.id);
   useEffect(() => {
-    setInput(branchDraft.current ?? '');
+    const previous = shownConversation.current;
+    shownConversation.current = conversation?.id;
+    const createdForThisMessage = !previous && conversation && conversation.messages.length === 0;
+    if (!createdForThisMessage) setInput(branchDraft.current ?? '');
     branchDraft.current = null;
     setActionError('');
     sticky.current = true;
