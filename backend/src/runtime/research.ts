@@ -65,12 +65,33 @@ const PLANNER_PROMPT = (queries: number) => [
 /** Longest a search query may be: Exa reads a phrase, not a page. */
 const QUERY_WORDS = 14;
 const QUERY_CHARS = 180;
+const QUERY_NOISE = new Set([
+  'perform', 'provide', 'document', 'deconstruct', 'identify', 'structure', 'write', 'create',
+  'comprehensive', 'comparative', 'detailed', 'granular', 'explicitly', 'analysis', 'research',
+  'detail', 'detailing', 'cover', 'following', 'domain', 'domains', 'utilize', 'utilizing',
+  'available', 'include', 'including', 'response', 'clear', 'heading', 'headings', 'table',
+  'tables', 'executive', 'summary', 'synthesizing', 'most', 'up', 'date', 'data',
+]);
 
 /** A message turned into something worth searching for: one line, no markdown, a few words. */
 export function searchPhrase(text: string, words = QUERY_WORDS): string {
   const line = text.replace(/[`*_>#\[\]]/g, ' ').replace(/^\s*[-*\d.)]+\s+/gm, ' ').replace(/\s+/g, ' ').trim();
   return line.split(' ').slice(0, words).join(' ').slice(0, QUERY_CHARS).trim();
 }
+
+const wordsForQuery = (text: string): string[] => (text.match(/[A-Za-z0-9][A-Za-z0-9./+-]*/g) ?? [])
+  .filter(word => word.length > 1 && !QUERY_NOISE.has(word.toLowerCase()));
+
+/** Stable topic words prepended to section headings when a planner does not return usable JSON. */
+function topicAnchor(question: string): string[] {
+  const opening = question.split(/\n\s*\n|(?<=[.!?])\s+/).find(part => part.trim().length > 12) ?? question;
+  const words = wordsForQuery(opening.slice(0, 600));
+  const named = words.filter((word, index) => index > 0 && /^[A-Z][A-Za-z0-9]*(?:[.-][A-Za-z0-9]+)*$/.test(word));
+  const topical = words.filter(word => /^(autonomous|automation|robotaxi|mobility|vehicle|vehicles|software|hardware|safety|economic|economics)$/i.test(word));
+  return [...new Set([...named, ...topical, ...words])].slice(0, 6);
+}
+
+const instructionQuery = (query: string) => /^(perform|provide|document|deconstruct|identify|structure)\b|\byour analysis must\b|\bstructure your response\b/i.test(query.trim());
 
 /**
  * Queries for a message the planner could not split: its questions, else its opening sentences,
@@ -79,10 +100,24 @@ export function searchPhrase(text: string, words = QUERY_WORDS): string {
 export function fallbackQueries(question: string, max: number): string[] {
   const sentences = question.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 12);
   const asked = sentences.filter(s => s.endsWith('?'));
-  const chosen = (asked.length ? asked : sentences).slice(0, Math.min(3, Math.max(1, max)));
+  const count = Math.max(1, max);
+  if (asked.length) {
+    const queries = asked.slice(0, count).map(sentence => searchPhrase(sentence)).filter((query, i, all) =>
+      query.length >= 8 && all.findIndex(other => other.toLowerCase() === query.toLowerCase()) === i);
+    if (queries.length) return queries;
+  }
+
+  const anchor = topicAnchor(question);
+  const sections = question.split('\n').map(line => line.trim()).filter(line =>
+    /^(?:\d+[.)]\s*)?[A-Z][A-Z0-9 /,&()_-]{5,}:/.test(line));
+  const candidates = [anchor.join(' '), ...sections.map(line => {
+    const heading = line.replace(/^\d+[.)]\s*/, '').split(':', 1)[0];
+    return [...anchor, ...wordsForQuery(heading)].join(' ');
+  })];
+  if (candidates.length === 1) candidates.push(...sentences.slice(1, count).map(sentence => [...anchor, ...wordsForQuery(sentence)].join(' ')));
   const queries: string[] = [];
-  for (const sentence of chosen.length ? chosen : [question]) {
-    const phrase = searchPhrase(sentence);
+  for (const candidate of candidates.slice(0, count)) {
+    const phrase = searchPhrase(candidate);
     if (phrase.length >= 8 && !queries.some(q => q.toLowerCase() === phrase.toLowerCase())) queries.push(phrase);
   }
   return queries.length ? queries : [searchPhrase(question)];
@@ -113,7 +148,7 @@ export function parseResearchPlan(reply: string | undefined, question: string, m
     if (typeof entry?.question !== 'string' || !entry.question.trim()) return [];
     const queries = texts(entry.queries, 2, 400).map(q => searchPhrase(q)).filter(q => {
       const key = q.toLowerCase();
-      if (q.length < 8 || seen.has(key)) return false;
+      if (q.length < 8 || instructionQuery(q) || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -154,7 +189,7 @@ const domainOf = (url: string) => { try { return new URL(url).hostname.toLowerCa
  * with at most `perDomain` from one website. When that leaves the budget unfilled, the rest is
  * taken without the website limit rather than read less.
  */
-export function pickSources(searches: { query: string; question: string; pages: WebPage[] }[], limit: number): Source[] {
+export function pickSources(searches: { query: string; question: string; pages: WebPage[] }[], limit: number, rootQuestion?: string): Source[] {
   const picked: Source[] = [];
   const seen = new Set<string>();
   const perDomain = new Map<string, number>();
@@ -164,6 +199,7 @@ export function pickSources(searches: { query: string; question: string; pages: 
       for (const search of searches) {
         const page = search.pages[rank];
         if (!page || seen.has(pageKey(page.url))) continue;
+        if (rootQuestion && !pageRelevant(page, search.query, rootQuestion)) continue;
         const domain = domainOf(page.url);
         if (capped && (perDomain.get(domain) ?? 0) >= RESEARCH_LIMITS.perDomain) continue;
         seen.add(pageKey(page.url));
@@ -253,6 +289,19 @@ const READER_PROMPT = (question: string, plan: ResearchPlan, found?: { query: st
 const STOPWORDS = new Set('the a an and or of to in on for with that this it is are was were be been as at by from into over under after before their its his her they them we you your our not no than then there here which who whom what when where how why can could may might will would should must have has had do does did'.split(' '));
 const keywords = (text: string) => new Set(normalize(text).split(/[^a-z0-9%$.-]+/).filter(word => word.length > 2 && !STOPWORDS.has(word)));
 
+/** Lexical guard against unrelated search results. The reader still makes the semantic decision. */
+export function pageRelevant(page: WebPage, query: string, rootQuestion = ''): boolean {
+  const pageWords = keywords(`${page.title}\n${page.highlights.join('\n')}\n${page.text}`);
+  const queryWords = keywords(query);
+  let shared = 0;
+  for (const word of queryWords) if (pageWords.has(word)) shared++;
+  if (shared >= (queryWords.size <= 3 ? 1 : 2)) return true;
+  if (!rootQuestion) return false;
+  let rootShared = 0;
+  for (const word of keywords(rootQuestion)) if (pageWords.has(word)) rootShared++;
+  return rootShared >= 2;
+}
+
 /** Sentences of a page, long enough to stand as a quote. */
 const sentences = (text: string) => text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s.length >= RESEARCH_LIMITS.quote.min);
 
@@ -304,7 +353,7 @@ export interface ReadResult {
  * When a reader finds nothing usable, the search engine's own extracts of the page stand in, so a
  * page that was worth finding is not thrown away because one model would not follow the format.
  */
-export function readNotes(reply: string, page: WebPage): ReadResult {
+export function readNotes(reply: string, page: WebPage, about = ''): ReadResult {
   const data = jsonIn(reply);
   const raw: any[] = Array.isArray(data?.notes) && data.notes.length ? data.notes : notesFromLines(reply);
   const text = readable(page);
@@ -321,12 +370,13 @@ export function readNotes(reply: string, page: WebPage): ReadResult {
     kept.push({ fact: fact.slice(0, 500), quote: found.quote, ...(Number.isInteger(note.question) ? { question: note.question } : {}) });
   }
   if (kept.length) return { kept, dropped, repaired, fromExtract: false };
-  const extracts = extractNotes(page);
+  const extracts = extractNotes(page, about);
   return { kept: extracts, dropped, repaired, fromExtract: extracts.length > 0 };
 }
 
 /** The search engine's extracts of a page, as notes: its own words, so they are quotable. */
-export function extractNotes(page: WebPage): Omit<Note, 'id' | 'source'>[] {
+export function extractNotes(page: WebPage, about = ''): Omit<Note, 'id' | 'source'>[] {
+  if (about && !pageRelevant(page, about)) return [];
   const pieces = page.highlights.length ? page.highlights : sentences(page.text).slice(0, 2);
   return pieces.slice(0, RESEARCH_LIMITS.extractNotes).flatMap(piece => {
     const quote = piece.trim().slice(0, RESEARCH_LIMITS.quote.max);
@@ -429,9 +479,10 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     if (!table[task.kind].length) throw noneLeft(rankCandidates(run.candidates, task, health, run.owner, bench), 0, health.now());
     const config = run.agent ?? {};
     const blockedAccounts = new Set<string>();
+    const successfulAccounts = new Set<string>();
     const context = (overrides: Partial<AttemptContext>): AttemptContext => ({
       owner: run.owner, health, request: run.request, messages, tools: [], documents: [], signal, fetchImpl, enqueue,
-      maxAttempts: 1, blockedAccounts, ...(deps.pacer ? { pacer: deps.pacer } : {}), ...overrides,
+      maxAttempts: 1, blockedAccounts, successfulAccounts, ...(deps.pacer ? { pacer: deps.pacer } : {}), ...overrides,
     });
     const steps = stepRunner(emit, signal, context);
     const notes: string[] = [];
@@ -480,7 +531,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
         return { query, question: about, pages: [] };
       }
     });
-    const sourcesToRead = pickSources(results, budget.sources);
+    const sourcesToRead = pickSources(results, budget.sources, question);
 
     // Read: several models in parallel, each starting on a different one; only quotes in the page are kept.
     const readers = ranked(table.extraction).length ? ranked(table.extraction) : ranked(table[task.kind]);
@@ -497,7 +548,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
         request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0 },
         maxAttempts: RESEARCH_LIMITS.attempts.reader,
       }, { task: page.title, url: page.url }, text => {
-        found = readNotes(text, { ...page, text: slice });
+        found = readNotes(text, { ...page, text: slice }, query);
         debug(`read ${i + 1} ${page.url}: ${readable(page).length} characters (${slice.length} read), ${found.kept.length} notes kept, ${found.dropped} dropped, ${found.repaired} matched to the page${found.fromExtract ? ', from the search extract' : ''}`);
         return {
           text: found.kept.map(note => `- ${note.fact}\n  "${note.quote}"`).join('\n') || '(nothing on this page helps)',
@@ -510,7 +561,8 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
         };
       });
       // A reader that failed outright still leaves the search extract to fall back on.
-      return done ? found : { ...empty, kept: extractNotes(page), fromExtract: true };
+      const extracts = extractNotes(page, query);
+      return done ? found : { ...empty, kept: extracts, fromExtract: extracts.length > 0 };
     });
 
     // Number the sources that gave notes, in reading order; the report cites these numbers.

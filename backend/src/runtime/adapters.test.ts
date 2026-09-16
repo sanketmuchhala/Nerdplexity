@@ -187,6 +187,11 @@ describe('OpenAI-style streaming', () => {
     const auth = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'Incorrect API key sk-compat-secret' } }, 401)).fn)).error);
     expect(auth).toMatchObject({ category: 'auth', retryable: false });
     expect(auth.message).not.toContain('sk-compat-secret');
+    const upstreamAuth = failure((await run(request({ kind: 'openrouter', apiKey: 'sk-or-test' }), fakeFetch(() => json({
+      error: { message: 'Provider error', metadata: { provider_name: 'ExampleCloud', raw: 'upstream unauthorized' } },
+    }, 401)).fn)).error);
+    expect(upstreamAuth).toMatchObject({ category: 'unavailable', retryable: true });
+    expect(upstreamAuth.message).toContain('ExampleCloud route');
     const context = failure((await run(request(compat), fakeFetch(() => json({ error: { message: "This model's maximum context length is 8192 tokens" } }, 400)).fn)).error);
     expect(context.category).toBe('context');
     const echoed = failure((await run(request(compat), fakeFetch(() => json({ error: { message: 'bad request for key sk-compat-secret' } }, 400)).fn)).error);

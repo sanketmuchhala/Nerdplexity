@@ -138,7 +138,14 @@ export function failureFromStatus(status: number, detail: string, target: Resolv
   const wait = status === 429 || status >= 500 ? retryAfterFrom(headers) : undefined;
   const make = (category: ProviderError['category'], message: string, retryable: boolean, account = false) =>
     new ProviderFailure({ category, message, retryable, ...(wait !== undefined ? { retryAfterMs: wait } : {}), ...(account ? { scope: 'account' as const } : {}) });
-  if (status === 401 || status === 403) return make('auth', `${label} rejected the API key.`, false, true);
+  if (status === 401 || status === 403) {
+    // OpenRouter identifies errors returned by the selected upstream provider as
+    // "provider_name — raw error". That route can reject a request while the OpenRouter key is
+    // valid, so cooling every model on the account would turn one bad route into a full outage.
+    const upstream = target.kind === 'openrouter' ? /^(.{1,80}?) — /.exec(text)?.[1] : undefined;
+    if (upstream) return make('unavailable', `OpenRouter's ${upstream} route rejected this request. Trying another free model may work.`, true);
+    return make('auth', `${label} rejected the API key.`, false, true);
+  }
   if (status === 402) return make('quota', `${label} reports insufficient credits or a negative balance. This can block free models too.${text ? ` ${text}` : ''}`, false, true);
   if (status === 429) return make(
     'quota',

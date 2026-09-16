@@ -152,6 +152,9 @@ export class RouterHealth {
     const entry = this.entry(account, model);
     entry.successes++;
     entry.cooldownUntil = undefined;
+    // A completed authenticated request proves this account is usable, including when another
+    // parallel request incorrectly reported an account-wide authorization failure.
+    this.accounts.delete(account);
     if (ttftMs !== undefined) entry.ttftMs = entry.ttftMs === undefined ? ttftMs : Math.round(entry.ttftMs * 0.7 + ttftMs * 0.3);
   }
 
@@ -401,6 +404,8 @@ export interface AttemptContext {
   maxAttempts: number;
   /** Accounts found unusable earlier in this run (a bad key, an account-wide limit), shared between steps. */
   blockedAccounts: Set<string>;
+  /** Accounts that already completed a request in this run. Shared by multi-step agents. */
+  successfulAccounts?: Set<string>;
   /** Spaces requests to one account; without it they are sent as fast as they are made. */
   pacer?: AccountPacer;
 }
@@ -462,16 +467,25 @@ export async function tryInOrder(ranked: RankedCandidate[], ctx: AttemptContext,
     try {
       const done = candidate.target.execution === 'local' ? await ctx.enqueue(attempt) : await attempt();
       ctx.health.success(account, candidate.model, answeredAt !== undefined ? answeredAt - sentAt : undefined);
+      ctx.successfulAccounts?.add(account);
+      ctx.blockedAccounts.delete(account);
       return { ok: true, ranked: entry, done, text, attempts };
     } catch (error) {
       if (ctx.signal.aborted) throw error;
       if (!(error instanceof ProviderFailure)) throw error;
-      ctx.health.failure(account, candidate.model, error.error);
-      if (answeredAt !== undefined || !FALLBACK.has(error.error.category)) throw error;
-      if (error.error.scope === 'account') ctx.blockedAccounts.add(account);
-      last = error.error;
+      // A key that worked earlier in this run is not globally invalid. OpenRouter can surface an
+      // upstream route's 401/403 as if the account key failed; treat that as a model-route outage.
+      const alreadyWorked = candidate.target.kind === 'openrouter' && ctx.successfulAccounts?.has(account)
+        && error.error.category === 'auth' && error.error.scope === 'account';
+      const failure: ProviderError = alreadyWorked
+        ? { category: 'unavailable', message: 'This model route rejected the request, but the provider account is working. Trying another free model may work.', retryable: true }
+        : error.error;
+      ctx.health.failure(account, candidate.model, failure);
+      if (answeredAt !== undefined || !FALLBACK.has(failure.category)) throw (alreadyWorked ? new ProviderFailure(failure) : error);
+      if (failure.scope === 'account') ctx.blockedAccounts.add(account);
+      last = failure;
       previous = candidate.displayName || candidate.model;
-      hooks.failed?.(entry, attempts, error.error);
+      hooks.failed?.(entry, attempts, failure);
     }
   }
   return { ok: false, attempts, ...(last ? { last } : {}) };
@@ -491,7 +505,7 @@ export function routedExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor {
     const ranking = rankCandidates(run.candidates, task, health, run.owner, bench);
     const result = await tryInOrder(ranking.ranked, {
       owner: run.owner, health, request: run.request, messages, tools: run.tools, documents: run.documents, search: run.search,
-      signal, fetchImpl, enqueue, maxAttempts: MAX_ATTEMPTS, blockedAccounts: new Set(), ...(deps.pacer ? { pacer: deps.pacer } : {}),
+      signal, fetchImpl, enqueue, maxAttempts: MAX_ATTEMPTS, blockedAccounts: new Set(), successfulAccounts: new Set(), ...(deps.pacer ? { pacer: deps.pacer } : {}),
     }, {
       trying: ({ candidate, why }, attempt, previous) => {
         const lead = attempt === 1 ? `Best free match for ${TASK_LABEL[task.kind]}` : `Trying the next model after ${previous} failed`;

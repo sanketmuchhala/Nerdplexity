@@ -3,7 +3,7 @@ import type { AgentStep, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import type { ProgressPayload } from './runs.js';
 import { RouterHealth, type RouteCandidate } from './router.js';
-import { checkCitations, extractNotes, fallbackQueries, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
+import { checkCitations, extractNotes, fallbackQueries, pageRelevant, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const target = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
@@ -27,7 +27,7 @@ const PAGES: Record<string, { title: string; url: string; text?: string; highlig
   ],
   'eiffel visitors': [
     // No page text, but the search engine's own extract of it.
-    { title: 'Extract only', url: 'https://extract.example.com/', highlights: ['Tickets to the summit cost 29.40 euros for adults in 2026.'] },
+    { title: 'Eiffel Tower summit tickets', url: 'https://extract.example.com/', highlights: ['Tickets to the summit cost 29.40 euros for adults in 2026.'] },
     { title: 'Visitor numbers', url: 'https://stats.example.com/visits', text: 'In 2023 the monument welcomed 6.3 million visitors, most of them from abroad.' },
   ],
 };
@@ -165,6 +165,32 @@ describe('Deep Research parts', () => {
     expect(searchPhrase('## **Heat pumps** in `cold` climates')).toBe('Heat pumps in cold climates');
   });
 
+  it('turns a long structured comparison into topic-specific fallback searches', () => {
+    const prompt = [
+      'Perform a comprehensive, comparative deep research analysis detailing the operational, technological, regulatory, and economic divergence between Waymo (Alphabet) and Tesla in the autonomous mobility / robotaxi race.',
+      'Your analysis must explicitly cover the following four domains, utilizing the most up-to-date data available up to 2026:',
+      '1. HARDWARE SUITE, COMPUTE STACK & SENSOR BOM:',
+      '- Compare Waymo\u2019s 6th-generation Driver on the Zeekr platform versus Tesla\u2019s Vision-only architecture.',
+      '2. SAFETY GOVERNANCE, CRASH METRICS & REGULATORY PERMITTING:',
+      '3. FLEET OPERATIONS, DEPLOYMENT SCALE & GO-TO-MARKET:',
+      '4. UNIT ECONOMICS, TCO & THE PATH TO PROFITABILITY:',
+    ].join('\n');
+    const queries = fallbackQueries(prompt, 6);
+    expect(queries).toHaveLength(5);
+    expect(queries.every(query => /waymo/i.test(query) && /tesla/i.test(query))).toBe(true);
+    expect(queries).toEqual(expect.arrayContaining([
+      expect.stringMatching(/hardware.*compute.*sensor.*bom/i),
+      expect.stringMatching(/safety.*crash.*regulatory.*permitting/i),
+      expect.stringMatching(/fleet.*operations.*deployment.*scale/i),
+      expect.stringMatching(/unit.*economics.*tco.*path.*profitability/i),
+    ]));
+    expect(queries.join(' ')).not.toMatch(/perform a comprehensive|your analysis must/i);
+
+    // A planner that copies an instruction fragment is discarded in favor of these fallbacks.
+    const copied = JSON.stringify({ questions: [{ question: 'Do the research', queries: ['Perform a comprehensive comparative deep research analysis'] }] });
+    expect(parseResearchPlan(copied, prompt, 6).questions.flatMap(q => q.queries)).toEqual(queries);
+  });
+
   it('asks for recent pages only when the question is about now', () => {
     const now = new Date(Date.UTC(2026, 8, 16));
     expect(recencySince('What is the latest on heat pump rebates?', now)).toBe('2025-03-16');
@@ -187,6 +213,9 @@ describe('Deep Research parts', () => {
     expect(found.fromExtract).toBe(true);
     expect(found.kept.map(n => n.quote)).toEqual(['Tickets cost 29.40 euros for adults in 2026.', 'The lift runs every ten minutes.']);
     expect(extractNotes({ ...page, highlights: [] }).length).toBe(0);
+    const unrelated = { title: 'Neobank market report', url: 'https://e.com/bank', text: '', highlights: ['Digital banks gained customers in Europe.'] };
+    expect(pageRelevant(unrelated, 'Waymo Tesla robotaxi fleet operations')).toBe(false);
+    expect(readNotes('{"notes":[]}', unrelated, 'Waymo Tesla robotaxi fleet operations').kept).toEqual([]);
   });
 
   it('needs an Exa key, defaults to standard depth, and never adds an automatic search on top', () => {
@@ -207,9 +236,9 @@ describe('Deep Research runs', () => {
     expect(world.searches.map(s => s.query)).toEqual(['eiffel height', 'eiffel history', 'eiffel visitors']);
     expect(world.searches[0].contents).toEqual({ text: { maxCharacters: 30_000 }, highlights: { query: 'eiffel height', numSentences: 3, highlightsPerUrl: 5 } });
     expect(world.searches[0].startPublishedDate).toBeUndefined();
-    // Four distinct pages with text were read (the duplicate and the textless page were not), by different models first.
+    // Four relevant pages were read (the duplicate and unrelated result were skipped), by different models first.
     const readers = world.calls.filter(c => c.role === 'reader');
-    expect(readers).toHaveLength(5);
+    expect(readers).toHaveLength(4);
     expect(new Set(readers.map(r => r.model)).size).toBeGreaterThan(1);
     expect(final('read-1')).toMatchObject({ status: 'done', task: 'Eiffel Tower facts', url: 'https://example.com/eiffel?utm_source=x', reason: 'Kept 1 note; dropped 1 the page does not say' });
 
@@ -220,13 +249,13 @@ describe('Deep Research runs', () => {
     expect(writerNote).not.toContain('solid gold');
     expect(writerNote).toContain('Outline:\n1. Height\n2. Visitors');
     // Sources come in turn from each search, so the third search's first page comes before the first search's second.
-    // Every page gives a note: one quote copied as it is, one matched back to the page, one from the extract.
+    // Every page gives a note: copied quotes, one quote matched back to the page, and one search extract.
     expect(result.agent?.sources?.map(s => [s.n, s.title, s.notes])).toEqual([
-      [1, 'Eiffel Tower facts', 1], [2, 'Extract only', 1], [3, 'Paris guide', 1], [4, 'An unrelated blog', 1], [5, 'Visitor numbers', 1],
+      [1, 'Eiffel Tower facts', 1], [2, 'Eiffel Tower summit tickets', 1], [3, 'Paris guide', 1], [4, 'Visitor numbers', 1],
     ]);
     expect(final('read-2')?.reason).toContain('from the search extract');
     expect(final('read-3')?.reason).toContain('1 quote matched to the page text');
-    expect(final('read-4')?.reason).toContain('from the search extract');
+    expect(final('read-4')?.reason).toContain('Kept 1 note');
 
     // The report streams as the answer; the citation check finds the citation that names no source.
     expect(text).toContain('It is 330 m tall [1].');
@@ -236,7 +265,7 @@ describe('Deep Research runs', () => {
     // Steps in order, and every model request counted.
     const order = [...new Set(steps.map(s => s.id.replace(/-\d+$/, '')))];
     expect(order).toEqual(['strategy', 'planner', 'search', 'read', 'outline', 'writer', 'check']);
-    expect(result.agent).toMatchObject({ mode: 'research', calls: 1 + 5 + 1 + 1 });
+    expect(result.agent).toMatchObject({ mode: 'research', calls: 1 + 4 + 1 + 1 });
   });
 
   it('tells each reader which search found its page, and keeps one copy of a repeated fact', async () => {
@@ -298,7 +327,7 @@ describe('Deep Research runs', () => {
     const asked = world.calls.filter(c => c.role === 'writer');
     expect(asked).toHaveLength(0);
     expect(turn).toBe(3);
-    expect(result.agent?.calls).toBe(1 + 5 + 1 + 3);
+    expect(result.agent?.calls).toBe(1 + 4 + 1 + 3);
   });
 
   it('says why when no model can take the request at all', async () => {
