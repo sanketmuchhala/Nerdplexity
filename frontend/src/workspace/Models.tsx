@@ -133,7 +133,7 @@ const PRESETS: Preset[] = [
     label: 'Cerebras',
     kind: 'cerebras',
     name: 'Cerebras',
-    hint: 'Very fast open models. The free tier allows about 5 requests per minute and 1 million tokens per day per model. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    hint: 'Very fast open models. The free tier has request and token limits per model. Free only requires provider-verified zero pricing; an account billing label does not enable routing.',
     link: {
       href: 'https://inference-docs.cerebras.ai/support/rate-limits',
       label: 'Cerebras rate limits',
@@ -144,7 +144,7 @@ const PRESETS: Preset[] = [
     label: 'Mistral',
     kind: 'mistral',
     name: 'Mistral',
-    hint: "Mistral's own models, with a free plan that needs no card. Rate limits apply; check Mistral's terms for how free-plan prompts may be used. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.",
+    hint: "Mistral's own models. Rate limits apply; check Mistral's terms for how free-plan prompts may be used. Free only requires provider-verified zero pricing; an account billing label does not enable routing.",
     link: {
       href: 'https://mistral.ai/pricing/',
       label: 'Mistral plans and terms',
@@ -155,7 +155,7 @@ const PRESETS: Preset[] = [
     label: 'SambaNova',
     kind: 'sambanova',
     name: 'SambaNova',
-    hint: 'Fast open models. Without a payment method, the free tier covers a few models at 20 requests per minute and 20 per day. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    hint: 'Fast open models with account rate limits. Free only requires provider-verified zero pricing; an account billing label does not enable routing.',
     link: {
       href: 'https://docs.sambanova.ai/docs/en/models/rate-limits',
       label: 'SambaNova rate limits',
@@ -166,7 +166,7 @@ const PRESETS: Preset[] = [
     label: 'Hugging Face',
     kind: 'huggingface',
     name: 'Hugging Face',
-    hint: 'One token reaches many hosted providers. Free accounts get small monthly credits ($0.10 at last check); going further requires buying credits. Use a fine-grained token that can call Inference Providers. Set Account billing to \u201cNo billing enabled\u201d if no payment method is on the account, so the Free Router can use it.',
+    hint: 'One token reaches many hosted providers. Free accounts get limited credits; use a fine-grained token that can call Inference Providers. Free only uses provider routes explicitly reported as free.',
     link: {
       href: 'https://huggingface.co/docs/inference-providers/pricing',
       label: 'Hugging Face credits',
@@ -477,9 +477,8 @@ function ConnectionForm({
             ))}
           </select>
           <small className="np-conn-hint">
-            Nerdplexity cannot read your billing settings. Free only mode uses
-            this answer. With no billing enabled, a provider cannot charge the
-            account.
+            This is your account label. Free only requires verified $0 model
+            pricing; choosing no billing does not authorize paid or unpriced models.
           </small>
         </label>
       )}
@@ -967,8 +966,8 @@ export function Models({
             />
             <span>
               <strong>Free only</strong>Run only models on this machine, models
-              listed at $0, or accounts you marked as having no billing.
-              Anything with an unknown price is blocked until you allow it.
+              listed at $0. The server enforces the free policy again for each call.
+              Paid or unpriced models are blocked, even on an account marked as having no billing.
             </span>
           </label>
           {actionError && (

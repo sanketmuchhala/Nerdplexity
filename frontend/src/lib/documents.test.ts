@@ -42,7 +42,7 @@ describe('document ingestion and model context', () => {
   it('finds a fact deep in a large file without overflowing a small model context', async () => {
     const content = `${'General background information.\n'.repeat(6000)}\nThe cobalt launch code is ZEBRA-729.\n${'More background.\n'.repeat(4000)}`;
     const attachment = await attachmentFromFile(new File([content], 'large-report.txt'), []);
-    const settings = { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 };
+    const settings = { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512, outputMode: 'custom' as const, contextMode: 'custom' as const };
     const result = buildContext([], 'What is the cobalt launch code?', settings, undefined, undefined, [attachment]);
     expect(result.warnings).toEqual([]);
     expect(result.estimatedTokens + result.effective.maxTokens!).toBeLessThanOrEqual(4096);
@@ -55,7 +55,7 @@ describe('document ingestion and model context', () => {
   it('keeps every small document and balances excerpts from multiple large documents', async () => {
     const files = await Promise.all(['one', 'two', 'three'].map(name => attachmentFromFile(new File([`${'背景信息'.repeat(30_000)}\n${name} cobalt code: 42\n`], `${name}.txt`), [])));
     const small = await attachmentFromFile(new File(['Keep this complete.'], 'small.txt'), []);
-    const result = buildContext([], 'Find cobalt code in each file', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 }, undefined, undefined, [...files, small]);
+    const result = buildContext([], 'Find cobalt code in each file', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512, outputMode: 'custom' as const, contextMode: 'custom' as const }, undefined, undefined, [...files, small]);
     expect(result.warnings).toEqual([]);
     const text = JSON.stringify(result.messages);
     for (const name of ['one', 'two', 'three']) expect(text).toContain(`${name} cobalt code: 42`);
@@ -71,7 +71,7 @@ describe('document ingestion and model context', () => {
       { role: 'assistant' as const, content: 'The launch needs a code check. ' + 'Confirm the release checklist. '.repeat(35) },
     ];
     const history = [{ role: 'user' as const, content: 'Old unrelated discussion. '.repeat(1000) }, ...recent];
-    const result = buildContext(history, 'What is its code?', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512 }, undefined, undefined, [attachment]);
+    const result = buildContext(history, 'What is its code?', { ...workbenchSettings(), contextBudget: 4096, maxTokens: 512, outputMode: 'custom' as const, contextMode: 'custom' as const }, undefined, undefined, [attachment]);
     expect(result.warnings).toEqual([]);
     expect(result.estimatedTokens + result.effective.maxTokens!).toBeLessThanOrEqual(4096);
     for (const message of recent) expect(result.messages).toContainEqual(message);

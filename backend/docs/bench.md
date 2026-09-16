@@ -23,7 +23,7 @@ Code: `backend/src/bench/` (suite, graders, runner), `backend/src/routes/bench.t
 ## 1. Using Bench
 
 1. Open **Bench** in the sidebar.
-2. **Models:** tick the models to test. Only models Nerdplexity has verified as free are offered (the same pool as the Free Router: on this machine, listed at $0, or on an account marked **No billing enabled**), so Bench never runs on a paid model.
+2. **Models:** tick the models to test. Only local or catalog-verified $0 models from the Free Router pool are offered. OpenRouter Bench calls also carry the zero-price ceiling.
 3. **Questions:** choose categories (all five by default) and how many questions per category: 1, 3, 5, 10, or 20.
 4. Read the estimate below the settings: total requests, requests per connection, and a warning when a connection's documented daily free limit would be exceeded:
    - OpenRouter: 50 free-model requests a day (1,000 after buying $10 of credit).

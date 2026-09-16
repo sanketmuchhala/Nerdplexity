@@ -12,11 +12,15 @@ Saved run input snapshots include the exact instruction text and version sent to
 
 ## Context and output budgets
 
-The configured context budget is capped by the selected model's reported context length. The selected model's reported output limit also caps the requested output. These automatic adjustments are recorded as run notices.
+Answer length and context capacity default to **Automatic**. A known hosted model uses its reported context window and output maximum, with output reduced to the space remaining after the input and a token-estimation margin. The old blanket limits of 2,048 output tokens and 8,192 context tokens no longer apply to hosted models. The Free Router and Free Agent resolve the final answer's capacity against the concrete model selected on the server. Provider limits still apply; free inference does not mean unlimited context or output.
+
+Automatic output reserves a modest amount of answer space while selecting input, then uses the remaining capacity for the answer. It does not discard useful conversation history solely to reserve a model's entire advertised output maximum. A local Ollama model retains the configured runtime context size to respect the machine's memory limits. When a model's context is unknown, the frontend preview uses a 65,536-token estimate; the server checks the actual selected model.
+
+Choose **Custom output limit** or **Custom context budget** in Generation settings to set an explicit cap. Legacy threads with the previous default values switch to Automatic; other saved numeric limits and deliberately applied legacy presets retain their values. Custom output is capped by the selected model's reported maximum, with any reduction recorded as a run notice.
 
 Large text attachments use question-relevant, labelled excerpts. Before selecting excerpts, Nerdplexity reserves space for up to two recent complete turns that fit within half the remaining input budget, preserving context for follow-up questions. Small attachments stay complete when they fit. Excerpt notices disclose omitted document content; the full extracted text remains attached.
 
-When input plus reserved output does not fit, Nerdplexity removes the oldest complete historical turn until it fits. It never slices through a conversation message. Product instructions, imported/thread instructions, the selected attachment context, and the current prompt are retained; if those fixed inputs still do not fit, sending is blocked with an actionable error. The complete transcript remains stored even when older turns are omitted from one request.
+When input plus the answer reservation does not fit, Nerdplexity removes the oldest complete historical turn until it fits. It never slices through a conversation message. Product instructions, imported/thread instructions, the selected attachment context, and the current prompt are retained; if those fixed inputs still do not fit, sending is blocked with an actionable error. The complete transcript remains stored even when older turns are omitted from one request.
 
 Token counts are UTF-8 estimates, not provider-tokenizer results. Tool results consume additional context during an agent run.
 

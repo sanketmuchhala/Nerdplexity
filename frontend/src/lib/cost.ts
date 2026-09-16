@@ -14,7 +14,7 @@ export type CostClass = 'local' | 'zero-price' | 'no-billing' | 'paid' | 'unknow
 
 export interface CostStatus {
   cls: CostClass;
-  /** Allowed under Free only: local, verified $0, or an account the user marked as having no billing. */
+  /** Allowed under Free only: local or verified $0. Account labels cannot prove pricing. */
   free: boolean;
   label: string;
   detail: string;
@@ -29,9 +29,6 @@ export function costStatus(connection: Connection | undefined, model: ModelDescr
     return { cls: 'local', free: true, label: 'On this machine', detail: 'No hosted fee. It uses your own hardware.' };
   }
   if (model?.pricing === 'zero-price') return { cls: 'zero-price', free: true, label: 'Free model', detail: `${connection.name} lists this model at $0.` };
-  if (connection.billing === 'no-billing' && connection.kind !== 'openrouter') {
-    return { cls: 'no-billing', free: true, label: 'Free plan', detail: `You marked this ${connection.name} account as having no billing, so it cannot be charged.` };
-  }
   if (model?.pricing === 'paid') {
     return {
       cls: 'paid', free: false,
@@ -40,7 +37,7 @@ export function costStatus(connection: Connection | undefined, model: ModelDescr
     };
   }
   if (connection.billing === 'paid') return { cls: 'paid', free: false, label: 'Billed account', detail: `You marked this ${connection.name} account as billed.` };
-  return { cls: 'unknown', free: false, label: 'Price unknown', detail: `Nerdplexity cannot confirm this model is free on ${connection.name}. It may be billed.` };
+  return { cls: 'unknown', free: false, label: 'Price unknown', detail: `Nerdplexity cannot confirm this model is free on ${connection.name}. ${connection.billing === 'no-billing' ? 'An account billing label does not verify the provider’s charges.' : 'It may be billed.'}` };
 }
 
 /** Free alternatives the user can choose after a failure: same connection first, then others. Never chosen automatically. */

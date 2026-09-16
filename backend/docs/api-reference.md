@@ -285,7 +285,7 @@ Instead of `target` and `model`, a run may send `route`: free models across up t
 }
 ```
 
-Every connection passes the same destination policy as `target`. The web app lists only models it has verified as free (on this machine, catalog $0, or an account marked as having no billing); the server does not re-check prices. With document tools on, only models on this machine are kept. How the router chooses:
+Every connection passes the same destination policy as `target`. The web app lists only local or catalog-verified $0 models. OpenRouter calls carry a request-time zero-price ceiling; other remote providers must pass a fresh zero-price catalog check before generation. With document tools on, only models on this machine are kept. How the router chooses:
 
 1. Classify the latest message (code, math, reasoning, writing, structured output, general) and what it needs (images, tools, estimated tokens).
 2. Leave out models that report no image or tool support, whose context is too small, or that are cooling down after a failure.

@@ -51,9 +51,9 @@ export interface RouterPool {
 }
 
 /**
- * Every enabled model Nerdplexity has verified as free (on this machine, listed at $0, or on an
- * account marked as having no billing), on connections that have the key they need. Unknown
- * prices are never included, so a routed run cannot reach a paid model.
+ * Every enabled model on this machine or listed at $0, on connections with their required key.
+ * Account billing labels cannot prove a model is free. The server checks current provider
+ * pricing again before generation, including each fallback and agent step.
  */
 export function routerPool(
   connections: Connection[],

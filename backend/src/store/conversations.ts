@@ -134,6 +134,11 @@ export async function updateConversation(db: Database, userId: string, id: strin
   return updated.length > 0;
 }
 
+/** Turning global Free only back on revokes every per-thread spending exception. */
+export async function clearChargePermissions(db: Database, userId: string): Promise<void> {
+  await db.update(conversations).set({ allowCharges: false }).where(eq(conversations.userId, userId));
+}
+
 export async function deleteConversation(db: Database, userId: string, id: string): Promise<boolean> {
   const deleted = await db.delete(conversations).where(and(eq(conversations.userId, userId), eq(conversations.id, id))).returning({ id: conversations.id });
   return deleted.length > 0;

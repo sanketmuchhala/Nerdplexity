@@ -14,7 +14,10 @@ const error = (status: number, message: string) => new Response(JSON.stringify({
 /** Answers by the model named in the request body, recording the order models were asked. */
 function fakeProviders(byModel: Record<string, () => Response>) {
   const asked: string[] = [];
-  const fn = (async (_url: RequestInfo | URL, init: RequestInit = {}) => {
+  const fn = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+    if (!init.body && String(url).endsWith('/models')) {
+      return new Response(JSON.stringify({ data: Object.keys(byModel).map(id => ({ id, pricing: { prompt: '0', completion: '0' } })) }), { headers: { 'content-type': 'application/json' } });
+    }
     const model = JSON.parse(String(init.body)).model as string;
     asked.push(model);
     const respond = byModel[model];
@@ -259,11 +262,10 @@ describe('routed execution', () => {
   });
 
   it('does not route around a refusal', async () => {
-    const gemini = resolveTarget({ kind: 'gemini', apiKey: 'gm-test-key' });
-    const fn = (async (url: RequestInfo | URL) => String(url).includes('generativelanguage')
-      ? stream(sse([{ promptFeedback: { blockReason: 'SAFETY' } }], false))
+    const fn = (async (_url: RequestInfo | URL, init: RequestInit = {}) => JSON.parse(String(init.body)).model === 'first-70b'
+      ? stream(sse([{ choices: [{ delta: {}, finish_reason: 'content_filter' }] }]))
       : stream(answer('should not be asked'))) as typeof fetch;
-    const { thrown } = await execute({ candidates: [candidate('gemini-2.5-flash', { connectionId: 'gemini', target: gemini, contextLength: 1_000_000 }), candidate('small-1b')] }, fn);
+    const { thrown } = await execute({ candidates: [candidate('first-70b'), candidate('small-1b')] }, fn);
     expect((thrown as ProviderFailure).error.category).toBe('refused');
   });
 

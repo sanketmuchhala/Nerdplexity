@@ -34,6 +34,8 @@ describe('explicit request context', () => {
       ...settings,
       contextBudget: 4096,
       maxTokens: 512,
+      contextMode: 'custom',
+      outputMode: 'custom',
     });
     expect(preview.messages[0]).toEqual({ role: 'system', content: expect.stringContaining(ASSISTANT_INSTRUCTIONS_VERSION) });
     expect(preview.messages).toContainEqual({ role: 'system', content: 'Imported instruction' });
@@ -67,7 +69,8 @@ describe('explicit request context', () => {
   it('distinguishes unknown model limits and default temperature from configured values', () => {
     const unknown = buildContext([], 'Hello', settings);
     expect(unknown.limitKnown).toBe(false);
-    expect(unknown.effective).toEqual({ maxTokens: 2048 });
+    expect(unknown.effective).toEqual({});
+    expect(unknown.budget).toBe(65_536);
     const model = {
       contextLength: 4096,
       maxOutputTokens: 1000,
@@ -84,8 +87,51 @@ describe('explicit request context', () => {
     expect(known.budget).toBe(4096);
     expect(known.effective.numCtx).toBe(4096);
     expect(known.effective.maxTokens).toBe(1000);
-    expect(known.notices.join(' ')).toContain('reduced to 1,000');
     expect(known.warnings.join(' ')).toContain('does not accept temperature');
+  });
+
+  it('uses the reported output capacity instead of the old 2K default', () => {
+    const model = { contextLength: 131_072, maxOutputTokens: 32_768, capabilities: {} } as ModelDescriptor;
+    const preview = buildContext([], 'Write the full implementation', settings, model);
+    expect(preview.effective.maxTokens).toBe(32_768);
+    expect(preview.budget).toBe(131_072);
+    expect(preview.warnings).toEqual([]);
+  });
+
+  it('preserves valuable history before assigning remaining capacity to output', () => {
+    const model = { contextLength: 32_768, maxOutputTokens: 32_768, capabilities: {} } as ModelDescriptor;
+    const input = [{ role: 'user' as const, content: 'Keep this specification. '.repeat(2000) }, { role: 'assistant' as const, content: 'I will use that specification.' }];
+    const preview = buildContext(input, 'Now implement it', settings, model);
+    expect(preview.omittedMessages).toBe(0);
+    expect(preview.messages).toContainEqual(input[0]);
+    expect(preview.effective.maxTokens).toBeGreaterThan(4096);
+    expect(preview.estimatedTokens + preview.effective.maxTokens!).toBeLessThan(model.contextLength!);
+    expect(preview.warnings).toEqual([]);
+  });
+
+  it('keeps explicit custom limits and caps them to the reported model maximum', () => {
+    const model = { contextLength: 4096, maxOutputTokens: 1000, capabilities: {} } as ModelDescriptor;
+    const preview = buildContext([], 'Hello', { ...settings, outputMode: 'custom', maxTokens: 2000 }, model);
+    expect(preview.effective.maxTokens).toBe(1000);
+    expect(preview.notices.join(' ')).toContain('reduced to 1,000');
+    const smaller = buildContext([], 'Hello', { ...settings, outputMode: 'custom', maxTokens: 321 }, model);
+    expect(smaller.effective.maxTokens).toBe(321);
+  });
+
+  it('upgrades legacy defaults while retaining deliberate custom and preset values', () => {
+    const conversation = { settings: { max_tokens: 2048 }, workbench: { maxTokens: 2048, contextBudget: 8192 } } as Conversation;
+    expect(workbenchSettings(conversation)).toMatchObject({ outputMode: 'auto', contextMode: 'auto' });
+    expect(workbenchSettings({ ...conversation, workbench: { ...settings, outputMode: undefined, contextMode: undefined, maxTokens: 321, contextBudget: 4096 } })).toMatchObject({ outputMode: 'custom', contextMode: 'custom' });
+    expect(workbenchSettings({ ...conversation, workbench: { ...settings, outputMode: 'custom', contextMode: 'custom' } })).toMatchObject({ outputMode: 'custom', contextMode: 'custom', maxTokens: 2048, contextBudget: 8192 });
+  });
+
+  it('retains local runtime memory settings in automatic context mode', () => {
+    const model = { contextLength: 131_072, maxOutputTokens: 32_768, capabilities: {} } as ModelDescriptor;
+    const preview = buildContext([], 'Hello', settings, model, { kind: 'ollama' } as Connection);
+    expect(preview.budget).toBe(8192);
+    expect(preview.effective.numCtx).toBe(8192);
+    expect(preview.effective.maxTokens).toBeGreaterThan(2048);
+    expect(preview.estimatedTokens + preview.effective.maxTokens!).toBeLessThan(8192);
   });
 
   it('adds bounded attachments as visibly delimited user context', async () => {
@@ -112,6 +158,8 @@ describe('explicit request context', () => {
     { recentTurns: 0 },
     { temperature: 3 },
     { maxTokens: 1.5 },
+    { outputMode: 'unlimited' as 'auto' },
+    { contextMode: 'invalid' as 'auto' },
   ])('rejects invalid stored settings: %j', (invalid) => {
     expect(settingsErrors({ ...settings, ...invalid }).length).toBeGreaterThan(
       0,
