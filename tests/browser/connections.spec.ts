@@ -134,7 +134,7 @@ test('the Free Agent becomes the default once a free model is connected, and nev
   await toolbar.click();
   await page.getByRole('button', { name: 'Use meta/llama:free on OpenRouter' }).click();
   await expect(toolbar).toContainText('meta/llama:free');
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Models' }).click();
+  await page.getByRole('navigation', { name: 'Settings navigation' }).getByRole('button', { name: 'Models' }).click();
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Chat' }).click();
   await expect(toolbar).toContainText('meta/llama:free');
 });

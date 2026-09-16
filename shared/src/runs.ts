@@ -81,7 +81,7 @@ export interface ActivityTrace {
 /** What a routed request asks for, as the router classified it. */
 export type TaskKind = 'code' | 'math' | 'reasoning' | 'writing' | 'extraction' | 'general';
 
-/** One model the router may use. The client lists only models it has verified as free. */
+/** One model the router may use. The client lists only models eligible under the free policy. */
 export interface RouteModel {
   connectionId: string;
   model: string;

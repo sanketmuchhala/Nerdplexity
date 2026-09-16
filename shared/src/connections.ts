@@ -18,6 +18,14 @@ export type KeyStorage = 'none' | 'session' | 'device';
  */
 export type BillingStatus = 'unknown' | 'no-billing' | 'paid';
 
+/**
+ * Providers with an account-level free API tier. Their model catalogs do not reliably expose
+ * which plan owns a key, so the user must also mark the connection as `no-billing` before these
+ * models may enter the Free Router.
+ */
+export const ACCOUNT_FREE_TIER_KINDS = ['gemini', 'groq', 'cerebras', 'mistral', 'sambanova'] as const satisfies readonly ConnectionKind[];
+export const hasAccountFreeTier = (kind: ConnectionKind) => (ACCOUNT_FREE_TIER_KINDS as readonly ConnectionKind[]).includes(kind);
+
 /** Latest rate-limit headers the provider sent, with when they were seen. */
 export interface QuotaSnapshot {
   requestsLimit?: number;
@@ -48,6 +56,8 @@ export interface ConnectionTarget {
   kind: ConnectionKind;
   baseURL?: string;
   apiKey?: string;
+  /** The user confirmed this key belongs to a free-plan account with no billing enabled. */
+  freeTier?: boolean;
 }
 
 /** A model selection: always a connection plus a model ID, never inferred from the name. */

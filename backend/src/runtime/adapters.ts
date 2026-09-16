@@ -40,7 +40,7 @@ export interface ModelRequest {
   tools?: ToolSpec[];
   /** false: fail at once on a rate limit instead of waiting it out (the router tries another model). */
   waitOnRateLimit?: boolean;
-  /** Enforce a zero-price provider ceiling on OpenRouter. */
+  /** Enforce zero-price or a confirmed supported provider free-tier account. */
   freeOnly?: boolean;
 }
 
@@ -647,9 +647,9 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
 /** Stream one model response. Throws ProviderFailure for provider errors; rethrows aborts. */
 export async function* streamModel(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn = fetch): AsyncGenerator<AdapterEvent> {
   try {
-    // Browser catalogs and saved billing labels are advisory. Free-only is enforced again for
-    // every generation, including tools, fallbacks, Bench, Free Agent, and Deep Research steps:
-    // OpenRouter gets a request-time $0 ceiling; other remote providers get a fresh catalog check.
+    // Free-only is enforced again for every generation, including tools, fallbacks, Bench, Free
+    // Agent, and Deep Research steps. OpenRouter gets a request-time $0 ceiling; other remote
+    // providers get a fresh catalog or account-access check.
     const descriptor = req.freeOnly
       ? await verifyFreeModel(req.target, req.model, signal, fetchImpl)
       : req.maxTokens === undefined && req.target.execution === 'remote'

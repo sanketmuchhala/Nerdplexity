@@ -14,6 +14,13 @@ describe('resolveTarget', () => {
     expect(resolveTarget({ kind: 'groq', apiKey: 'gsk' })).toMatchObject({ baseURL: 'https://api.groq.com/openai/v1', headers: { Authorization: 'Bearer gsk' } });
   });
 
+  it('accepts free-tier routing only for providers with an account-level free plan', () => {
+    expect(resolveTarget({ kind: 'groq', apiKey: 'gsk', freeTier: true })).toMatchObject({ kind: 'groq', freeTier: true });
+    expect(resolveTarget({ kind: 'cerebras', apiKey: 'csk', freeTier: true })).toMatchObject({ kind: 'cerebras', freeTier: true });
+    expect(() => resolveTarget({ kind: 'openai', apiKey: 'sk-test', freeTier: true })).toThrow(/does not support account-level free-tier routing/);
+    expect(() => resolveTarget({ kind: 'groq', apiKey: 'gsk', freeTier: 'yes' })).toThrow(/must be true or false/);
+  });
+
   it('requires a key for hosted providers', () => {
     expect(() => resolveTarget({ kind: 'anthropic', apiKey: '  ' })).toThrow(DestinationError);
   });

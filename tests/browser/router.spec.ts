@@ -38,7 +38,7 @@ test('the Free Router tries the best free model, falls back when it is rate limi
   await expect(page.locator('.np-provenance')).toHaveCount(0);
   const decision = page.getByLabel('Free Router decision');
   await expect(decision).toContainText('1 fallback');
-  await decision.locator('summary').click();
+  await decision.locator('summary').first().click();
   await expect(decision).toContainText('limit-model-70b');
   await expect(decision).toContainText('rate limiting');
 
@@ -95,4 +95,50 @@ test('the Free Router sends only models verified as free, and never a paid or un
   expect(bodies[0].target).toBeUndefined();
   expect(bodies[0].route.models.map((m: { model: string }) => m.model)).toEqual(['meta/llama:free']);
   expect(bodies[0].route.connections).toEqual([{ id: expect.any(String), target: { kind: 'openrouter', apiKey: 'sk-or-test' } }]);
+});
+
+test('the Free Router pools available models from multiple free-plan provider keys', async ({ page }) => {
+  const model = (id: string) => ({ id, displayName: id, capabilities: { tools: true, vision: false }, pricing: 'unknown', source: 'discovered' });
+  await page.route('**/v1/models/discover', route => {
+    const kind = route.request().postDataJSON().target.kind as string;
+    const models = kind === 'groq' ? [model('groq-model')] : kind === 'cerebras' ? [model('cerebras-model')] : [];
+    return route.fulfill({ json: models.length
+      ? { ok: true, execution: 'remote', checkedAt: Date.now(), models }
+      : { ok: false, error: { category: 'offline', message: 'Offline.' }, checkedAt: Date.now() } });
+  });
+  const bodies: any[] = [];
+  await page.route('**/v1/runs', async route => {
+    bodies.push(route.request().postDataJSON());
+    await route.fulfill({ status: 201, json: { runId: 'run-multi-provider', existing: false } });
+  });
+  const events = [
+    { type: 'queued', position: 0 }, { type: 'started' },
+    { type: 'route', attempt: 1, connectionId: 'groq', model: 'groq-model', status: 'trying', reason: 'Best free match.' },
+    { type: 'delta', text: 'Answer from the shared free pool.' },
+    { type: 'completed', route: { connectionId: 'groq', model: 'groq-model', task: 'general', attempts: 1 }, timing: { queuedMs: 0, ttftMs: 100, durationMs: 300 } },
+  ];
+  await page.route('**/v1/runs/*/events**', route => route.fulfill({ contentType: 'application/x-ndjson', body: events.map((event, i) => JSON.stringify({ v: 1, runId: 'run-multi-provider', seq: i + 1, ts: Date.now(), event })).join('\n') + '\n' }));
+
+  await page.goto('/app/models');
+  for (const [kind, key] of [['groq', 'gsk-test'], ['cerebras', 'csk-test']] as const) {
+    await page.getByRole('button', { name: 'Add Provider' }).click();
+    const form = page.getByRole('form', { name: 'Add connection' });
+    await form.getByLabel('Connection type').selectOption(kind);
+    await form.getByLabel('API key').fill(key);
+    await form.getByLabel('Account billing').selectOption('no-billing');
+    await form.getByRole('button', { name: 'Save Connection' }).click();
+    await expect(page.locator(`h3[title="${kind}-model"]`)).toBeVisible();
+  }
+
+  await chooseRouter(page);
+  await expect(page.getByRole('button', { name: 'Choose model' })).toContainText('2 free models');
+  await send(page, 'Use every free provider');
+  await expect(page.getByText('Answer from the shared free pool.')).toBeVisible();
+
+  expect(bodies).toHaveLength(1);
+  expect(bodies[0].route.models.map((entry: { model: string }) => entry.model).sort()).toEqual(['cerebras-model', 'groq-model']);
+  expect(bodies[0].route.connections.map((entry: any) => entry.target).sort((a: any, b: any) => a.kind.localeCompare(b.kind))).toEqual([
+    { kind: 'cerebras', apiKey: 'csk-test', freeTier: true },
+    { kind: 'groq', apiKey: 'gsk-test', freeTier: true },
+  ]);
 });

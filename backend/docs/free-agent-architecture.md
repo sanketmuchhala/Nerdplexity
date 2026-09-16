@@ -77,7 +77,7 @@ Each principle is a rule the code enforces, with where it is enforced.
 | --- | --- | --- |
 | 1 | **One answer, from one model.** The user's answer is only ever the writer's stream. Drafts and part answers are inputs and are shown as steps, never streamed as the answer. The single exception, when no writer can answer at all, shows one whole draft with a status line. | `agentExecutor`: only the writer's hooks forward `delta` events |
 | 2 | **Never splice or shop.** A model that fails after it started answering is not replaced, and a refusal is never retried on another model. | `tryInOrder` (the commit point), shared with the Free Router |
-| 3 | **Free models only.** Every step draws from the route's models, which the web app lists only when verified as free. | `validateRoute`; `routerPool` in the web app |
+| 3 | **Free policy only.** Every step draws from the route's local models, catalog-listed $0 models, and supported connections the user confirmed are free-plan accounts with no billing. | `validateRoute`; `routerPool` in the web app; `verifyFreeModel` before dispatch |
 | 4 | **Ranked, explainable choices.** Every model is chosen by the same scoring as the Free Router, and every choice carries its reasons. | `rankCandidates` → `why`; `describe()` |
 | 5 | **The user can overrule the ranking, safely.** A chosen model goes first in its role, but only if it can take the message; otherwise the ranking stands and the strategy step says why. Choices are checked against the pool on the server. | `agentSettings`, `withChoice` |
 | 6 | **Bounded work per step.** Each step tries a limited number of models, so a failing provider cannot cause unbounded requests. | `AGENT_LIMITS.attempts` |
@@ -128,7 +128,7 @@ flowchart LR
 | Component | File | Responsibility | Does not |
 | --- | --- | --- | --- |
 | Agent identity | `frontend/src/lib/router.ts` | The Free Agent is chosen like a model: connection `nerdplexity-router`, model `agent` (the Free Router is model `free`). `isAgent`, `routeStrategy`, `chooseAgentByDefault`. | Exist as a real connection; it has no key or address |
-| Free-model pool | `frontend/src/lib/router.ts` (`routerPool`), `state/connections.ts` (`currentRouterPool`) | Build `route.connections` and `route.models` from enabled connections with keys, keeping only models verified as free | Store keys in the run record |
+| Free-model pool | `frontend/src/lib/router.ts` (`routerPool`), `state/connections.ts` (`currentRouterPool`) | Build `route.connections` and `route.models` from enabled connections with keys, keeping local, catalog-listed $0, and confirmed supported free-plan account models | Store keys in the run record |
 | Default selection | `workspace/Workspace.tsx`, `workspace/Models.tsx` | Choose the Free Agent when no model is chosen; move the earlier automatic Free Router default once | Replace a model a person picked |
 | Settings UI | `workspace/AgentSettings.tsx` | Edit `AgentConfig`, save optimistically, show what Automatic would pick | Validate choices (the server does) |
 | Run client | `workspace/useRun.ts` | Send the run with the pool and settings, follow events, keep the steps, save the run record and the message | Decide anything about models |
@@ -535,7 +535,7 @@ Invariants, each covered by tests (section 16):
 
 | Boundary | Rule |
 | --- | --- |
-| Browser → server | The browser offers only local and catalog-verified $0 models. The server validates every destination and model reference. OpenRouter receives a request-time zero-price ceiling; other remote providers must pass a fresh zero-price catalog check before generation. Account billing labels are never treated as proof of zero pricing. |
+| Browser → server | The browser offers local models, catalog-verified $0 models, and supported connections explicitly marked as free-plan accounts with no billing. The server validates every destination and model reference. OpenRouter receives a request-time zero-price ceiling; other remote providers must pass a fresh catalog and model-access check before generation. Unsupported providers still require current zero pricing. |
 | Model output → other models | Drafts and part answers are other models' output. They reach the writer inside a system note that says they can be wrong and must be checked. They are never executed and never choose a destination or a tool. |
 | Keys | Sent per request in the connection targets, used for that request's provider calls, hashed (never stored) to key health. Never in run records, events, or messages. |
 | Users | Health, cooldowns, Bench scores, settings, and runs are per user. Another user's run answers like an unknown run. |

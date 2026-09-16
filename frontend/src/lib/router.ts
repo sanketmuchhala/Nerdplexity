@@ -51,9 +51,9 @@ export interface RouterPool {
 }
 
 /**
- * Every enabled model on this machine or listed at $0, on connections with their required key.
- * Account billing labels cannot prove a model is free. The server checks current provider
- * pricing again before generation, including each fallback and agent step.
+ * Every enabled local, listed-at-$0, or supported free-tier-account model on connections with
+ * their required key. The server checks current provider access again before generation,
+ * including each fallback and agent step.
  */
 export function routerPool(
   connections: Connection[],

@@ -55,14 +55,14 @@ export function runCostPolicy(conversationId?: string): 'free-only' | 'any' {
 
 /** Why Free only blocks this model in this thread, or null when it may run. */
 export function policyBlock(ref: ModelRef, conversationId?: string): string | null {
-  // The Free Router only ever uses models verified as free.
+  // The Free Router only ever uses models eligible under the free policy.
   if (isRouter(ref)) return null;
   if (runCostPolicy(conversationId) === 'any') return null;
   const status = costOf(ref);
   return status.free ? null : `Free only is on. ${status.detail}`;
 }
 
-const NO_FREE_MODELS = 'The Free Router has no free models to use. Connect OpenRouter with a free key, or a model on this machine, then refresh its catalog in Models.';
+const NO_FREE_MODELS = 'The Free Router has no free models to use. Connect a provider with a free-plan key, OpenRouter with a $0 model, or a model on this machine, then refresh its catalog in Models.';
 
 /** The Free Agent's writer, the model behind any partial answer of an agent run. */
 const lastWriter = (steps: AgentStep[] | undefined) => {
@@ -288,9 +288,10 @@ export function useRun() {
     if (pool && !pool.route) { setError({ message: NO_FREE_MODELS, retryable: false }); return; }
     const discovery = connection ? latestResult(useConnections.getState().catalog[connection.id]) : undefined;
     const descriptor = discovery?.ok ? discovery.models.find(item => item.id === attempt.model) : undefined;
+    const effectiveCost = connection ? costStatus(connection, descriptor, discovery?.ok ? discovery.execution : undefined) : undefined;
     const pricing = discovery?.ok ? {
       execution: discovery.execution,
-      classification: discovery.execution === 'local' ? 'local' as const : descriptor?.pricing ?? 'unknown' as const,
+      classification: discovery.execution === 'local' ? 'local' as const : effectiveCost?.cls === 'no-billing' ? 'free-tier' as const : descriptor?.pricing ?? 'unknown' as const,
       ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}),
       catalogCheckedAt: discovery.checkedAt,
     } : undefined;

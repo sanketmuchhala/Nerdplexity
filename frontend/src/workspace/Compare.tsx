@@ -11,6 +11,7 @@ import { buildContext, workbenchSettings } from '../lib/workbench';
 import { cancelRun, followRun, startRun } from './runClient';
 import { exportText } from './api';
 import { policyBlock, runCostPolicy } from './useRun';
+import { costStatus } from '../lib/cost';
 
 type Choice = { ref: ModelRef; label: string; descriptor: ModelDescriptor };
 
@@ -56,13 +57,14 @@ export function Compare({ onChat }: { onChat: () => void }) {
     const connection = connectionState.connections.find(item => item.id === side.connectionId)!;
     const discovery = latestResult(connectionState.catalog[connection.id]);
     const descriptor = discovery?.ok ? discovery.models.find(item => item.id === side.modelId) : undefined;
+    const effectiveCost = costStatus(connection, descriptor, discovery?.ok ? discovery.execution : undefined);
     const controller = new AbortController();
     controllers.current.push(controller);
     const record: RunRecord = {
       id: uuidv4(), conversationId: comparison.sourceConversationId ?? `comparison:${comparison.id}`, connectionId: side.connectionId,
       provider: connection.name, model: side.modelId, prompt: comparison.prompt, startedAt: Date.now(), durationMs: 0,
       status: 'running', mode: 'chat', output: '', reasoning: '', tools: [], input: structuredClone(comparison.input), notices: [], idempotencyKey: uuidv4(), lastSeq: 0,
-      ...(discovery?.ok ? { pricing: { execution: discovery.execution, classification: discovery.execution === 'local' ? 'local' as const : descriptor?.pricing ?? 'unknown' as const, ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}), catalogCheckedAt: discovery.checkedAt } } : {}),
+      ...(discovery?.ok ? { pricing: { execution: discovery.execution, classification: discovery.execution === 'local' ? 'local' as const : effectiveCost.cls === 'no-billing' ? 'free-tier' as const : descriptor?.pricing ?? 'unknown' as const, ...(descriptor?.price ? { inputPerMillion: descriptor.price.input, outputPerMillion: descriptor.price.output } : {}), catalogCheckedAt: discovery.checkedAt } } : {}),
     };
     side.runRecordId = record.id;
     await store.runs.put(record);

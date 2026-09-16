@@ -25,10 +25,17 @@ describe('costStatus', () => {
     expect(costStatus(connection(), model('tiny', { pricing: 'paid', price: { input: 0.005, output: 0.1 } })).label).toBe('<$0.01 in / $0.1 out per M tokens');
   });
 
-  it('does not treat a user’s billing statement as proof of free usage', () => {
-    expect(costStatus(connection({ kind: 'gemini', name: 'Gemini', billing: 'no-billing' }), model('gemini-2.5-flash'))).toMatchObject({ cls: 'unknown', free: false });
+  it('uses supported providers when the user confirms the key belongs to a free-plan account', () => {
+    for (const kind of ['gemini', 'groq', 'cerebras', 'mistral', 'sambanova'] as const) {
+      const account = connection({ kind, name: kind, billing: 'no-billing' });
+      expect(costStatus(account, model('available'))).toMatchObject({ cls: 'no-billing', free: true, label: 'Free-tier account' });
+      expect(costStatus(account, model('listed-price', { pricing: 'paid', price: { input: 1, output: 2 } }))).toMatchObject({ cls: 'no-billing', free: true });
+    }
     expect(costStatus(connection({ kind: 'groq', name: 'Groq', billing: 'paid' }), model('llama'))).toMatchObject({ cls: 'paid', free: false });
-    for (const kind of ['openai', 'anthropic', 'sambanova', 'huggingface', 'openai-compatible'] as const) {
+  });
+
+  it('does not extend an account billing label to providers without a supported free tier', () => {
+    for (const kind of ['openai', 'anthropic', 'deepseek', 'openrouter', 'huggingface', 'openai-compatible'] as const) {
       const account = connection({ kind, billing: 'no-billing', baseURL: 'https://openrouter.ai/api/v1' });
       expect(costStatus(account, model('paid', { pricing: 'paid', price: { input: 1, output: 2 } })).free, kind).toBe(false);
       expect(costStatus(account, model('unknown')).free, kind).toBe(false);

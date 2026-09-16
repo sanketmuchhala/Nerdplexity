@@ -24,7 +24,8 @@ export async function inspectModel(
 
 /**
  * Verify prices at dispatch when a provider has no request-time price ceiling.
- * Browser catalogs and account billing labels are not authorization to spend money.
+ * Browser catalogs are not authorization to spend money. A supported provider may use an
+ * explicitly confirmed free-plan account; the model is still rediscovered before every call.
  * Do not cache successful checks: a model's promotional pricing may change between calls.
  */
 export async function verifyFreeModel(
@@ -39,9 +40,15 @@ export async function verifyFreeModel(
   if (target.kind === 'openrouter') return undefined;
   const result = await catalog(target, signal, fetchImpl);
   if (!result.ok) {
-    throw new FreeModelPolicyError(`Free only is on. Cannot verify current pricing: ${result.error.message} No generation request was sent.`);
+    throw new FreeModelPolicyError(`Free only is on. Cannot verify current ${target.freeTier ? 'free-tier model access' : 'pricing'}: ${result.error.message} No generation request was sent.`);
   }
   const descriptor = result.models.find(entry => entry.id === model);
+  if (target.freeTier) {
+    if (!descriptor) {
+      throw new FreeModelPolicyError(`Free only is on. ${model} is not available to this provider account. No generation request was sent.`);
+    }
+    return { ...descriptor, pricing: 'free-tier' };
+  }
   if (!descriptor || descriptor.pricing !== 'zero-price') {
     throw new FreeModelPolicyError(`Free only is on. ${model} is ${descriptor?.pricing === 'paid' ? 'a paid model' : 'not verified as free in the provider’s current catalog'}. No generation request was sent.`);
   }

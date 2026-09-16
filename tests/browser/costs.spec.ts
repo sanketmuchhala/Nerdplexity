@@ -100,19 +100,19 @@ test('a free model that hits its limit offers free alternatives and never switch
   await expect(page.locator('.np-thread').getByText('Question', { exact: true })).toHaveCount(1);
 });
 
-test('an unpriced model stays blocked in Free only even when the account has no billing', async ({ page }) => {
+test('a supported free-plan account can use its available models in Free only', async ({ page }) => {
   await mockDiscovery(page, { gemini: [model('gemini-2.5-flash')] });
   await page.goto('/app/models');
   await page.getByRole('button', { name: 'Add Provider' }).click();
   const form = page.getByRole('form', { name: 'Add connection' });
   await form.getByLabel('Connection type').selectOption('gemini');
-  await expect(form).toContainText('Google may use your prompts to improve its products');
+  await expect(form).toContainText('Google may use free-tier prompts to improve its products');
   await form.getByLabel('API key').fill('AIza-test');
   await form.getByLabel('Account billing').selectOption('no-billing');
   await form.getByRole('button', { name: 'Save Connection' }).click();
   await page.getByLabel(/Free only/).check();
-  await expect(card(page, 'gemini-2.5-flash')).toContainText('Price unknown');
-  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeDisabled();
+  await expect(card(page, 'gemini-2.5-flash')).toContainText('Free-tier account');
+  await expect(card(page, 'gemini-2.5-flash').getByRole('button', { name: 'Select Model' })).toBeEnabled();
 });
 
 test('Check enforces Free only and asks before a paid check when charges are allowed', async ({ page }) => {

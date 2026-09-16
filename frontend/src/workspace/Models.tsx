@@ -14,14 +14,15 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import type {
-  BillingStatus,
-  Connection,
-  ConnectionKind,
-  ConnectionTarget,
-  ModelDescriptor,
-  ModelRef,
-  RateLimitState,
+import {
+  hasAccountFreeTier,
+  type BillingStatus,
+  type Connection,
+  type ConnectionKind,
+  type ConnectionTarget,
+  type ModelDescriptor,
+  type ModelRef,
+  type RateLimitState,
 } from '@app/types';
 import useChat from '../state/chatStore';
 import useConnections, {
@@ -93,7 +94,7 @@ const PRESETS: Preset[] = [
     label: 'Google Gemini',
     kind: 'gemini',
     name: 'Gemini',
-    hint: 'Free-tier availability varies by model and account. On the free tier, Google may use your prompts to improve its products.',
+    hint: 'Free-tier availability varies by model and account. Mark a free-plan key as “No billing enabled” to add available models to the Free Router. Google may use free-tier prompts to improve its products.',
     link: {
       href: 'https://ai.google.dev/gemini-api/docs/pricing',
       label: 'Gemini pricing and data use',
@@ -122,7 +123,7 @@ const PRESETS: Preset[] = [
     label: 'Groq',
     kind: 'groq',
     name: 'Groq',
-    hint: 'Fast hosted open models. The free plan has request and token limits per model.',
+    hint: 'Fast hosted open models. Mark a free-plan key as “No billing enabled” to add its available models to the Free Router.',
     link: {
       href: 'https://console.groq.com/docs/rate-limits',
       label: 'Groq rate limits',
@@ -133,7 +134,7 @@ const PRESETS: Preset[] = [
     label: 'Cerebras',
     kind: 'cerebras',
     name: 'Cerebras',
-    hint: 'Very fast open models. The free tier has request and token limits per model. Free only requires provider-verified zero pricing; an account billing label does not enable routing.',
+    hint: 'Very fast open models. Mark a free-plan key as “No billing enabled” to add its available models to the Free Router.',
     link: {
       href: 'https://inference-docs.cerebras.ai/support/rate-limits',
       label: 'Cerebras rate limits',
@@ -144,7 +145,7 @@ const PRESETS: Preset[] = [
     label: 'Mistral',
     kind: 'mistral',
     name: 'Mistral',
-    hint: "Mistral's own models. Rate limits apply; check Mistral's terms for how free-plan prompts may be used. Free only requires provider-verified zero pricing; an account billing label does not enable routing.",
+    hint: "Mistral's own models. Mark a free-plan key as “No billing enabled” to use its available models within the provider's free allowance.",
     link: {
       href: 'https://mistral.ai/pricing/',
       label: 'Mistral plans and terms',
@@ -155,7 +156,7 @@ const PRESETS: Preset[] = [
     label: 'SambaNova',
     kind: 'sambanova',
     name: 'SambaNova',
-    hint: 'Fast open models with account rate limits. Free only requires provider-verified zero pricing; an account billing label does not enable routing.',
+    hint: 'Fast open models with account rate limits. Mark a free-plan key as “No billing enabled” to add its available models to the Free Router.',
     link: {
       href: 'https://docs.sambanova.ai/docs/en/models/rate-limits',
       label: 'SambaNova rate limits',
@@ -477,8 +478,9 @@ function ConnectionForm({
             ))}
           </select>
           <small className="np-conn-hint">
-            This is your account label. Free only requires verified $0 model
-            pricing; choosing no billing does not authorize paid or unpriced models.
+            {hasAccountFreeTier(kind)
+              ? 'Choose “No billing enabled” only for a free-plan key. Its available models will join the Free Router and stay within provider quotas.'
+              : 'This is your account label. Free only still requires model-level $0 pricing for this provider.'}
           </small>
         </label>
       )}
@@ -966,8 +968,8 @@ export function Models({
             />
             <span>
               <strong>Free only</strong>Run only models on this machine, models
-              listed at $0. The server enforces the free policy again for each call.
-              Paid or unpriced models are blocked, even on an account marked as having no billing.
+              listed at $0, or supported provider keys marked as free-plan accounts.
+              The server checks the policy and current model access again for each call.
             </span>
           </label>
           {actionError && (

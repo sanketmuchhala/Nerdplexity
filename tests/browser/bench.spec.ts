@@ -13,7 +13,7 @@ test('Bench grades free models, keeps the results, and clears them', async ({ pa
   await form.getByRole('button', { name: 'Save Connection' }).click();
   await expect(page.locator('h3[title="fast-model-8b"]')).toBeVisible();
 
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Bench' }).click();
+  await page.getByRole('navigation', { name: 'Lab navigation' }).getByRole('button', { name: 'Bench' }).click();
   const setup = page.getByLabel('Bench setup');
   await expect(setup.getByText('openai/gsm8k')).toBeVisible();
   await setup.getByLabel(/fast-model-8b/).check();
