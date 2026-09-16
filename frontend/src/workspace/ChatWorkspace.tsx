@@ -286,8 +286,28 @@ export function ChatWorkspace({
   return (
     <div className="np-chat">
       <div className="np-chat-toolbar">
-        <button
-          className="np-model-switch"
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {empty ? (
+            <span className="np-chat-title">New chat</span>
+          ) : (
+            <button
+              className="np-chat-title"
+              onClick={() => setRename(conversation!.title)}
+              title="Rename thread"
+            >
+              {conversation!.title}
+              <Pencil size={11} />
+            </button>
+          )}
+          {conversation?.branchOf && (
+            <span className="np-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <GitBranch size={11} />
+              Branch · original retained
+            </span>
+          )}
+          <div style={{ width: '1px', height: '14px', background: 'var(--np-line)' }} />
+          <button
+            className="np-model-switch"
           aria-label="Choose model"
           disabled={run.running}
           onClick={() => setShowPicker(true)}
@@ -301,6 +321,7 @@ export function ChatWorkspace({
           </span>
           <ArrowRight size={13} />
         </button>
+        </div>
         <div className="np-toolbar-actions">
           {freeOnly && (
             <button
@@ -349,23 +370,7 @@ export function ChatWorkspace({
           </button>
         </div>
       </div>
-      {conversation && (
-        <div className="np-thread-heading">
-          <button
-            aria-label="Rename thread"
-            onClick={() => setRename(conversation.title)}
-          >
-            <span>{conversation.title}</span>
-            <Pencil size={12} />
-          </button>
-          {conversation.branchOf && (
-            <span className="np-label">
-              <GitBranch size={12} />
-              Branch · original retained
-            </span>
-          )}
-        </div>
-      )}
+      
       {showDocs && (
         <DocumentsPanel
           documents={documents}
@@ -490,7 +495,7 @@ export function ChatWorkspace({
                       <X size={12} /> Remove from context
                     </button>
                     {file.fileData && (
-                      <a 
+                      <a
                         className="np-button ghost small"
                         href={`data:${file.mimeType};base64,${file.fileData}`}
                         download={file.name}
@@ -527,31 +532,9 @@ export function ChatWorkspace({
         }}
       >
         {empty ? (
-          <div className="np-welcome">
-            <div className="np-orbit" aria-hidden="true">
-              <div className="np-orbit-ring one" />
-              <div className="np-orbit-ring two" />
-              <div className="np-orbit-ring three" />
-              <span className="np-orbit-point a" />
-              <span className="np-orbit-point b" />
-              <span className="np-orbit-point c" />
-              <div className="np-orbit-center">
-                <img src="/brand/nerdplexity-mark.svg" alt="" />
-              </div>
-              <span className="np-orbit-caption">LOCAL INTELLIGENCE</span>
-            </div>
-            <div className="np-welcome-label">
-              <span /> A little more independent.
-            </div>
-            <h1>
-              Your models.
-              <br />
-              <span>Your possibilities.</span>
-            </h1>
-            <p>
-              Think, build, and work with your own AI.
-              <br />A quiet space for intelligence that runs on your terms.
-            </p>
+          <div className="np-welcome-minimal">
+            <h1>Nerdplexity</h1>
+            <p>A quiet space for intelligence that runs on your terms.</p>
             <div className="np-suggestions">
               {suggestions.map(({ icon: Icon, title, text }) => (
                 <button
@@ -570,7 +553,6 @@ export function ChatWorkspace({
                 >
                   <Icon size={18} />
                   <span>{title}</span>
-                  <ArrowRight size={13} />
                 </button>
               ))}
             </div>
@@ -750,7 +732,7 @@ export function ChatWorkspace({
           </p>
         )}
         {actionError && (
-          <p className="np-error" role="alert">
+          <div className="np-error" role="alert" style={{ whiteSpace: 'pre-line' }}>
             {actionError}
             <button
               className="np-icon-button"
@@ -759,7 +741,7 @@ export function ChatWorkspace({
             >
               <X size={14} />
             </button>
-          </p>
+          </div>
         )}
         {actionNotice && (
           <p className="np-action-notice" role="status">

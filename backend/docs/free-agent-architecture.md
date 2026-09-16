@@ -535,7 +535,7 @@ Invariants, each covered by tests (section 16):
 
 | Boundary | Rule |
 | --- | --- |
-| Browser → server | The server trusts the browser's statement of which models are free (the web app checks catalog prices and billing settings; the server does not re-check prices). It does not trust anything else: every connection passes the destination policy, every model must name a listed connection, and the settings are sanitized. |
+| Browser → server | The browser offers only local and catalog-verified $0 models. The server validates every destination and model reference. OpenRouter receives a request-time zero-price ceiling; other remote providers must pass a fresh zero-price catalog check before generation. Account billing labels are never treated as proof of zero pricing. |
 | Model output → other models | Drafts and part answers are other models' output. They reach the writer inside a system note that says they can be wrong and must be checked. They are never executed and never choose a destination or a tool. |
 | Keys | Sent per request in the connection targets, used for that request's provider calls, hashed (never stored) to key health. Never in run records, events, or messages. |
 | Users | Health, cooldowns, Bench scores, settings, and runs are per user. Another user's run answers like an unknown run. |

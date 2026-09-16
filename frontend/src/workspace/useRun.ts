@@ -440,7 +440,7 @@ export function useRun() {
           conversationId: record.conversationId, connectionId: record.connectionId || '', model: record.model, prompt: record.prompt,
           messages: record.input?.messages ?? historyOf(record.conversationId), documents: record.input?.documents ?? [], recordId: record.id,
           tools: record.input?.tools ?? (record.mode === 'agent' ? ['search_documents', 'read_document'] : []),
-          input: record.input ?? { messages: historyOf(record.conversationId), settings: { maxTokens: 2048 }, configured: workbenchSettings(), context: { estimatedTokens: 0, budget: 8192, omittedMessages: 0, limitKnown: false }, documents: [] },
+          input: record.input ?? { messages: historyOf(record.conversationId), settings: {}, configured: workbenchSettings(), context: { estimatedTokens: 0, budget: 65_536, omittedMessages: 0, limitKnown: false }, documents: [] },
         };
         showRunning(record, 'Reconnecting');
         setStreamRunId(record.runId);

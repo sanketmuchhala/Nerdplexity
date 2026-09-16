@@ -86,7 +86,7 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
 
   it('sends the bearer key and keeps compatible context metadata', async () => {
     const { fn, calls } = fakeFetch({ '/api/v1/models': () => json({ data: [{ id: 'z-model', context_length: 131072 }, { id: 'a-model' }] }) });
-    const result = await discover({ kind: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'or-key' }, fn);
+    const result = await discover({ kind: 'openai-compatible', baseURL: 'https://compatible.example/api/v1', apiKey: 'or-key' }, fn);
     expect(models(result).map(m => [m.id, m.contextLength, m.pricing])).toEqual([['a-model', undefined, 'unknown'], ['z-model', 131072, 'unknown']]);
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer or-key');
   });
@@ -161,6 +161,41 @@ describe('discover: OpenAI-compatible and hosted providers', () => {
     expect(models(await discover({ kind: 'openrouter', apiKey: 'or-key' }, fn))).toEqual([
       expect.objectContaining({ id: 'openrouter/free', pricing: 'zero-price' }),
     ]);
+  });
+
+  it('never calls incomplete, malformed, or paid ancillary prices free', async () => {
+    const samples: Record<string, unknown> = {
+      free: { prompt: '0', completion: '0', request: '0', input_cache_read: '0' },
+      image: { prompt: '0', completion: '0', image: '0.002' },
+      audio: { prompt: '0', completion: '0', audio: '0.01' },
+      reasoning: { prompt: '0', completion: '0', internal_reasoning: '0.000001' },
+      cache: { prompt: '0', completion: '0', input_cache_write: '0.000001' },
+      future_fee: { prompt: '0', completion: '0', new_fee: '0.1' },
+      invalid: { prompt: '0', completion: '0', request: 'not-a-price' },
+      blank: { prompt: '', completion: '0' },
+      null: { prompt: '0', completion: '0', request: null },
+      negative: { prompt: '0', completion: '0', image: '-1' },
+      missing: { prompt: '0' },
+      'openrouter/auto': { prompt: '0', completion: '0' },
+    };
+    const { fn } = fakeFetch({
+      '/api/v1/key': () => json({ data: {} }),
+      '/api/v1/models': () => json({ data: Object.entries(samples).map(([id, pricing]) => ({ id, pricing })) }),
+    });
+    const byId = new Map(models(await discover({ kind: 'openrouter', apiKey: 'test' }, fn)).map(m => [m.id, m.pricing]));
+    expect(byId.get('free')).toBe('zero-price');
+    for (const id of ['image', 'audio', 'reasoning', 'cache', 'future_fee']) expect(byId.get(id), id).toBe('paid');
+    for (const id of ['invalid', 'blank', 'null', 'negative', 'missing', 'openrouter/auto']) expect(byId.get(id), id).toBe('unknown');
+  });
+
+  it('discovers an OpenRouter compatible alias using its authenticated native catalog', async () => {
+    const { fn, calls } = fakeFetch({
+      '/api/v1/key': () => json({ data: {} }),
+      '/api/v1/models': () => json({ data: [{ id: 'vendor/free', pricing: { prompt: '0', completion: '0' } }] }),
+    });
+    expect(models(await discover({ kind: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', apiKey: 'test' }, fn)))
+      .toContainEqual(expect.objectContaining({ id: 'vendor/free', pricing: 'zero-price' }));
+    expect(new URL(calls[0].url).pathname).toBe('/api/v1/key');
   });
 
   it('validates an OpenRouter key before reading its public model catalog', async () => {

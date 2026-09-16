@@ -32,8 +32,13 @@ describe('resolveTarget', () => {
   it('accepts compatible endpoints with provider-specific paths', () => {
     expect(resolveTarget({ kind: 'openai-compatible', baseURL: 'http://127.0.0.1:1234' })).toMatchObject({ baseURL: 'http://127.0.0.1:1234/v1', execution: 'local' });
     expect(resolveTarget({ kind: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1/', apiKey: 'or-key' })).toMatchObject({
-      baseURL: 'https://openrouter.ai/api/v1', execution: 'remote', headers: { Authorization: 'Bearer or-key' },
+      kind: 'openrouter', baseURL: 'https://openrouter.ai/api/v1', execution: 'remote', headers: { Authorization: 'Bearer or-key' },
     });
+  });
+
+  it('applies OpenRouter authentication and pricing policy to compatible aliases', () => {
+    expect(() => resolveTarget({ kind: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1/' })).toThrow(/API key/);
+    expect(resolveTarget({ kind: 'openai-compatible', baseURL: 'https://openrouter.ai.evil.example/api/v1', apiKey: 'test' }).kind).toBe('openai-compatible');
   });
 
   it('requires https for anything that is not this machine', () => {

@@ -75,7 +75,7 @@ async function discoverOllama(target: ResolvedTarget, fetchImpl: FetchFn): Promi
 }
 
 const perMillion = (value: unknown) => {
-  const n = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  const n = (typeof value === 'string' && value.trim() !== '') || typeof value === 'number' ? Number(value) : NaN;
   return Number.isFinite(n) ? n * 1_000_000 : undefined;
 };
 
@@ -86,9 +86,12 @@ const perMillion = (value: unknown) => {
 function tokenPricing(prices: any): Pick<ModelDescriptor, 'pricing' | 'price'> {
   const input = perMillion(prices?.prompt);
   const output = perMillion(prices?.completion);
-  const perRequest = Number(prices?.request || 0);
-  if (input === undefined || output === undefined || input < 0 || output < 0 || perRequest < 0) return { pricing: 'unknown' };
-  return input === 0 && output === 0 && perRequest === 0 ? { pricing: 'zero-price' } : { pricing: 'paid', price: { input, output } };
+  if (input === undefined || output === undefined || input < 0 || output < 0) return { pricing: 'unknown' };
+  // Catalogs also price images, audio, requests, cached tokens, and reasoning. A $0 text
+  // rate is insufficient: every reported charge must be a valid zero before calling it free.
+  const rates = Object.values(prices).map(perMillion);
+  if (rates.some(rate => rate === undefined || rate < 0)) return { pricing: 'unknown' };
+  return rates.every(rate => rate === 0) ? { pricing: 'zero-price' } : { pricing: 'paid', price: { input, output } };
 }
 
 const hasImageInput = (m: any): boolean | null => Array.isArray(m?.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null;
@@ -163,7 +166,8 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
     .map((m: any) => {
       const freeRouter = m.id === 'openrouter/free';
       // OpenRouter documents openrouter/free as an always-$0 router even though its selected model varies per request.
-      const { pricing, price } = freeRouter ? { pricing: 'zero-price' as const, price: undefined } : tokenPricing(m.pricing);
+      const { pricing, price } = freeRouter ? { pricing: 'zero-price' as const, price: undefined }
+        : m.id === 'openrouter/auto' ? { pricing: 'unknown' as const, price: undefined } : tokenPricing(m.pricing);
       return withDefaults({
         id: m.id,
         displayName: typeof m.name === 'string' ? m.name : m.id,

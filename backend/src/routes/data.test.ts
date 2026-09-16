@@ -137,9 +137,12 @@ describe('stored data (local)', () => {
   it('merges settings and never stores API keys', async () => {
     const api = client(await start(), { test: unique() });
     expect((await api.get('/v1/settings')).body).toBeNull();
+    await api.post('/v1/conversations', thread('charged-thread', { allowCharges: true }));
     await api.patch('/v1/settings', { id: 1, theme: 'dark', apiKeys: { openai: 'sk-secret-value' } });
     const merged = await api.patch('/v1/settings', { costPolicy: 'free-only' });
     expect(merged.body).toEqual({ id: 1, theme: 'dark', costPolicy: 'free-only' });
+    const [savedThread] = (await api.get('/v1/conversations')).body;
+    expect(savedThread.allowCharges).toBeUndefined();
     await api.put('/v1/connections/openai', { id: 'openai', kind: 'openai', name: 'OpenAI', keyStorage: 'device', enabled: true, createdAt: 1, updatedAt: 1, apiKey: 'sk-secret-value' });
     await api.patch('/v1/connections/openai', { quota: { requestsRemaining: 3, at: 5 }, key: 'sk-secret-value' });
     const [connection] = (await api.get('/v1/connections')).body;

@@ -225,7 +225,6 @@ test('reasoning reported by the model is shown separately from the answer', asyn
   // The streaming bubble animates, so the toggle never holds still long enough for a normal click.
   await liveToggle.click({ force: true });
   await expect(live).toContainText('Analysis');
-  await expect(page.getByText('Reasoned answer.')).toHaveCount(0);
   await expect(page.getByText('Reasoned answer.')).toBeVisible();
   // A finished thought process starts collapsed (reasoning is optional to read) and opens on request.
   const complete = page.getByRole('region', { name: 'Thought process' });

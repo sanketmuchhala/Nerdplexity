@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ProviderError, RateLimitState, RunMessage, Usage } from '@app/types';
+import type { ModelDescriptor, ProviderError, RateLimitState, RunMessage, Usage } from '@app/types';
 import { readLines } from './streams.js';
 import { redact, ResolvedTarget } from './destinations.js';
+import { FreeModelPolicyError, inspectModel, verifyFreeModel } from './modelPolicy.js';
 
 type FetchFn = typeof fetch;
 
@@ -55,7 +56,8 @@ export class ProviderFailure extends Error {
   constructor(public error: ProviderError) { super(error.message); }
 }
 
-const DEFAULT_MAX_TOKENS = 2048;
+/** Fallback only when a provider does not publish output limits. This is a ceiling, not a requested length. */
+const AUTOMATIC_MAX_TOKENS = 16_384;
 /** A rate-limited request never reached the model, so a short wait and resend cannot duplicate output or billing. */
 const MAX_AUTO_WAIT_MS = 10_000;
 const MAX_AUTO_RETRIES = 2;
@@ -259,6 +261,15 @@ const textOf = (message: ModelMessage) => partsOf(message).filter((part): part i
 const imagesOf = (message: ModelMessage) => partsOf(message).filter((part): part is Extract<ContentPart, { type: 'image' }> => part.type === 'image');
 const hasToolCalls = (message: ModelMessage): message is Extract<ModelMessage, { toolCalls: ToolCall[] }> => 'toolCalls' in message;
 
+/** Use the selected model's live limits without sacrificing the whole context window to output. */
+export function automaticMaxTokens(req: ModelRequest, descriptor?: Pick<ModelDescriptor, 'contextLength' | 'maxOutputTokens'>): number {
+  const input = Math.ceil(req.messages.reduce((sum, message) => sum + textOf(message).length, 0) / 4);
+  const context = descriptor?.contextLength ?? req.numCtx ?? 65_536;
+  const margin = Math.min(2048, Math.ceil(context * 0.02));
+  const room = Math.max(1, context - input - margin);
+  return Math.max(1, Math.min(descriptor?.maxOutputTokens ?? AUTOMATIC_MAX_TOKENS, room, 128_000));
+}
+
 /** Arguments as an object for providers that take objects; malformed arguments were already reported to the model as a tool error. */
 function argumentsObject(json: string): Record<string, unknown> {
   try {
@@ -357,7 +368,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     stream: true,
     ...(NO_STREAM_OPTIONS.has(target.kind) ? {} : { stream_options: { include_usage: true } }),
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
-    [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? DEFAULT_MAX_TOKENS,
+    [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? AUTOMATIC_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
     ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
   };
@@ -406,6 +417,9 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   }
   // Some servers omit [DONE]; a reported finish reason still marks a complete answer.
   if (!done && !finishReason) throw new ProviderFailure({ category: 'transport', message: INCOMPLETE, retryable: true });
+  if (finishReason && /^(content_filter|safety)$/i.test(finishReason)) {
+    throw new ProviderFailure({ category: 'refused', message: `${LABEL[target.kind]} stopped the answer for a safety policy. The partial answer was kept.`, retryable: false });
+  }
   const toolCalls = req.tools?.length ? calls.result() : undefined;
   yield { type: 'done', usage, finishReason, ...(toolCalls ? { toolCalls } : {}) };
 }
@@ -414,7 +428,7 @@ async function* streamOllama(req: ModelRequest, signal: AbortSignal, fetchImpl: 
   const { target } = req;
   const response = yield* sendWithRetry(target, () => post(fetchImpl, `${target.baseURL}/api/chat`, target, {
     model: req.model, messages: req.messages.map(ollamaMessage), stream: true,
-    options: { num_predict: req.maxTokens ?? DEFAULT_MAX_TOKENS, num_ctx: req.numCtx ?? 8192, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
+    options: { num_predict: req.maxTokens ?? AUTOMATIC_MAX_TOKENS, num_ctx: req.numCtx ?? 8192, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
     ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
   }, signal), signal, req.waitOnRateLimit);
   // Ollama sends each tool call whole, with arguments as an object.
@@ -487,7 +501,7 @@ async function* streamGemini(req: ModelRequest, signal: AbortSignal, fetchImpl: 
   const body: Record<string, any> = {
     contents: geminiContents(req.messages),
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-    generationConfig: { maxOutputTokens: req.maxTokens ?? DEFAULT_MAX_TOKENS, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
+    generationConfig: { maxOutputTokens: req.maxTokens ?? AUTOMATIC_MAX_TOKENS, ...(req.temperature !== undefined ? { temperature: req.temperature } : {}) },
     ...(req.tools?.length ? { tools: [{ functionDeclarations: req.tools.map(({ name, description, parameters }) => ({ name, description, parameters: geminiSchema(parameters) })) }] } : {}),
   };
   // alt=sse selects the event-stream format; the key stays in the x-goog-api-key header.
@@ -575,7 +589,7 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
   const system = systemText(req.messages);
   const params: Anthropic.MessageStreamParams = {
     model: req.model,
-    max_tokens: req.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: req.maxTokens ?? AUTOMATIC_MAX_TOKENS,
     messages: anthropicMessages(req.messages),
     ...(system ? { system } : {}),
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
@@ -625,14 +639,26 @@ async function* streamAnthropic(req: ModelRequest, signal: AbortSignal, fetchImp
 
 /** Stream one model response. Throws ProviderFailure for provider errors; rethrows aborts. */
 export async function* streamModel(req: ModelRequest, signal: AbortSignal, fetchImpl: FetchFn = fetch): AsyncGenerator<AdapterEvent> {
-  const source = req.target.kind === 'ollama' ? streamOllama(req, signal, fetchImpl)
-    : req.target.kind === 'anthropic' ? streamAnthropic(req, signal, fetchImpl)
-    : req.target.kind === 'gemini' ? streamGemini(req, signal, fetchImpl)
-    : streamOpenAIStyle(req, signal, fetchImpl);
   try {
+    // Browser catalogs and saved billing labels are advisory. Free-only is enforced again for
+    // every generation, including tools, fallbacks, Bench, Free Agent, and Deep Research steps:
+    // OpenRouter gets a request-time $0 ceiling; other remote providers get a fresh catalog check.
+    const descriptor = req.freeOnly
+      ? await verifyFreeModel(req.target, req.model, signal, fetchImpl)
+      : req.maxTokens === undefined && req.target.execution === 'remote'
+        ? await inspectModel(req.target, req.model, signal, fetchImpl)
+        : undefined;
+    const prepared = req.maxTokens === undefined ? { ...req, maxTokens: automaticMaxTokens(req, descriptor) } : req;
+    const source = prepared.target.kind === 'ollama' ? streamOllama(prepared, signal, fetchImpl)
+      : prepared.target.kind === 'anthropic' ? streamAnthropic(prepared, signal, fetchImpl)
+      : prepared.target.kind === 'gemini' ? streamGemini(prepared, signal, fetchImpl)
+      : streamOpenAIStyle(prepared, signal, fetchImpl);
     yield* source;
   } catch (error) {
     if (signal.aborted || error instanceof ProviderFailure) throw error;
+    if (error instanceof FreeModelPolicyError) {
+      throw new ProviderFailure({ category: 'invalid-request', message: error.message, retryable: false });
+    }
     const name = (error as Error)?.name;
     if (name === 'TimeoutError') throw new ProviderFailure({ category: 'timeout', message: `${LABEL[req.target.kind]} did not respond in time.`, retryable: true });
     if (error instanceof TypeError) {
