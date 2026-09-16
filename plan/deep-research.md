@@ -2,6 +2,8 @@
 
 Status: plan, revised 2026-09-15 after the Gemini research ([`research/deep-research.md`](research/deep-research.md), with review notes: it gives no sources, and several numbers are outdated). The changes it led to are listed at the end.
 
+R0 and R1 are built. **R2 to R4 are superseded by [`deep-research-quality.md`](deep-research-quality.md)** (2026-09-16), which works them out in detail after using the engine: freshness, correct Exa usage, reading quality, synthesis correctness, the second round, and evaluation. This file remains the origin document and the record of what the research changed.
+
 ## What it is
 
 A mode for questions that need a real investigation. The user asks once; Nerdplexity plans the research, searches the web in rounds, has several free models read the sources in parallel, looks for gaps and searches again, then writes a report where every claim is cited, and checks each citation against the source before showing it. It takes minutes and tens of requests, not seconds and one.
