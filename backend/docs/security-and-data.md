@@ -155,9 +155,13 @@ Durable documents are stored in the server database under their owner. For one r
 - document text reaches the model in search/read results;
 - text is explicitly described as untrusted data, not instructions.
 
-Current limits are 20 documents, 100,000 characters each, and 400,000 total characters.
+Current run limits are 20 documents, 2 MB of UTF-8 text each, and 4 MB of UTF-8 text total.
 
 This prevents documents from being sent to hosted model targets through the supported run route. The browser still sends the workspace documents to the local Express process for that tool-enabled run, and a local model receives the inventory and tool-returned passages. A compromised local server/runtime can access that traffic.
+
+Chat attachments are separate from workspace document tools. The browser extracts text from supported documents, saves that text with the thread, and sends it or selected excerpts to the model the user chooses, including online providers. PDF and archive parsers load on demand; archive extraction has entry and expanded-size limits. HTML scripts and styles, RTF embedded objects, and document markup are excluded from extracted text. See [Document inputs](../../README.md#document-inputs) for formats and import limits.
+
+Chat also saves original PDF bytes in the owner-scoped attachment row for page previews and downloads. Normal thread reads return only a `hasPdf` flag; the viewer fetches the original on demand through an authenticated, owner-scoped endpoint. Originals are included in thread/account exports and branches, and deleted with their attachment or thread. Model requests contain extracted text, never the stored PDF bytes. Workspace imports continue to store text only.
 
 ## 8. Tools and prompt injection
 

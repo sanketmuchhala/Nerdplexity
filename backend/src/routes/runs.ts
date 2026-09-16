@@ -1,13 +1,14 @@
 import { Router, type Request, type Response } from 'express';
-import type { BenchScore, RunEnvelope, RunMessage, ToolName } from '@app/types';
+import type { AgentConfig, BenchScore, ResearchDepth, RunEnvelope, RunMessage, ToolName } from '@app/types';
 import { resolveTarget, ResolvedTarget } from '../runtime/destinations.js';
 import { ModelRequest, streamModel } from '../runtime/adapters.js';
 import { DOCUMENT_TOOLS, TOOL_NAMES, WorkspaceDocument } from '../runtime/tools.js';
 import { runWithTools } from '../runtime/toolLoop.js';
 import { RunExecutor, RunRegistry } from '../runtime/runs.js';
-import { BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
+import { AccountPacer, BenchIndex, benchIndex, RouteCandidate, routedExecutor, RouterHealth } from '../runtime/router.js';
 import { withWebResults } from '../runtime/autoSearch.js';
-import { agentExecutor } from '../runtime/agent.js';
+import { agentExecutor, agentSettings } from '../runtime/agent.js';
+import { RESEARCH_DEPTHS, researchExecutor } from '../runtime/research.js';
 
 type FetchFn = typeof fetch;
 
@@ -15,7 +16,7 @@ interface ValidRun {
   key: string;
   request: ModelRequest;
   /** Present when the server chooses the model; `request.target` and `request.model` are then placeholders. */
-  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent' };
+  route?: { candidates: RouteCandidate[]; strategy: 'free' | 'agent' | 'research'; agent?: AgentConfig; research?: { depth: ResearchDepth } };
   tools: ToolName[];
   documents: WorkspaceDocument[];
   /** auto: search the web before answering when the latest message needs current information. */
@@ -40,7 +41,7 @@ export function resolveConnections(connections: unknown, limit = ROUTE_LIMITS.co
 
 /** Validate a route: every connection passes the destination policy, and every model names one of them. */
 export function validateRoute(route: any): RouteCandidate[] {
-  if (!route || typeof route !== 'object' || (route.strategy !== 'free' && route.strategy !== 'agent')) throw new Error('Unknown route strategy.');
+  if (!route || typeof route !== 'object' || !['free', 'agent', 'research'].includes(route.strategy)) throw new Error('Unknown route strategy.');
   const { models } = route;
   const targets = resolveConnections(route.connections);
   if (!Array.isArray(models) || !models.length || models.length > ROUTE_LIMITS.models) throw new Error(`A route needs 1–${ROUTE_LIMITS.models} models.`);
@@ -53,11 +54,13 @@ export function validateRoute(route: any): RouteCandidate[] {
     if (seen.has(key)) throw new Error(`Route model ${entry.model} is listed twice.`);
     seen.add(key);
     const contextLength = Number.isInteger(entry.contextLength) && entry.contextLength > 0 ? entry.contextLength : undefined;
+    const maxOutputTokens = Number.isInteger(entry.maxOutputTokens) && entry.maxOutputTokens > 0 ? entry.maxOutputTokens : undefined;
     return {
       connectionId: entry.connectionId, model: entry.model, target,
       ...(typeof entry.displayName === 'string' ? { displayName: entry.displayName.slice(0, 200) } : {}),
       capabilities: { tools: capability(entry.capabilities?.tools), vision: capability(entry.capabilities?.vision) },
       ...(contextLength ? { contextLength } : {}),
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
     };
   });
 }
@@ -87,14 +90,18 @@ export function validateRunRequest(body: any): ValidRun {
   const tools: ToolName[] = body.tools ?? [];
   if (!Array.isArray(tools) || tools.some(name => !TOOL_NAMES.includes(name)) || new Set(tools).size !== tools.length) throw new Error(`Choose tools from: ${TOOL_NAMES.join(', ')}.`);
   const documents = body.documents ?? [];
-  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || d.content.length > 100_000)) throw new Error('Attach up to 20 text documents, each under 100,000 characters.');
-  if (documents.reduce((n: number, d: any) => n + d.content.length, 0) > 400_000) throw new Error('Attached documents exceed 400,000 characters.');
+  if (!Array.isArray(documents) || documents.length > 20 || documents.some((d: any) => !d || typeof d.id !== 'string' || typeof d.title !== 'string' || d.title.length > 200 || typeof d.content !== 'string' || Buffer.byteLength(d.content, 'utf8') > 2_000_000)) throw new Error('Attach up to 20 text documents, each under 2 MB of text.');
+  if (documents.reduce((n: number, d: any) => n + Buffer.byteLength(d.content, 'utf8'), 0) > 4_000_000) throw new Error('Attached documents exceed 4 MB of text.');
   let search: ValidRun['search'];
   const auto = body.search?.auto === true;
-  if (tools.includes('web_search') || auto) {
+  const research = body.route?.strategy === 'research';
+  if (tools.includes('web_search') || auto || research) {
     const key = body.search?.apiKey;
-    if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) throw new Error('Web search needs an Exa API key. Add one in Connections.');
-    search = { apiKey: key, auto };
+    if (body.search?.provider !== 'exa' || typeof key !== 'string' || !/^[\x21-\x7e]{8,200}$/.test(key)) {
+      throw new Error(research ? 'Deep research needs an Exa API key. Add one in Connections.' : 'Web search needs an Exa API key. Add one in Connections.');
+    }
+    // Deep Research does its own searching, so it never adds an automatic search on top.
+    search = { apiKey: key, auto: auto && !research };
   }
   const documentTools = tools.some(name => DOCUMENT_TOOLS.has(name));
   if (documentTools) {
@@ -105,7 +112,13 @@ export function validateRunRequest(body: any): ValidRun {
   }
   return {
     key: body.idempotencyKey,
-    ...(candidates ? { route: { candidates, strategy: body.route.strategy } } : {}),
+    ...(candidates ? {
+      route: {
+        candidates, strategy: body.route.strategy,
+        ...(body.route.strategy !== 'free' ? { agent: agentSettings(body.route.agent, candidates) } : {}),
+        ...(research ? { research: { depth: RESEARCH_DEPTHS.includes(body.route.research?.depth) ? body.route.research.depth : 'standard' } } : {}),
+      },
+    } : {}),
     request: {
       target, model: candidates ? '' : body.model,
       freeOnly: !!candidates || body.costPolicy !== 'any',
@@ -119,15 +132,17 @@ export function validateRunRequest(body: any): ValidRun {
   };
 }
 
-function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex): RunExecutor {
+function executorFor(run: ValidRun, fetchImpl: FetchFn, health: RouterHealth, owner: string, bench?: BenchIndex, pacer?: AccountPacer): RunExecutor {
   if (run.route) {
     const { target: _target, model: _model, messages, ...request } = run.request;
     const routed = {
       owner, candidates: run.route.candidates, request, messages: messages as RunMessage[], tools: run.tools, documents: run.documents,
       ...(run.search ? { search: run.search } : {}),
+      ...(run.route.agent ? { agent: run.route.agent } : {}),
+      ...(run.route.research ? { research: run.route.research } : {}),
     };
-    const deps = { health, fetchImpl, ...(bench ? { bench } : {}) };
-    return run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
+    const deps = { health, fetchImpl, ...(bench ? { bench } : {}), ...(pacer ? { pacer } : {}) };
+    return run.route.strategy === 'research' ? researchExecutor(routed, deps) : run.route.strategy === 'agent' ? agentExecutor(routed, deps) : routedExecutor(routed, deps);
   }
   return async ({ signal, emit }) => {
     const request = run.search?.auto
@@ -148,6 +163,8 @@ export function runsRouter(
   registry: RunRegistry, fetchImpl: FetchFn = fetch, health = new RouterHealth(),
   /** The user's Bench scores, which the Free Router ranks models with. */
   scores?: (owner: string) => Promise<BenchScore[]>,
+  /** Spaces requests to each provider account, shared by every run. */
+  pacer = new AccountPacer(),
 ): Router {
   const router = Router();
 
@@ -161,7 +178,7 @@ export function runsRouter(
     bench.then(index => {
       // A routed run queues only its attempts on local models, not the whole run.
       const local = !run.route && run.request.target.execution === 'local';
-      const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner, index), owner);
+      const started = registry.start(run.key, local, executorFor(run, fetchImpl, health, owner, index, pacer), owner);
       res.status(started.existing ? 200 : 201).json(started);
     }).catch(next);
   });

@@ -58,6 +58,36 @@ const thread = (id: string, extra: object = {}) => ({
 const msg = (id: string, role: 'user' | 'assistant', content: string, createdAt = 2_000) => ({ id, role, content, createdAt });
 
 describe('stored data (local)', () => {
+  it('keeps PDF originals private, loads them on demand, and preserves them in branches and exports', async () => {
+    const base = await start();
+    const owner = unique();
+    const api = client(base, { test: owner });
+    const other = client(base, { test: unique() });
+    const pdfBase64 = Buffer.from('%PDF-1.4\noriginal sample\n%%EOF').toString('base64');
+    await api.post('/v1/conversations', thread('pdf-thread', { messages: [msg('question', 'user', 'Read this PDF')] }));
+    const file = { id: 'pdf-file', name: 'report.pdf', mimeType: 'application/pdf', size: 32, content: '[Page 1]\nReport', kind: 'text', createdAt: 3_000, pdfBase64 };
+    expect((await api.post('/v1/conversations/pdf-thread/attachments', file)).status).toBe(204);
+    const sourcePath = '/v1/conversations/pdf-thread/attachments/pdf-file/pdf';
+    expect((await api.get(sourcePath)).body).toEqual({ pdfBase64 });
+    expect((await other.get(sourcePath)).status).toBe(404);
+    expect((await other.put(sourcePath, { pdfBase64 })).status).toBe(404);
+    const metadata = (await api.get('/v1/conversations')).body[0].attachments[0];
+    expect(metadata.hasPdf).toBe(true);
+    expect(metadata.pdfBase64).toBeUndefined();
+    expect((await api.get('/v1/conversations/pdf-thread/export')).body.attachments[0].pdfBase64).toBe(pdfBase64);
+    const exported = (await api.get('/v1/store/export')).body;
+    expect(exported.conversations[0].attachments[0].pdfBase64).toBe(pdfBase64);
+    expect((await other.post('/v1/import', exported)).status).toBe(200);
+    expect((await other.get(sourcePath)).body).toEqual({ pdfBase64 });
+    expect((await api.post('/v1/conversations/pdf-thread/fork', { id: 'pdf-branch', beforeMessageId: 'question', title: 'Branch', createdAt: 4_000 })).status).toBe(201);
+    expect((await api.get('/v1/conversations/pdf-branch/attachments/pdf-file/pdf')).body).toEqual({ pdfBase64 });
+    expect((await api.put(sourcePath, { pdfBase64: 'not a PDF' })).status).toBe(400);
+    await api.del('/v1/conversations/pdf-thread/attachments/pdf-file');
+    expect((await api.get(sourcePath)).status).toBe(404);
+    await api.del('/v1/conversations/pdf-branch');
+    expect((await api.get('/v1/conversations/pdf-branch/attachments/pdf-file/pdf')).status).toBe(404);
+  });
+
   it('keeps threads, messages, feedback, attachments, and branches', async () => {
     const api = client(await start(), { test: unique() });
     expect((await api.post('/v1/conversations', thread('t1'))).status).toBe(201);

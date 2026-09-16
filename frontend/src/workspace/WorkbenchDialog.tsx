@@ -6,11 +6,13 @@ export function WorkbenchDialog({
   onClose,
   children,
   sheet = false,
+  className = '',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   sheet?: boolean;
+  className?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const previous = useRef(document.activeElement as HTMLElement | null);
@@ -26,7 +28,7 @@ export function WorkbenchDialog({
   return (
     <dialog
       ref={dialog}
-      className={`np-dialog ${sheet ? 'sheet' : ''}`}
+      className={`np-dialog ${sheet ? 'sheet' : ''} ${className}`}
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();

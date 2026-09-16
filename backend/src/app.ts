@@ -8,7 +8,7 @@ import { runsRouter } from './routes/runs.js';
 import { benchRouter } from './routes/bench.js';
 import { benchScores } from './store/bench.js';
 import { agentRouter } from './routes/agent.js';
-import { RouterHealth } from './runtime/router.js';
+import { AccountPacer, RouterHealth } from './runtime/router.js';
 import { RunRegistry } from './runtime/runs.js';
 import { discover } from './runtime/discovery.js';
 import { errorHandler } from './middleware/errors.js';
@@ -106,8 +106,10 @@ export function createApp(options: AppOptions): NerdplexityApp {
   const registry = options.registry ?? new RunRegistry();
   // One health record per server, shared by the Free Router, the Free Agent, and the specialists view.
   const routerHealth = new RouterHealth();
+  // One pacer for the server: parallel steps of every run share each account's rate limit.
+  const pacer = new AccountPacer();
   const scores = (owner: string) => benchScores(db, owner);
-  app.use('/v1/runs', user, express.json({ limit: '10mb' }), runsRouter(registry, fetch, routerHealth, scores));
+  app.use('/v1/runs', user, express.json({ limit: '10mb' }), runsRouter(registry, fetch, routerHealth, scores, pacer));
   app.use('/v1/agent', user, express.json({ limit: '1mb' }), agentRouter(routerHealth, scores));
   // Bench jobs run in the same registry, so their events, replay, and cancel use /v1/runs/:id.
   app.use('/v1/bench', user, express.json({ limit: '1mb' }), benchRouter(registry, db));

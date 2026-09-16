@@ -6,10 +6,11 @@ import type { RunRecord, WorkspaceDocument } from '../lib/db';
 import * as store from '../lib/store';
 import { costStatus, freeAlternatives } from '../lib/cost';
 import useConnections, { currentRouterPool, isLocal, latestResult, targetFor } from '../state/connections';
-import { isRouter, routerName, routeStrategy } from '../lib/router';
+import { isAgent, isRouter, routerName, routeStrategy } from '../lib/router';
 import { buildContext, toolNamesFor, usesDocumentTools, workbenchSettings, type InputSnapshot } from '../lib/workbench';
 import { cancelRun, followRun, RunUnavailable, startRun } from './runClient';
 import { autoWebSearch, searchKey } from '../lib/searchKey';
+import { formatModelName } from './ModelLogo';
 
 export interface RunError {
   message: string;
@@ -46,13 +47,17 @@ function costOf(ref: ModelRef) {
   return costStatus(connections.find(c => c.id === ref.connectionId), result?.ok ? result.models.find(m => m.id === ref.modelId) : undefined, result?.ok ? result.execution : undefined);
 }
 
+/** Read permission at dispatch time, including retries and explicit per-thread permission. */
+export function runCostPolicy(conversationId?: string): 'free-only' | 'any' {
+  const chat = useChat.getState();
+  return chat.settings?.costPolicy === 'any' || (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) ? 'any' : 'free-only';
+}
+
 /** Why Free only blocks this model in this thread, or null when it may run. */
 export function policyBlock(ref: ModelRef, conversationId?: string): string | null {
   // The Free Router only ever uses models verified as free.
   if (isRouter(ref)) return null;
-  const chat = useChat.getState();
-  if (chat.settings?.costPolicy !== 'free-only') return null;
-  if (conversationId && chat.conversations.find(c => c.id === conversationId)?.allowCharges) return null;
+  if (runCostPolicy(conversationId) === 'any') return null;
   const status = costOf(ref);
   return status.free ? null : `Free only is on. ${status.detail}`;
 }
@@ -65,19 +70,33 @@ const lastWriter = (steps: AgentStep[] | undefined) => {
   return writer ? { connectionId: writer.connectionId!, model: writer.model! } : undefined;
 };
 
-/** The status line while a Free Agent step runs. */
-function agentPhase(step: AgentStep) {
-  const who = step.model ?? 'a model';
-  switch (step.role) {
-    case 'planner': return `Planning the parts with ${who}`;
-    case 'drafter': return `Drafting with ${who}`;
-    case 'specialist': return `${who} is answering a part`;
-    case 'writer': return `Checking and writing the answer with ${who}`;
-    default: return 'Choosing a strategy';
+const modelName = (model?: string) => model ? formatModelName(undefined, model) : 'A model';
+const both = (names: string[]) => names.length > 2 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join(' and ');
+
+/** The status line while the Free Agent works: which models are doing what right now. */
+function agentPhase(steps: AgentStep[]) {
+  const research = steps.some(step => step.role === 'strategy' && step.mode === 'research');
+  const running = steps.filter(step => step.status === 'running');
+  const writer = running.find(step => step.role === 'writer');
+  if (writer) return `${modelName(writer.model)} is ${research ? 'writing the report' : 'checking and writing the answer'}`;
+  if (!running.length) return research ? 'Researching' : 'Choosing how to answer';
+  const searching = running.filter(step => step.role === 'searcher');
+  if (searching.length) return `Searching the web (${searching.length} search${searching.length === 1 ? '' : 'es'} at once)`;
+  const names = both([...new Set(running.map(step => modelName(step.model)))]);
+  const are = running.length > 1 ? 'are' : 'is';
+  const role = running[0].role;
+  if (role === 'reader') {
+    const readers = steps.filter(step => step.role === 'reader');
+    return `${names} ${are} reading sources (${readers.filter(step => step.status !== 'running').length} of ${readers.length} done)`;
   }
+  return role === 'planner' ? `${names} is planning ${research ? 'the research' : 'the parts'}`
+    : role === 'outliner' ? `${names} is outlining the report`
+      : role === 'specialist' ? `${names} ${are} answering the parts` : `${names} ${are} drafting`;
 }
 
 /** Which model a routed run was last sent to: the one behind any partial answer. */
+const hostOf = (url: string) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; } };
+
 const lastTried = (steps: RouteStep[] | undefined) => [...(steps ?? [])].reverse().find(step => step.status === 'trying');
 
 const historyOf = (conversationId: string): RunMessage[] =>
@@ -137,6 +156,10 @@ export function useRun() {
           ...(record.reasoning ? { reasoning: record.reasoning } : {}), ...(record.activities?.length ? { activities: record.activities } : {}), ...(record.tools.length ? { tools: record.tools } : {}),
           ...(record.route?.length ? { route: { steps: record.route, ...(routedTo ? { task: routedTo.task } : {}) } } : {}),
           ...(record.agent?.length ? { agent: { steps: record.agent, ...(agentOutcome ? { mode: agentOutcome.mode, calls: agentOutcome.calls, task: agentOutcome.task } : {}) } } : {}),
+          // A Deep Research report cites [n]; its sources are shown in the same order, numbered.
+          ...(agentOutcome?.sources?.length ? { webSearchResults: agentOutcome.sources.map(source => ({
+            title: source.title, url: source.url, snippet: '', source: hostOf(source.url), ...(source.published ? { publishDate: source.published } : {}),
+          })) } : {}),
         };
         const provenance = answered ? { connectionId: answered.connectionId, modelId: record.routedModel || answered.model }
           : record.connectionId && !isRouter(record) ? { connectionId: record.connectionId, modelId: record.routedModel || record.model } : undefined;
@@ -192,7 +215,7 @@ export function useRun() {
           case 'queued': setPhase(event.position > 0 ? `Queued behind ${event.position} local run${event.position === 1 ? '' : 's'}` : 'Queued'); break;
           case 'started': setPhase('Waiting for the model'); break;
           case 'status': record.notices = [...new Set([...(record.notices || []), event.message])]; setPhase(event.message); break;
-          case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); setPhase(`Using ${event.model}`); break;
+          case 'model': record.routedModel = event.model; record.routedProvider = event.provider; setSelectedModel(event.model); setSelectedProvider(event.provider); if (!isRouter(record)) setPhase(`Using ${event.model}`); break;
           case 'reasoning': record.reasoning = (record.reasoning || '') + event.text; setPhase('Reasoning'); break;
           case 'activity': {
             const { type: _type, ...activity } = event;
@@ -222,7 +245,14 @@ export function useRun() {
             const index = steps.findIndex(existing => existing.id === step.id);
             record.agent = index >= 0 ? steps.map((existing, i) => i === index ? step : existing) : [...steps, step];
             setAgent(record.agent);
-            if (step.status === 'running') setPhase(agentPhase(step));
+            setPhase(agentPhase(record.agent));
+            break;
+          }
+          case 'agent_output': {
+            // A step's draft or reasoning as the model writes it; the finished step replaces it.
+            const { id, channel, text } = event;
+            record.agent = (record.agent ?? []).map(step => step.id === id ? { ...step, [channel]: (step[channel] ?? '') + text } : step);
+            setAgent(record.agent);
             break;
           }
           case 'route': {
@@ -231,7 +261,7 @@ export function useRun() {
             setRoute(record.route);
             // A new attempt forgets the concrete model a failed attempt reported.
             if (step.status === 'trying') { record.routedModel = undefined; record.routedProvider = undefined; setSelectedModel(undefined); setSelectedProvider(undefined); }
-            setPhase(step.status === 'trying' ? `Asking ${step.model}` : `${step.model} failed; choosing another free model`);
+            setPhase(step.status === 'trying' ? (step.attempt === 1 ? 'Asking the best free model' : 'Asking another free model') : 'A model was busy; choosing another free model');
             break;
           }
         }
@@ -278,15 +308,24 @@ export function useRun() {
     try {
       // Durable before contacting the model, so a reload can find this run.
       await store.runs.put(record);
-      const choice = pool?.route ? { route: { ...pool.route, strategy: routeStrategy(attempt) } } : { target: targetFor(connection!), model: attempt.model };
+      const agentSettings = useChat.getState().settings?.agent;
+      // Deep Research is the Free Agent with the thread's Deep research tool on.
+      const research = isAgent(attempt) && !!attempt.input.configured?.tools?.includes('research');
+      if (research && !searchKey()) throw new Error('Deep research needs an Exa API key. Add one in Connections.');
+      const strategy = research ? 'research' as const : routeStrategy(attempt);
+      const choice = pool?.route
+        ? { route: { ...pool.route, strategy, ...(strategy !== 'free' && agentSettings ? { agent: agentSettings } : {}) } }
+        : { target: targetFor(connection!), model: attempt.model };
+      const webAuto = autoWebSearch(useChat.getState().settings?.webSearch);
       const { runId } = await startRun({
         idempotencyKey: record.idempotencyKey!, ...choice, messages: attempt.messages,
+        costPolicy: routed ? 'free-only' : runCostPolicy(attempt.conversationId),
         settings: attempt.input.settings,
         ...(attempt.tools.length ? { tools: attempt.tools } : {}),
         documents: usesDocumentTools(attempt.tools) ? attempt.documents : [],
         // Read at send time so the key never enters the saved run snapshot.
         // With automatic web search, the server searches first when the message needs current information.
-        ...(autoWebSearch(useChat.getState().settings?.webSearch) ? { search: { provider: 'exa' as const, apiKey: searchKey(), auto: true } } : {}),
+        ...(webAuto || research ? { search: { provider: 'exa' as const, apiKey: searchKey(), auto: webAuto && !research } } : {}),
       }, controller.signal);
       record.runId = runId;
       setStreamRunId(runId);

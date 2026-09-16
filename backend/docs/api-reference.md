@@ -25,6 +25,8 @@ During frontend development, Vite proxies `/v1` to this server. A separately dep
 | Any | `/v1/auth/*` | Better Auth sign-up, sign-in, sign-out, and session routes | Hosted only |
 | GET | `/v1/account` | Current owner/account | Available; auth required when hosted |
 | Various | `/v1/conversations/*`, `/v1/documents/*` | Owner-scoped threads, messages, attachments, and workspace documents | Available |
+| GET | `/v1/conversations/:id/export` | Thread export including saved PDF originals | Available |
+| GET, PUT | `/v1/conversations/:id/attachments/:attachmentId/pdf` | Fetch or restore an original PDF as `{pdfBase64}`; owner-scoped, maximum 20 MB decoded | Available |
 | Various | `/v1/run-records/*` | Durable run history and completion claims | Available; owner-scoped |
 | Various | `/v1/connections/*`, `/v1/presets/*`, `/v1/comparisons/*`, `/v1/settings` | Saved workspace records without keys | Available; owner-scoped |
 | POST | `/v1/models/discover` | Validate a target and list models | Available; private targets refused |
@@ -292,6 +294,32 @@ Every connection passes the same destination policy as `target`. The web app lis
 
 Rate limits put a model (or, for account-wide limits such as OpenRouter's free-model quota and bad keys, every model on that account) on cooldown until the provider's reset. Health is kept in memory per user, provider, address, and key hash.
 
+### Free Agent example
+
+`"strategy": "agent"` runs the Free Agent on the same route ([Free Agent](free-agent.md), [architecture](free-agent-architecture.md)). The optional `route.agent` carries the user's settings; every field is optional, and any choice that does not name a model in `route.models` is dropped rather than rejected:
+
+```json
+"route": {
+  "strategy": "agent",
+  "connections": [ … ],
+  "models": [ … ],
+  "agent": {
+    "behavior": "auto | quick | thorough",
+    "drafts": 2,
+    "writer": { "connectionId": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free" },
+    "planner": { "connectionId": "openrouter", "model": "qwen/qwen3-32b:free" },
+    "drafters": [{ "connectionId": "openrouter", "model": "google/gemma-3-27b-it:free" }],
+    "specialists": { "code": { "connectionId": "openrouter", "model": "qwen/qwen3-coder:free" } }
+  }
+}
+```
+
+The run then reports `agent` step events and ends with `completed.agent` (section 6).
+
+### Deep Research example
+
+`"strategy": "research"` runs [Deep Research](deep-research.md) on the same route. It needs `search: { "provider": "exa", "apiKey": "…" }` ("Deep research needs an Exa API key." otherwise); `search.auto` is ignored. `route.research.depth` is `quick`, `standard` (the default, and what anything else becomes), or `deep`. Its steps are `agent` events with the roles `searcher` (query in `task`), `reader` (page in `task` and `url`), `outliner`, and `checker`, besides `planner` and `writer`; `completed.agent` has `mode: "research"` and `sources: [{ n, title, url, published?, notes }]`, the sources the report cites as `[n]`.
+
 ## 6. Follow and replay events
 
 ### `GET /v1/runs/:id/events?after=N`
@@ -334,7 +362,8 @@ Errors:
 | `tool` | call ID/name/input/output/step/status/duration/source | Tool progress and outcome |
 | `route` | attempt/connectionId/model/status (`trying`, `failed`)/reason/category | Free Router sent the request to a model, or that model failed before answering |
 | `model` | model, provider | The concrete model answering, reported by OpenRouter's stream (for `openrouter/free`, the model its router picked) |
-| `agent` | id, role, status, reason, connectionId, model, mode, task, kind, text, durationMs | A Free Agent step started, switched model, finished, or failed ([Free Agent, section 12](free-agent.md#12-api-contract)) |
+| `agent` | id, role, status, reason, connectionId, model, mode, task, kind, text, reasoning, durationMs | A Free Agent step started, switched model, finished, or failed ([Free Agent, section 12](free-agent.md#12-api-contract)) |
+| `agent_output` | id, channel (`text` or `reasoning`), text | Part of a Free Agent step's output or reasoning, live; appended to the step with that id |
 | `completed` | usage/finishReason/loadMs/route/agent/timing | Successful terminal event; `route` names the model that answered a routed run, `agent` how a Free Agent run went and who wrote the answer |
 | `failed` | structured `error`, timing | Failed terminal event |
 | `canceled` | reason, timing | Canceled terminal event |

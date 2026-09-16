@@ -349,7 +349,10 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
   const { target } = req;
   const body: Record<string, unknown> = {
     model: req.model,
-    ...(target.kind === 'openrouter' ? { provider: { allow_fallbacks: false, ...(req.freeOnly ? { max_price: { prompt: 0, completion: 0, request: 0, image: 0, audio: 0 } } : {}) } } : {}),
+    ...(target.kind === 'openrouter' ? { provider: {
+      allow_fallbacks: false,
+      ...(req.freeOnly ? { max_price: { prompt: 0, completion: 0, request: 0, image: 0, audio: 0 } } : {}),
+    } } : {}),
     messages: target.kind === 'openrouter' ? alternatingOpenAIMessages(req.messages) : req.messages.map(openAIMessage),
     stream: true,
     ...(NO_STREAM_OPTIONS.has(target.kind) ? {} : { stream_options: { include_usage: true } }),

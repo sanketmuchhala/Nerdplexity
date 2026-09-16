@@ -3,6 +3,7 @@ import { ArrowUpRight, CheckCircle2, Clock, Download, XCircle } from 'lucide-rea
 import type { RunRecord, RunStatus } from '../lib/db';
 import * as store from '../lib/store';
 import useChat from '../state/chatStore';
+import useConnections from '../state/connections';
 import { exportRuns, measurementFor } from '../lib/runMetrics';
 import { exportText } from './api';
 import { ToolActivity } from './ToolActivity';
@@ -21,6 +22,9 @@ export function Runs({ openConversation }: { openConversation: (id: string) => v
   const [selected, setSelected] = useState<RunRecord | null>(null);
   const [error, setError] = useState('');
   const conversations = useChat(state => state.conversations);
+  const connections = useConnections(state => state.connections);
+  const nameOf = (id: string) => connections.find(c => c.id === id)?.name ?? id;
+  const providerOf = (id: string) => { const owner = connections.find(c => c.id === id); return owner ? (owner.kind === 'openai-compatible' ? owner.name : owner.kind) : ''; };
   const conversationIds = useMemo(() => new Set(conversations.map(c => c.id)), [conversations]);
   const running = runs.some(run => run.status === 'running');
   useEffect(() => {
@@ -50,8 +54,8 @@ export function Runs({ openConversation }: { openConversation: (id: string) => v
     </button>)}</div>
     {selected && selectedMetric && <section className="np-panel np-run-detail"><div className="np-section-title"><div><h2>Run details</h2><p>Measured values remain blank when the provider did not report enough data.</p></div>{conversationIds.has(selected.conversationId) && <button className="np-button small" onClick={() => openConversation(selected.conversationId)}>Open thread<ArrowUpRight size={13}/></button>}</div><dl><div><dt>Connection</dt><dd>{selected.provider}</dd></div><div><dt>Origin</dt><dd>{selected.pricing?.execution === 'local' ? 'On this machine' : selected.pricing?.execution === 'remote' ? 'Online provider' : 'Not captured'}</dd></div><div><dt>State</dt><dd>{STATUS_LABEL[selected.status]}</dd></div><div><dt>Model time</dt><dd>{seconds(selectedMetric.providerMs)}</dd></div><div><dt>Queued</dt><dd>{seconds(selected.queuedMs)}</dd></div><div><dt>First text</dt><dd>{seconds(selected.ttftMs)}</dd></div><div><dt>Total</dt><dd>{seconds(selected.durationMs)}</dd></div><div><dt>Model load</dt><dd>{seconds(selected.loadMs)}</dd></div><div><dt>Generation rate</dt><dd>{selectedMetric.tokensPerSecond === undefined ? 'Not available' : `${selectedMetric.tokensPerSecond.toFixed(1)} tokens/s`}</dd></div><div><dt>Context used</dt><dd>{percent(selectedMetric.contextUtilization)}</dd></div><div><dt>Input / output tokens</dt><dd>{selected.usage ? `${selected.usage.prompt_tokens.toLocaleString()} / ${selected.usage.completion_tokens.toLocaleString()} · provider reported` : 'Not reported'}</dd></div><div><dt>Estimated hosted cost</dt><dd>{money(selectedMetric.estimatedCostUsd)} · {selectedMetric.costProvenance === 'catalog-snapshot' ? 'catalog price captured before run' : selectedMetric.costProvenance === 'zero-price-snapshot' ? 'catalog listed $0 before run' : 'no validated price snapshot'}</dd></div>{selected.finishReason && <div><dt>Finish reason</dt><dd>{selected.finishReason}</dd></div>}{selected.retryOf && <div><dt>Attempt</dt><dd>Retry</dd></div>}</dl>
       {selected.error && <p className="np-error">{selected.errorCategory ? `${selected.errorCategory}: ` : ''}{selected.error}</p>}
-      {!!selected.route?.length && <RouteActivity steps={selected.route} task={selected.routedTo?.task} nameOf={id => id} />}
-      {!!selected.agent?.length && <AgentActivity steps={selected.agent} calls={selected.agentOutcome?.calls} nameOf={id => id} />}
+      {!!selected.route?.length && <RouteActivity steps={selected.route} task={selected.routedTo?.task} nameOf={nameOf} />}
+      {!!selected.agent?.length && <AgentActivity steps={selected.agent} calls={selected.agentOutcome?.calls} nameOf={nameOf} providerOf={providerOf} writerThinking={selected.reasoning} />}
       <ToolActivity tools={selected.tools ?? []} activities={selected.activities} />
       {selected.input && <details className="np-tool-detail"><summary>Input and settings sent</summary><pre>{JSON.stringify(selected.input, null, 2)}</pre></details>}
       {!!selected.notices?.length && <details className="np-tool-detail"><summary>Provider adjustments and status</summary><pre>{selected.notices.join('\n')}</pre></details>}

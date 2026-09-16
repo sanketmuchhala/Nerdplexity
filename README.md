@@ -25,10 +25,11 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 
 - **Local first.** Threads, settings, files, and run history live in your browser. Local models never leave your machine.
 - **Bring your own keys.** Ollama, LM Studio, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Cerebras, Mistral, SambaNova, Hugging Face, or any OpenAI-compatible server, all in one catalog.
+- **Free Agent, the default.** For harder messages, the free models best at each kind of task draft or answer parts, and the strongest checks their work and writes one answer. You can choose how it works and which model does each part.
 - **Free Router.** Choose it like a model: each message goes to the best free model you have, and to the next one when a model is rate limited.
 - **Bench.** Graded questions from published datasets (code, math, instructions, tool calls, reading) run on your free models, paced for free limits. The Free Router ranks models with your results.
 - **Honest about cost.** Every model says whether it runs on your machine, is listed at $0, or may be billed. **Free only** blocks anything it cannot confirm is free.
-- **Nothing hidden.** Each answer shows the model that wrote it, every tool call with its exact input and result, and measured timing and token usage.
+- **Nothing hidden.** Each answer shows every tool call with its exact input and result, and measured timing and token usage. Answers from a model you pick name it; for the Free Agent and Free Router, Run history names every model asked.
 
 ## Features
 
@@ -36,7 +37,7 @@ Switch and compare models, give them bounded tools, and see exactly what every r
 | --- | --- |
 | **Models** | One searchable catalog with brand logos, favorites, filters (free, on this machine, tools, vision), price and context info, and a one-prompt **Check**. Install and remove Ollama models with live download progress. |
 | **Chat** | Streaming answers from every provider, **Stop**, **Retry**, switching models mid-thread, edit-and-regenerate branches, presets, per-thread system instructions, explicit context budgets with a request preview, reasoning shown separately, export and import. |
-| **Attachments** | Text, Markdown, and code files (100 KB each), and images for models that accept them, shown and removable before you send. |
+| **Attachments** | PDF, Office, OpenDocument, EPUB, RTF, HTML, text, data, and code files (20 MB each, up to 2 MB extracted text), plus images for vision models; inspect or remove them before sending. |
 | **Tools** | Off by default, on per thread: **Calculator** (computed by the app), **Documents** (search and read your Workspace notes, models on this machine only), **Web** (Exa search with your own key). |
 | **Compare** | Send one frozen context to two models and see both answers with measured timing and usage, then continue either one in chat. |
 | **Run history** | Every run records queue time, time to first text, tokens, errors, tool calls, and its exact input snapshot for inspection or export. |
@@ -98,23 +99,35 @@ Provider notes: OpenRouter free models have per-minute and per-day limits, and a
 
 ## Free Router and Bench
 
-**Free Router** is Nerdplexity's own router and the default model once you connect a provider with free models (it never replaces a model you picked). It sits at the top of the model picker with the Nerdplexity logo. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
+**Free Router** is Nerdplexity's own router. It sits in the model picker with the Nerdplexity logo, under the Free Agent. Each message goes to the best free model across all your connections: it reads what the message needs (code, math, writing, images, tools, length), leaves out models that cannot take it or are rate limited, ranks the rest, and tries the next one if a model fails before answering. It only uses models known to be free, never splices two models into one answer, and shows every model it tried and why. It is not OpenRouter's `openrouter/free`, which picks among OpenRouter's models on OpenRouter's side; the Free Router uses that only as a last resort.
 
-**Free Agent** puts several free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; two specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. Simple messages still cost one request, and no message uses more than five. Every draft is shown with the answer.
+**Free Agent** is the default model once you connect a provider with free models (it never replaces a model you picked). It puts several different free models to work on harder messages. It knows which of your models is best at code, math, reasoning, and writing; specialists draft independently (or, for a message with several parts, each part goes to its specialist), and the strongest model checks their work and writes one answer. It always uses at least two models (a simple message gets one draft checked by a second model), and while it works a live panel shows every model, its role, what it is thinking and writing, and what it hands to the next model. Under **Models → Let Nerdplexity choose** you decide how it works: Automatic, Quick (always one model), or Thorough (always drafts), how many drafts, and which model writes the final answer, plans, drafts, and answers each kind of part.
 
 **Bench** runs graded questions from published datasets (CRUXEval, GSM8K, IFEval, BFCL, SQuAD) on the free models you pick, paced to stay under free limits, and saves the results. The Free Router then ranks models by how they actually did on your connections instead of by their names.
 
-Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md), and [Bench](backend/docs/bench.md).
+**Deep research** is a Free Agent mode for questions that need an investigation. Turn it on in the composer (it needs an Exa key): the agent plans the research from several perspectives, searches the web, has several free models read the pages in parallel, keeps only the quotes it can find on the page, and writes a report that cites its sources as [1], [2], with a citation check at the end. The live panel shows every search, every source and what was kept from it, and which model did what.
+
+Full details: [Free Router](backend/docs/free-router.md), [Free Agent](backend/docs/free-agent.md) and its [architecture](backend/docs/free-agent-architecture.md), [Deep Research](backend/docs/deep-research.md), and [Bench](backend/docs/bench.md).
 
 ## Tools
 
 Turn tools on from the message box; the choice is saved with the thread and in presets.
 
 - **Calculator:** exact arithmetic computed by the app, on any model.
-- **Documents:** search and read the notes in **Workspace**. Only for models on this machine; documents are never sent online.
+- **Documents:** search and read the notes in **Workspace**. This tool is available only for models on this machine; workspace documents are never sent to online models by the tool.
 - **Web search, automatic:** add an [Exa](https://exa.ai) key under **Connections** and there is nothing to turn on. When a message needs current information (news, prices, recent releases, a link, or "search the web for…"), Nerdplexity searches before the model answers, the model answers from the results, and the sources are shown. Works with every model, including the Free Router. Switch it off under **Connections → Web search**. Search queries go to Exa, even when the model is local.
 
 A run may use at most 6 model steps and 12 tool calls. Each call appears above the answer with its exact input, result, and time, and is kept in Run history. Tool results are treated as data, not instructions, and no tool changes anything outside the app.
+
+### Document inputs
+
+Use **Attach** in a chat or **Bring in a document** in Workspace to import PDF, DOCX, XLSX, PPTX, ODT, ODS, ODP, EPUB, RTF, HTML, plain text, Markdown, CSV/TSV, JSON, XML, YAML, logs, and source code. Extensionless text files such as Dockerfile work too. Files are read in your browser; extracted text is saved, preserving page, slide, sheet, cell, and paragraph labels where available. Chat also accepts PNG, JPEG, WebP, and GIF images for vision models.
+
+Each document can be up to 20 MB, with up to 2 MB of extracted text. A chat supports eight attachments, 20 MB of source files, and 8 MB of extracted text and encoded images total; images are limited to four, 2 MB each, and 5 MB total. Workspace supports 20 documents and 4 MB of text total. PDFs are limited to 500 pages. Large chat documents use question-relevant excerpts within the model's context budget; the full extracted text stays attached, and the interface discloses when excerpts are used.
+
+Attachments stay in **Files in this chat** above the messages before, during, and after a response. Click **Open PDF** to view pages, change pages, zoom, or download the original. **Open in browser** opens the original in a new tab using your browser's PDF viewer. Chat saves original PDFs with your thread so previews survive reloads. Older attachments saved only text: use **Choose original PDF** once to restore their preview. Thread and account exports include saved PDF originals; thread imports accept up to 50 MB. Workspace imports save extracted text only.
+
+**Chat attachment text and images are sent to the model you select, including online providers.** Original PDF bytes are stored for previews and exports; models receive extracted text or selected excerpts. Workspace documents are available through the local-only Documents tool. Legacy DOC/XLS/PPT and Apple Pages/Numbers/Keynote files need export to a supported format. Scanned PDFs need OCR first, or their pages can be attached as images to a vision model. Password-protected PDFs need an unlocked copy. Unsupported or damaged files show an error while other valid chat uploads continue.
 
 ## How runs work
 
@@ -127,7 +140,7 @@ Run history records queue time, time to first text, total and model time, report
 - **Saved by the Nerdplexity server:** threads, messages, attachments, documents, run history, comparisons, presets, connections (without keys), and settings. On your computer the server keeps them in `backend/data` (PGlite; change it with `NERDPLEXITY_DATA_DIR`). A hosted server keeps them in Postgres, under each person's account. Nothing is sent to a telemetry service.
 - **API keys never reach the database.** They stay in your browser: for the current tab unless you tick **Remember this key on this device**, which stores them unencrypted in that browser profile. **Forget key** removes one. Keys travel to the backend in request bodies for each request, never in URLs, and are left out of every export and every saved record.
 - **Accounts (hosted only):** email and password. The session token is kept in the browser and sent as a bearer header. A server on your own computer needs no sign-in.
-- **What leaves your machine:** only what an online model or tool needs. Messages to an online model go through the backend to that provider; web search sends search queries to Exa; documents are only ever read by models on this machine.
+- **What leaves your machine:** only what an online model or tool needs. Messages and chat attachments to an online model go through the backend to that provider; web search sends search queries to Exa; the Documents tool reads workspace documents only with models on this machine.
 
 Do not commit keys, `backend/data`, or personal conversation exports.
 

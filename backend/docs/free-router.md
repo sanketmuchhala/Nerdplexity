@@ -38,7 +38,7 @@ Nerdplexity deals with two different things that are both called a "free router"
 | Chooses among | Every free model on **all** your connections: OpenRouter, Groq, Gemini, Cerebras, Mistral, SambaNova, Hugging Face, Ollama, LM Studio, custom endpoints | OpenRouter's free models only |
 | How it chooses | Task type, model capabilities, context size, your Bench results, recent failures (sections 5–10) | OpenRouter's own logic, not visible to Nerdplexity |
 | When a model is busy | Tries the next model, up to 4, and shows each attempt | OpenRouter's behavior; Nerdplexity sees one request |
-| Picked in the app as | **Free Router**, first row of the model picker, marked with the Nerdplexity logo; the default model | An ordinary model in the OpenRouter catalog |
+| Picked in the app as | **Free Router**, second row of the model picker (after the Free Agent, the default), marked with the Nerdplexity logo | An ordinary model in the OpenRouter catalog |
 | Model ID | Connection `nerdplexity-router`, model `free` (not a real connection) | `openrouter/free` on your OpenRouter connection |
 
 The Free Router can use `openrouter/free` as one of its candidates, always last (section 7). Section 15 covers how the app treats `openrouter/free` on its own. The [Free Agent](free-agent.md) is built on the Free Router and can ask several models per message.
@@ -47,10 +47,10 @@ The Free Router can use `openrouter/free` as one of its candidates, always last 
 
 1. Connect at least one provider with free models. The quickest is OpenRouter with a free key: its catalog marks $0 models, which the router can use at once. Models on your computer (Ollama, LM Studio) are always free.
 2. For providers whose free plan is "an account with no payment method" (Groq, Gemini, Cerebras, Mistral, SambaNova, Hugging Face), set **Account billing** to **No billing enabled** when you add the connection. Nerdplexity cannot read billing settings, so it only uses those models after you say the account cannot be charged.
-3. The Free Router is the **default model**: as soon as a connection has a free model and no model has been chosen, the app selects it (for the settings and for an empty new thread). Otherwise, open the model picker and choose **Free Router**, the first row, marked with the Nerdplexity logo. Its row says how many free models on how many connections it can use. Choosing any other model keeps that choice; the default never replaces it.
+3. The [Free Agent](free-agent.md), which is built on the Free Router, is the **default model**: as soon as a connection has a free model and no model has been chosen, the app selects it (for the settings and for an empty new thread). To send each message to one model instead, open the model picker and choose **Free Router**, the second row, marked with the Nerdplexity logo, or choose it under **Models → Let Nerdplexity choose**. Its row says how many free models on how many connections it can use. Choosing any model keeps that choice; the default never replaces it. (Until 2026-09-14 the Free Router was the default; a settings value still holding that automatic default is switched to the Free Agent once. A Free Router chosen by hand after that stays.)
 4. Optional but recommended: run [Bench](bench.md) on a few models. The router then ranks by measured results instead of guesses from model names.
 
-Each answer then shows which model wrote it ("… · via Free Router") and a **Free Router** panel listing every model it tried, why, and what happened.
+The answer is credited to Nerdplexity, and the **Free Router** panel above it names every model it tried, why, and what happened. **Run history** shows the model that answered ("… via Free Router") and the same attempts.
 
 ## 3. One routed message, end to end
 
@@ -154,7 +154,7 @@ The order matters: "Write a Python script" is `code`, not `writing`, because `co
 
 - `vision`: any message in the request (not only the latest) contains an image. Thread image attachments are sent with every turn, so they count.
 - `tools`: the run has any tool enabled (calculator, documents, web search).
-- `estimatedTokens` = ⌈characters in all messages ÷ 4⌉ + 1,000 per image + the answer's `maxTokens` (2,048 when not set).
+- `estimatedTokens` = ⌈characters in all messages ÷ 4⌉ + 1,000 per image + room for the answer: the request's `maxTokens` (2,048 when not set), but at most `RESERVED_OUTPUT` (4,096). A request for a longer answer does not rule a model out; the answer is trimmed to fit it instead (below).
 
 ## 6. Step 2: leaving models out
 
@@ -164,10 +164,12 @@ A candidate is removed before scoring when:
 | --- | --- |
 | The message has an image and the catalog says the model has **no** image input (`vision: false`) | cannot read images |
 | Tools are on and the catalog says the model has **no** tool support (`tools: false`) | cannot use tools |
-| The model's context length is known and smaller than `estimatedTokens` | context too small |
+| The model's context length is known and smaller than `estimatedTokens` (prompt plus at most 4,096 reserved for the answer) | context too small |
 | The model, or its whole account, is cooling down (section 9) | cooling down after a failure |
 
 "Unknown" capabilities (`null`) do not remove a model; they lower its score instead. The counts are kept for the message shown when nothing is left (section 12).
+
+**The answer is trimmed to the model, not the other way round** (`fitOutput`). Before a model is sent the request, the output limit is lowered to the smallest of: what was asked, the model's own maximum output when the catalog says, and what is left of its context after the prompt (less 256 tokens). So a request for a long answer, such as a Deep Research report asking for 8,000 tokens, still runs on a model with a smaller context or output cap, and providers do not reject it for asking too much.
 
 ## 7. Step 3: scoring
 
@@ -261,7 +263,15 @@ The router walks the sorted list:
 
 **Tools.** With tools on, each attempt runs the whole bounded tool loop ([Tools](tools.md)). The first tool call counts as output, so a failure after a tool ran does not move to another model.
 
-## 9. Health and cooldowns
+## 9. Spacing, health, and cooldowns
+
+### Spacing requests to an account
+
+Free models share their provider's limits: OpenRouter's free models allow about 20 requests a minute for the whole account, Groq 30, Cerebras 5. A Free Agent message sends several requests at once, and a Deep Research run sends 10 to 25, so a burst can be refused, and one refusal on a shared free-model limit cools every model on that account at once.
+
+`AccountPacer` (one per server, shared by every run) therefore books a slot before each request: one request per account every `60,000 / requests-per-minute` milliseconds, so OpenRouter is asked at most every 3 seconds, Groq every 2, Cerebras every 12. Parallel steps wait their turn rather than arriving together; models on this machine are not spaced, because the local queue already serializes them. Different accounts run independently, so connecting more providers makes a run faster as well as more reliable.
+
+### Health
 
 `RouterHealth` keeps what recent runs showed about each model. It lives in the server's memory: one instance per server process, shared by all routed runs, empty after a restart.
 
@@ -407,7 +417,7 @@ Validation (`validateRoute`): `strategy` must be `"free"`; 1–12 connections wi
 `openrouter/free` is a model on your OpenRouter connection that asks OpenRouter to pick one of its free models. Nerdplexity:
 
 - **Lists it as free.** Discovery (`discoverOpenRouter`) always includes it and classifies it `zero-price`, even when the catalog omits it or reports request-time prices, because OpenRouter documents it as $0.
-- **Does not make it the default.** Main briefly defaulted to `openrouter/free` (`0cb9249`); the default is now the Free Router (section 2). Someone who already had `openrouter/free` chosen keeps it until they pick another model.
+- **Does not make it the default.** Main briefly defaulted to `openrouter/free` (`0cb9249`); the default is now the Free Agent (section 2). Someone who already had `openrouter/free` chosen keeps it until they pick another model.
 - **Shows the model it picked.** OpenRouter's stream reports the concrete model; the adapter emits it once per request as a `model` event, the web app shows that model's name and logo while it streams, and saves it as the answer's model (`routedModel` on the run record).
 - **Suggests it first** among free alternatives when a single free model runs out of quota. It is never switched to on its own.
 - **Puts it last in the Free Router.** Its choice cannot be ranked or measured, so the Free Router uses it only after its own picks.
@@ -445,6 +455,6 @@ When changing a rule:
 | `frontend/src/workspace/RouteActivity.tsx` | The attempt panel |
 | `frontend/src/workspace/ModelPicker.tsx` | The Free Router row |
 | `frontend/src/workspace/RouterMark.tsx` | The Nerdplexity logo shown with the Free Router (picker, chat toolbar, sidebar, attempt panel) |
-| `frontend/src/workspace/Workspace.tsx`, `Models.tsx` | Making the Free Router the default when no model is chosen (`chooseRouterByDefault`) |
+| `frontend/src/workspace/Workspace.tsx`, `Models.tsx` | Making the Free Agent the default when no model is chosen (`chooseAgentByDefault` in `lib/router.ts`) |
 | `backend/src/runtime/router.test.ts` | Classification, sizes, ranking, cooldowns, fallback, commit point, account limits, refusals, attempt limit, messages, validation |
 | `tests/browser/router.spec.ts` | Real backend: fallback, cooldown, attribution, Run history; mocked: paid and unpriced models never sent |

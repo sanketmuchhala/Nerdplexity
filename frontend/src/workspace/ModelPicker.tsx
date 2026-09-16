@@ -95,6 +95,28 @@ export function ModelPicker({
         </p>
       )}
       <div className="np-picker-list">
+        {showAgent && (
+          <div className={`np-picker-row np-picker-router ${agentActive ? 'active' : ''}`}>
+            <button
+              className="np-picker-choice"
+              aria-label={`Use the ${AGENT_NAME}`}
+              aria-pressed={agentActive}
+              onClick={() => void choose(AGENT_REF)}
+            >
+              <span>
+                <strong><RouterMark size={18} /> {AGENT_NAME}</strong>
+                <small>
+                  {pool.models > 1
+                    ? `The default. For harder questions, asks the free models best at each kind of task, then the strongest checks their work and writes one answer`
+                    : pool.models === 1
+                      ? 'Needs two or more free models to combine; with one it answers like the Free Router'
+                      : 'No free models yet: connect OpenRouter with a free key, or a model on this machine'}
+                </small>
+              </span>
+              {agentActive && <Check size={17} />}
+            </button>
+          </div>
+        )}
         {showRouter && (
           <div className={`np-picker-row np-picker-router ${routerActive ? 'active' : ''}`}>
             <button
@@ -112,28 +134,6 @@ export function ModelPicker({
                 </small>
               </span>
               {routerActive && <Check size={17} />}
-            </button>
-          </div>
-        )}
-        {showAgent && (
-          <div className={`np-picker-row np-picker-router ${agentActive ? 'active' : ''}`}>
-            <button
-              className="np-picker-choice"
-              aria-label={`Use the ${AGENT_NAME}`}
-              aria-pressed={agentActive}
-              onClick={() => void choose(AGENT_REF)}
-            >
-              <span>
-                <strong><RouterMark size={18} /> {AGENT_NAME}</strong>
-                <small>
-                  {pool.models > 1
-                    ? `For harder questions, asks the free models best at each kind of task, then the strongest checks their work and writes one answer. Up to 5 free requests per message`
-                    : pool.models === 1
-                      ? 'Needs two or more free models to combine; with one it answers like the Free Router'
-                      : 'No free models yet: connect OpenRouter with a free key, or a model on this machine'}
-                </small>
-              </span>
-              {agentActive && <Check size={17} />}
             </button>
           </div>
         )}
