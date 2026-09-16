@@ -355,7 +355,7 @@ The ranking assumes a text-only request of about 2,000 tokens without tools, and
 
 | Guarantee | How |
 | --- | --- |
-| Only free models | The agent uses the Free Router's pool: models the web app has verified as free ([Free Router, section 4](free-router.md#4-the-free-model-pool)). |
+| Only free-policy models | The agent uses the Free Router's pool: local models, catalog-listed $0 models, and supported connections confirmed as free-plan accounts with no billing ([Free Router, section 4](free-router.md#4-the-free-model-pool)). |
 | A limited number of models per step | `AGENT_LIMITS.attempts`; a test sends every request to a failing provider and checks the count is at most the drafters' and writer's limits. |
 | Your choices are used when they can be | A chosen model goes first in its role's list; when it cannot take the message the strategy step says so. Tested for writer, drafters, planner, and specialists. |
 | No two models spliced into one answer | The user's answer is only ever the writer's stream (or, when no writer answered at all, one whole draft). |

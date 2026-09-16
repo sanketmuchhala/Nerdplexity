@@ -1,4 +1,4 @@
-import type { ConnectionKind, ConnectionTarget, ExecutionLocation } from '@app/types';
+import { hasAccountFreeTier, type ConnectionKind, type ConnectionTarget, type ExecutionLocation } from '@app/types';
 
 export const CONNECTION_KINDS: readonly ConnectionKind[] = [
   'ollama', 'openai-compatible', 'openai', 'anthropic', 'gemini', 'deepseek', 'openrouter', 'groq', 'cerebras', 'mistral', 'sambanova', 'huggingface',
@@ -50,6 +50,8 @@ export interface ResolvedTarget {
   baseURL: string;
   execution: ExecutionLocation;
   apiKey?: string;
+  /** This key belongs to a supported provider's free-plan account with billing disabled. */
+  freeTier: boolean;
   /** Auth headers for fetch-based adapters. Anthropic uses its SDK instead. */
   headers: Record<string, string>;
 }
@@ -100,17 +102,19 @@ function authHeaders(kind: ConnectionKind, apiKey?: string): Record<string, stri
 /** Validate a client-supplied connection target against the destination policy. */
 export function resolveTarget(input: unknown): ResolvedTarget {
   if (!input || typeof input !== 'object') throw new DestinationError('A connection is required.');
-  const { kind, baseURL, apiKey } = input as ConnectionTarget;
+  const { kind, baseURL, apiKey, freeTier } = input as ConnectionTarget;
   if (!isConnectionKind(kind)) throw new DestinationError('Unknown connection type.');
   if (baseURL !== undefined && typeof baseURL !== 'string') throw new DestinationError('Server address must be text.');
   if (apiKey !== undefined && (typeof apiKey !== 'string' || apiKey.length > 1000)) throw new DestinationError('API key must be text.');
+  if (freeTier !== undefined && typeof freeTier !== 'boolean') throw new DestinationError('Free-tier status must be true or false.');
   const { baseURL: base, execution } = normalizeBase(kind, baseURL);
   // A compatible connection to OpenRouter needs the same discovery and provider price
   // ceiling as its named integration. Selecting a different label must not bypass policy.
   const effectiveKind = kind === 'openai-compatible' && base === HOSTED.openrouter ? 'openrouter' : kind;
+  if (freeTier === true && !hasAccountFreeTier(effectiveKind)) throw new DestinationError('This provider does not support account-level free-tier routing.');
   const key = apiKey?.trim() || undefined;
   if (HOSTED[effectiveKind] && !key) throw new DestinationError('Add an API key for this provider.');
-  return { kind: effectiveKind, baseURL: base, execution, apiKey: key, headers: authHeaders(effectiveKind, key) };
+  return { kind: effectiveKind, baseURL: base, execution, apiKey: key, freeTier: freeTier === true, headers: authHeaders(effectiveKind, key) };
 }
 
 /** Remove a key from text that may be shown to the user. */

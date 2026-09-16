@@ -359,13 +359,13 @@ If every attempt fails, or nothing was left after step 2, the run fails with one
 
 The error's category is the last failure's category (or `quota` when models are cooling down, otherwise `invalid-request`). It is retryable when a model will become available, and carries `retryAfterMs` for the soonest one. The web app shows **Retry**. It does not offer other free models as it does for single-model runs, because the router has already tried them.
 
-If the web app has no free models at all, it does not send anything and says: *"The Free Router has no free models to use. Connect OpenRouter with a free key, or a model on this machine, then refresh its catalog in Models."*
+If the web app has no free models at all, it does not send anything and says: *"The Free Router has no free models to use. Connect a provider with a free-plan key, OpenRouter with a $0 model, or a model on this machine, then refresh its catalog in Models."*
 
 ## 13. Guarantees and where they are enforced
 
 | Guarantee | Where |
 | --- | --- |
-| Never pays for an OpenRouter route in Free only | `routerPool` includes only local or catalog-verified $0 models. Every OpenRouter generation also sends a zero `provider.max_price` ceiling, including agent, research, tool, fallback, and Bench calls. Other remote providers must still report current zero pricing before dispatch. Covered by `cost.test.ts`, `modelPolicy.test.ts`, `adapters.test.ts`, and `router.spec.ts`. |
+| Keeps routed work inside the selected free policy | `routerPool` includes local models, catalog-verified $0 models, and models on Groq, Cerebras, Gemini, Mistral, or SambaNova connections explicitly marked as free-plan accounts with no billing. Every OpenRouter generation sends a zero `provider.max_price` ceiling. Other remote models are rediscovered before each agent, research, tool, fallback, and Bench call; unsupported providers still require current zero pricing. Covered by `cost.test.ts`, `modelPolicy.test.ts`, `adapters.test.ts`, and `router.spec.ts`. |
 | Every connection passes the destination policy | `resolveConnections` in `backend/src/routes/runs.ts` calls `resolveTarget` for each; hosted servers refuse private addresses as usual. |
 | Documents never go online | `validateRunRequest` keeps only local candidates when document tools are on. |
 | No two models in one answer | The commit point in `routedExecutor`: fallback only before any output. |
@@ -456,4 +456,4 @@ When changing a rule:
 | `frontend/src/workspace/RouterMark.tsx` | The Nerdplexity logo shown with the Free Router (picker, chat toolbar, sidebar, attempt panel) |
 | `frontend/src/workspace/Workspace.tsx`, `Models.tsx` | Making the Free Agent the default when no model is chosen (`chooseAgentByDefault` in `lib/router.ts`) |
 | `backend/src/runtime/router.test.ts` | Classification, sizes, ranking, cooldowns, fallback, commit point, account limits, refusals, attempt limit, messages, validation |
-| `tests/browser/router.spec.ts` | Real backend: fallback, cooldown, attribution, Run history; mocked: paid and unpriced models never sent |
+| `tests/browser/router.spec.ts` | Real backend: fallback, cooldown, attribution, Run history; mocked: paid and unpriced models excluded, multiple free-plan provider keys pooled |

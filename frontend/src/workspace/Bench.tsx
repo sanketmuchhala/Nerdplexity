@@ -134,13 +134,13 @@ export function Bench() {
     {error && <p className="np-error" role="alert">{error}</p>}
 
     <section className="np-panel np-bench-setup" aria-label="Bench setup">
-      <div className="np-section-title"><div><h2>Models</h2><p>Only models Nerdplexity has verified as free are offered, so Bench never runs on a paid model.</p></div>
+      <div className="np-section-title"><div><h2>Models</h2><p>Only local, listed-at-$0, or confirmed free-plan account models are offered, so Bench stays inside the Free only policy.</p></div>
         {models.length > 0 && <button className="np-button small ghost" disabled={running} onClick={() => setSelected(selected.size === models.length ? new Set() : new Set(models.map(m => modelKey(m.connectionId, m.model))))}>{selected.size === models.length ? 'Select none' : 'Select all'}</button>}
       </div>
       {models.length ? <div className="np-bench-models">{models.map(m => {
         const key = modelKey(m.connectionId, m.model);
         return <label key={key} className="np-check"><input type="checkbox" disabled={running} checked={selected.has(key)} onChange={() => toggle(key)} /><span><strong>{m.displayName ?? m.model}</strong>{nameOf(m.connectionId)}</span></label>;
-      })}</div> : <p className="np-bench-note">No free models yet. Connect OpenRouter with a free key, or a model on this machine, then refresh its catalog in Models.</p>}
+      })}</div> : <p className="np-bench-note">No free models yet. Connect a provider with a free-plan key, OpenRouter with a $0 model, or a model on this machine, then refresh its catalog in Models.</p>}
 
       <div className="np-section-title np-bench-subtitle"><div><h2>Questions</h2><p>{suite ? `Suite from ${suite.generatedAt}; every answer is checked automatically, never by another model.` : 'Loading the suite.'}</p></div></div>
       <div className="np-bench-categories">{CATEGORIES.map(category => {

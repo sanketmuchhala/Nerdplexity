@@ -43,6 +43,12 @@ describe('free model dispatch policy', () => {
     await expect(verifyFreeModel(remote, 'zero', signal(), fetchCatalog([{ id: 'zero', pricing: { prompt: '0', completion: '0' } }]))).resolves.toMatchObject({ pricing: 'zero-price' });
   });
 
+  it('allows an available model on a confirmed provider free-tier account', async () => {
+    const groq = resolveTarget({ kind: 'groq', apiKey: 'gsk-test', freeTier: true });
+    await expect(verifyFreeModel(groq, 'llama', signal(), fetchCatalog([{ id: 'llama' }]))).resolves.toMatchObject({ id: 'llama', pricing: 'free-tier' });
+    await expect(verifyFreeModel(groq, 'missing', signal(), fetchCatalog([{ id: 'llama' }]))).rejects.toThrow('not available to this provider account');
+  });
+
   it('honors cancellation before discovery and passes it to pending requests', async () => {
     const controller = new AbortController();
     const remote = resolveTarget({ kind: 'openai-compatible', baseURL: 'https://api.example.com/v1' });

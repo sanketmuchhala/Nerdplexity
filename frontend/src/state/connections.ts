@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { BillingStatus, Connection, ConnectionKind, ConnectionTarget, DiscoveryResult, ProviderError, RateLimitState } from '@app/types';
+import { hasAccountFreeTier, type BillingStatus, type Connection, type ConnectionKind, type ConnectionTarget, type DiscoveryResult, type ProviderError, type RateLimitState } from '@app/types';
 import { KEYED_KINDS } from '../lib/db';
 import * as store from '../lib/store';
 import { authHeaders, sessionEnded } from '../lib/api';
@@ -39,6 +39,7 @@ export const targetFor = (connection: Connection): ConnectionTarget => ({
   kind: connection.kind,
   ...(usesBaseURL(connection.kind) ? { baseURL: connection.baseURL } : {}),
   ...(credentials.getKey(connection.id) ? { apiKey: credentials.getKey(connection.id) } : {}),
+  ...(connection.billing === 'no-billing' && hasAccountFreeTier(connection.kind) ? { freeTier: true } : {}),
 });
 
 export const modelKey = (connectionId: string, modelId: string) => `${connectionId}::${modelId}`;

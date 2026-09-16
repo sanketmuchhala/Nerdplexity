@@ -1,4 +1,4 @@
-import type { Connection, ConnectionKind, DiscoveryResult, ModelDescriptor, ModelRef } from '@app/types';
+import { hasAccountFreeTier, type Connection, type ConnectionKind, type DiscoveryResult, type ModelDescriptor, type ModelRef } from '@app/types';
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', 'host.docker.internal']);
 
@@ -14,7 +14,7 @@ export type CostClass = 'local' | 'zero-price' | 'no-billing' | 'paid' | 'unknow
 
 export interface CostStatus {
   cls: CostClass;
-  /** Allowed under Free only: local or verified $0. Account labels cannot prove pricing. */
+  /** Allowed under Free only: local, verified $0, or a supported provider account confirmed as free-tier. */
   free: boolean;
   label: string;
   detail: string;
@@ -22,13 +22,19 @@ export interface CostStatus {
 
 const money = (n: number) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2).replace(/\.?0+$/, '')}`);
 
-/** Whether a model can run without charges, and how that is known. Unknown is never treated as free. */
+/** Whether a model can run without charges, and how that is known. */
 export function costStatus(connection: Connection | undefined, model: ModelDescriptor | undefined, execution?: 'local' | 'remote'): CostStatus {
   if (!connection) return { cls: 'unknown', free: false, label: 'Price unknown', detail: 'The connection for this model was removed.' };
   if (execution ? execution === 'local' : isLocal(connection)) {
     return { cls: 'local', free: true, label: 'On this machine', detail: 'No hosted fee. It uses your own hardware.' };
   }
   if (model?.pricing === 'zero-price') return { cls: 'zero-price', free: true, label: 'Free model', detail: `${connection.name} lists this model at $0.` };
+  if (connection.billing === 'no-billing' && hasAccountFreeTier(connection.kind)) {
+    return {
+      cls: 'no-billing', free: true, label: 'Free-tier account',
+      detail: `You marked this ${connection.name} connection as a free-plan account with no billing. Provider quotas and model access still apply.`,
+    };
+  }
   if (model?.pricing === 'paid') {
     return {
       cls: 'paid', free: false,
@@ -37,7 +43,7 @@ export function costStatus(connection: Connection | undefined, model: ModelDescr
     };
   }
   if (connection.billing === 'paid') return { cls: 'paid', free: false, label: 'Billed account', detail: `You marked this ${connection.name} account as billed.` };
-  return { cls: 'unknown', free: false, label: 'Price unknown', detail: `Nerdplexity cannot confirm this model is free on ${connection.name}. ${connection.billing === 'no-billing' ? 'An account billing label does not verify the provider’s charges.' : 'It may be billed.'}` };
+  return { cls: 'unknown', free: false, label: 'Price unknown', detail: `Nerdplexity cannot confirm this model is free on ${connection.name}. ${connection.billing === 'no-billing' ? 'This provider does not have a supported account-level free tier.' : 'It may be billed.'}` };
 }
 
 /** Free alternatives the user can choose after a failure: same connection first, then others. Never chosen automatically. */
