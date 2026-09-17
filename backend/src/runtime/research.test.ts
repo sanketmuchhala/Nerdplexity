@@ -3,13 +3,19 @@ import type { AgentStep, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import type { ProgressPayload } from './runs.js';
 import { RouterHealth, type RouteCandidate } from './router.js';
-import { checkCitations, extractNotes, fallbackQueries, pageRelevant, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
+import { checkCitations, extractNotes, fallbackQueries, hasNotes, hasPlan, jsonIn, pageRelevant, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const target = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
 const candidate = (model: string): RouteCandidate => ({ connectionId: 'or', model, target, capabilities: { tools: true, vision: false }, contextLength: 131_072 });
 const models = () => [candidate('meta-llama/llama-3.3-70b-instruct:free'), candidate('qwen/qwen3-32b:free'), candidate('google/gemma-3-27b-it:free')];
 const user = (content: string): RunMessage[] => [{ role: 'user', content }];
+
+/** A reply the model was cut off in the middle of, as a provider reports it. */
+const truncated = (text: string) => new Response(
+  `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
+  { headers: { 'content-type': 'text/event-stream' } },
+);
 
 const sse = (text: string) => new Response(
   `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } })}\n\ndata: [DONE]\n\n`,
@@ -428,5 +434,109 @@ describe('a research run that has already done the work', () => {
     );
     await expect(executor({ signal: new AbortController().signal, emit: () => {} })).rejects.toThrow();
     expect(slept).toEqual([]);
+  });
+});
+
+describe('a reply the model was cut off in the middle of', () => {
+  // What nvidia/nemotron-3-ultra-550b-a55b actually returned as a planner, with 718 of its 800
+  // tokens spent on a chain of thought: three sub-questions written, the third cut mid-query.
+  const truncatedPlan = `{
+  "perspectives": ["Automotive OEMs", "Battery researchers"],
+  "questions": [
+    {
+      "question": "What is the current technology readiness level of solid-state batteries?",
+      "queries": ["solid-state battery technology readiness level EV"]
+    },
+    {
+      "question": "Which automakers have announced production timelines?",
+      "queries": ["automaker solid-state battery production timeline announcement"]
+    },
+    {
+      "question": "What are the key technical challenges?",
+      "queries": ["solid-state battery commercialization challenges`;
+
+  it('keeps the entries the model finished, and drops the one it did not', () => {
+    const parsed = jsonIn(truncatedPlan);
+    expect(parsed.questions).toHaveLength(2);
+    expect(parsed.perspectives).toEqual(['Automotive OEMs', 'Battery researchers']);
+    expect(parsed.questions[1].queries).toEqual(['automaker solid-state battery production timeline announcement']);
+  });
+
+  it('plans from what survived rather than falling back to the question itself', () => {
+    const plan = parseResearchPlan(truncatedPlan, 'Where are solid-state batteries up to?', 6);
+    expect(plan.questions.map(q => q.queries[0])).toEqual([
+      'solid-state battery technology readiness level EV',
+      'automaker solid-state battery production timeline announcement',
+    ]);
+  });
+
+  it('adds structure back but never content', () => {
+    expect(jsonIn('{"notes":[{"fact":"a","quote":"b"},{"fact":"c"')).toEqual({ notes: [{ fact: 'a', quote: 'b' }] });
+    expect(jsonIn('not json at all')).toBeUndefined();
+    expect(jsonIn('{"a":1}')).toEqual({ a: 1 });
+    // A brace inside a string is not a bracket, and must not be counted as one.
+    expect(jsonIn('{"notes":[{"fact":"the } character","quote":"x"}]}')).toEqual({ notes: [{ fact: 'the } character', quote: 'x' }] });
+  });
+});
+
+describe('whether a step can use what a model replied', () => {
+  it('accepts a reader that read the page and found nothing, and refuses one that was cut off', () => {
+    expect(hasNotes('{"notes":[]}')).toBe(true);
+    expect(hasNotes('Berlin is the capital -- "Berlin is the capital of Germany."')).toBe(true);
+    expect(hasNotes('{"notes":[{"fact":"a","quote":')).toBe(false);
+    expect(hasNotes('')).toBe(false);
+  });
+
+  it('refuses a plan the planner never actually wrote', () => {
+    expect(hasPlan('{"questions":[{"question":"q","queries":["a real search phrase"]}]}')).toBe(true);
+    expect(hasPlan('{"questions":[]}')).toBe(false);
+    expect(hasPlan('Sure, I can help you plan that research!')).toBe(false);
+    // A question with no query of its own leaves nothing to search for.
+    expect(hasPlan('{"questions":[{"question":"q","queries":[]}]}')).toBe(false);
+  });
+});
+
+
+describe('a model that breaks off mid-reply', () => {
+  it('hands the page to the next model, and keeps its notes', async () => {
+    const world = fakeWorld();
+    const cutOff: string[] = [];
+    // The first model to see each page runs out of output halfway through its JSON.
+    const seen = new Set<string>();
+    const fn = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+      const body = JSON.parse(String(init.body));
+      if (String(url).includes('api.exa.ai')) return world.fn(url, init);
+      const system = body.messages.filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
+      if (system.includes('You read one web page')) {
+        const page = String(body.messages.at(-1).content);
+        if (!seen.has(page)) {
+          seen.add(page);
+          cutOff.push(body.model);
+          return truncated('{"notes":[{"fact":"It is 330 m tall.","quote":"The Eiffel Tow');
+        }
+      }
+      return world.fn(url, init);
+    }) as typeof fetch;
+
+    const { result, steps } = await runResearch(fn);
+    // Every page was read twice: once by the model that broke off (counted in cutOff, which answers
+    // before the fake world sees it), once by the model that replaced it.
+    const readers = world.calls.filter(c => c.role === 'reader');
+    expect(cutOff).toHaveLength(4);
+    expect(readers).toHaveLength(4);
+    for (const [i, replacement] of readers.entries()) expect(replacement.model).not.toBe(cutOff[i]);
+    expect(steps.filter(s => s.role === 'reader' && s.status === 'failed').map(s => s.reason))
+      .toContain('The model did not return anything it had read, having reached its output limit. Trying another model.');
+    // And the notes still arrive, from the second model rather than the search extract.
+    expect(result.agent?.sources?.length).toBeGreaterThan(0);
+    expect(steps.find(s => s.id === 'read-1' && s.status === 'done')?.reason).toContain('Kept 1 note');
+  });
+
+  it('leaves a model that read the page and found nothing alone', async () => {
+    const world = fakeWorld();
+    await runResearch(world.fn);
+    // The fixture's third page gets a prose "nothing relevant here", which finishes normally: it is
+    // an answer, so the page is not handed to another model and the extract stands in.
+    expect(world.calls.filter(c => c.role === 'reader')).toHaveLength(4);
   });
 });
