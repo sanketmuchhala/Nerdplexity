@@ -28,9 +28,14 @@ export const RESEARCH_LIMITS = {
   readersAtOnce: 4,
   searchesAtOnce: 3,
   attempts: { planner: 2, reader: 2, outliner: 2, writer: 4 },
-  plannerTokens: 800,
-  readerTokens: 1000,
-  outlineTokens: 800,
+  /**
+   * Output budgets for the steps that must return JSON. A reasoning model spends this budget on its
+   * chain of thought before it writes anything, so these are large enough to survive one that
+   * ignores the request to think less: a truncated reply parses to nothing and wastes the call.
+   */
+  plannerTokens: 2500,
+  readerTokens: 2500,
+  outlineTokens: 2000,
   /** Output reserved for the report, when the user's own limit is lower. */
   reportTokens: 8000,
   /** Times the report may be continued after hitting the model's output limit. */
@@ -501,7 +506,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     let planText = '';
     const planned = await steps.run('planner', 'planner', planners.list, {
       messages: [{ role: 'system', content: PLANNER_PROMPT(budget.queries) }, { role: 'user', content: before ? `Earlier in the conversation:\n${before}\n\nQuestion: ${question}` : question }],
-      request: { ...run.request, maxTokens: RESEARCH_LIMITS.plannerTokens, temperature: 0 },
+      request: { ...run.request, maxTokens: RESEARCH_LIMITS.plannerTokens, temperature: 0, reasoning: 'off' },
       maxAttempts: RESEARCH_LIMITS.attempts.planner,
     }, {}, text => {
       const plan = parseResearchPlan(text, question, budget.queries);
@@ -547,7 +552,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
           { role: 'system', content: READER_PROMPT(question, plan, { query, question: about }) },
           { role: 'user', content: `Page: ${page.title}\nURL: ${page.url}${page.published ? `\nPublished: ${page.published}` : ''}\n\n${slice}` },
         ],
-        request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0 },
+        request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0, reasoning: 'off' },
         maxAttempts: RESEARCH_LIMITS.attempts.reader,
       }, { task: page.title, url: page.url }, text => {
         found = readNotes(text, { ...page, text: slice }, query);
@@ -596,7 +601,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
           { role: 'system', content: OUTLINE_PROMPT },
           { role: 'user', content: `Question: ${question}\n\nNotes:\n${allNotes.map(note => `${note.id}. [source ${note.source}] ${note.fact}`).join('\n')}` },
         ],
-        request: { ...run.request, maxTokens: RESEARCH_LIMITS.outlineTokens, temperature: 0 },
+        request: { ...run.request, maxTokens: RESEARCH_LIMITS.outlineTokens, temperature: 0, reasoning: 'off' },
         maxAttempts: RESEARCH_LIMITS.attempts.outliner,
       }, {}, text => {
         const sections = parseOutline(text, new Set(allNotes.map(note => note.id)));
