@@ -96,6 +96,15 @@ function tokenPricing(prices: any): Pick<ModelDescriptor, 'pricing' | 'price'> {
 
 const hasImageInput = (m: any): boolean | null => Array.isArray(m?.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : null;
 
+/**
+ * A model that writes text and nothing else. Text has to be the whole output, not merely part of
+ * it: a music or image model that also emits a text wrapper lists $0 per token, because it charges
+ * per second or per picture instead, and so reads as free while rejecting every chat request sent
+ * to it. A catalog that does not say is taken at its word.
+ */
+const writesText = (m: any): boolean => !Array.isArray(m?.architecture?.output_modalities)
+  || (m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text');
+
 async function discoverOpenAIStyle(target: ResolvedTarget, fetchImpl: FetchFn): Promise<ModelDescriptor[]> {
   const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
   if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'This endpoint did not return an OpenAI-compatible model list.');
@@ -130,7 +139,7 @@ async function discoverHuggingFace(target: ResolvedTarget, fetchImpl: FetchFn): 
   const data = await getJSON(fetchImpl, `${target.baseURL}/models`, target);
   if (!Array.isArray(data?.data)) throw new DiscoveryFailure('invalid-response', 'Hugging Face did not return a model list.');
   return data.data.flatMap((m: any): ModelDescriptor[] => {
-    if (typeof m?.id !== 'string' || (Array.isArray(m.architecture?.output_modalities) && !m.architecture.output_modalities.includes('text'))) return [];
+    if (typeof m?.id !== 'string' || !writesText(m)) return [];
     const live = (Array.isArray(m.providers) ? m.providers : []).filter((p: any) => p && typeof p.provider === 'string' && p.status === 'live');
     if (!live.length) return [];
     const vision = hasImageInput(m);
@@ -161,7 +170,7 @@ async function discoverOpenRouter(target: ResolvedTarget, fetchImpl: FetchFn): P
   const now = Date.now();
   const models = data.data
     .filter((m: any) => typeof m?.id === 'string'
-      && (!Array.isArray(m.architecture?.output_modalities) || m.architecture.output_modalities.includes('text'))
+      && writesText(m)
       && !(m.expiration_date && Date.parse(m.expiration_date) <= now))
     .map((m: any) => {
       const freeRouter = m.id === 'openrouter/free';
