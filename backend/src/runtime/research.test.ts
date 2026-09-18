@@ -3,7 +3,7 @@ import type { AgentStep, RunMessage } from '@app/types';
 import { resolveTarget } from './destinations.js';
 import type { ProgressPayload } from './runs.js';
 import { RouterHealth, type RouteCandidate } from './router.js';
-import { checkCitations, extractNotes, fallbackQueries, hasNotes, hasPlan, jsonIn, pageRelevant, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
+import { checkCitations, extractNotes, fallbackQueries, hasNotes, hasPlan, jsonIn, outlineSections, pageRelevant, parseResearchPlan, pickSources, quoteInPage, readNotes, recencySince, relevantSlice, researchExecutor, searchPhrase } from './research.js';
 import { validateRunRequest } from '../routes/runs.js';
 
 const target = resolveTarget({ kind: 'openrouter', apiKey: 'sk-or-test-key' });
@@ -538,5 +538,19 @@ describe('a model that breaks off mid-reply', () => {
     // The fixture's third page gets a prose "nothing relevant here", which finishes normally: it is
     // an answer, so the page is not handed to another model and the extract stands in.
     expect(world.calls.filter(c => c.role === 'reader')).toHaveLength(4);
+  });
+});
+
+describe('how many sections to ask an outliner for', () => {
+  it('asks for more as the notes pile up, and never past what parseOutline keeps', () => {
+    // A quick run's handful of notes: two sections is a reasonable shape for them.
+    expect(outlineSections(6)).toEqual({ least: 2, most: 6 });
+    expect(outlineSections(26)).toEqual({ least: 2, most: 6 });
+    // A standard and a deep run: filing 64 or 75 notes under two headings is not an outline.
+    expect(outlineSections(64)).toEqual({ least: 4, most: 6 });
+    expect(outlineSections(75)).toEqual({ least: 4, most: 6 });
+    // The floor never climbs past the ceiling, however many notes arrive.
+    expect(outlineSections(1000)).toEqual({ least: 4, most: 6 });
+    expect(outlineSections(0)).toEqual({ least: 2, most: 6 });
   });
 });

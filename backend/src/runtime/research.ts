@@ -475,11 +475,24 @@ const brokeOff = (text: string, done: DoneEvent): boolean => done.finishReason =
 // ---------------------------------------------------------------------------
 // Outline, report, and the citation check
 
-const OUTLINE_PROMPT = [
-  "You outline a research report that answers the user's question from the numbered notes below.",
-  'Use 2 to 6 sections, in the order a reader needs them. List the note numbers each section will use; a note may be used in more than one section. Leave out notes that do not help.',
-  'Reply with JSON only, no other text: {"sections":[{"heading":"...","notes":[1,4,7]}]}',
-].join('\n');
+/** Sections to ask for, given how many notes there are. Never more than parseOutline will keep. */
+export const outlineSections = (notes: number) => ({ least: Math.min(4, Math.max(2, Math.ceil(notes / 20))), most: 6 });
+
+/**
+ * A deep run gathers three times the notes a quick one does, and asking both for "2 to 6 sections"
+ * got the same two back: seventy-five notes filed under two headings, and a report shorter than the
+ * one written from half as many. So the floor rises with the notes, while the ceiling stays where
+ * parseOutline's own limit is.
+ */
+const OUTLINE_PROMPT = (notes: number) => {
+  const { least, most } = outlineSections(notes);
+  return [
+    "You outline a research report that answers the user's question from the numbered notes below.",
+    `There are ${notes} notes. Use ${least} to ${most} sections, in the order a reader needs them. List the note numbers each section will use; a note may be used in more than one section. Leave out notes that do not help.`,
+    'Give each section its own subject. A section holding most of the notes is too broad: split it.',
+    'Reply with JSON only, no other text: {"sections":[{"heading":"...","notes":[1,4,7]}]}',
+  ].join('\n');
+};
 
 export function parseOutline(reply: string | undefined, noteIds: Set<number>): { heading: string; notes: number[] }[] | undefined {
   const data = reply ? jsonIn(reply) : undefined;
@@ -677,7 +690,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
       const outliners = ranked(table.reasoning).length ? ranked(table.reasoning) : readers;
       const drafted = await steps.run('outline', 'outliner', outliners, {
         messages: [
-          { role: 'system', content: OUTLINE_PROMPT },
+          { role: 'system', content: OUTLINE_PROMPT(allNotes.length) },
           { role: 'user', content: `Question: ${question}\n\nNotes:\n${allNotes.map(note => `${note.id}. [source ${note.source}] ${note.fact}`).join('\n')}` },
         ],
         request: { ...run.request, maxTokens: RESEARCH_LIMITS.outlineTokens, temperature: 0, reasoning: 'off' },
