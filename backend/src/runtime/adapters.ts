@@ -42,6 +42,11 @@ export interface ModelRequest {
   waitOnRateLimit?: boolean;
   /** Enforce a zero-price provider ceiling on OpenRouter. */
   freeOnly?: boolean;
+  /**
+   * Ask a reasoning model to think less, so a small output budget is spent on the answer rather than
+   * on a chain of thought the caller throws away. Steps that want JSON back set 'off'.
+   */
+  reasoning?: 'off' | 'low';
 }
 
 export type AdapterEvent =
@@ -241,9 +246,22 @@ const rejectsTemperature = (error: unknown) =>
 const TEMPERATURE_NOTICE = 'This model does not accept a temperature setting; using its default.';
 
 /** An optional parameter a server rejected by name, so the request can be resent without it. */
-function rejectedParameter(error: unknown, body: Record<string, unknown>): 'temperature' | 'stream_options' | undefined {
+function rejectedParameter(error: unknown, body: Record<string, unknown>): 'temperature' | 'stream_options' | 'reasoning' | 'reasoning_effort' | undefined {
   if (!(error instanceof ProviderFailure) || error.error.category !== 'invalid-request') return undefined;
-  return (['temperature', 'stream_options'] as const).find(name => body[name] !== undefined && error.message.toLowerCase().includes(name));
+  // reasoning_effort first: a provider naming it also matches the shorter 'reasoning'.
+  return (['reasoning_effort', 'reasoning', 'temperature', 'stream_options'] as const).find(name => body[name] !== undefined && error.message.toLowerCase().includes(name));
+}
+
+/**
+ * How one provider is told to think less. Only the OpenAI-style providers that document a control
+ * get one; the rest simply keep their default, and a provider that rejects it has it stripped and
+ * the request resent. Anthropic needs nothing here: extended thinking is opt-in already.
+ */
+function reasoningParams(kind: ResolvedTarget['kind'], control: ModelRequest['reasoning']): Record<string, unknown> {
+  if (!control) return {};
+  if (kind === 'openrouter') return { reasoning: control === 'off' ? { enabled: false } : { effort: 'low' } };
+  if (kind === 'groq' || kind === 'cerebras') return { reasoning_effort: control === 'off' ? 'none' : 'low' };
+  return {};
 }
 
 function parseRecord(payload: string, target: ResolvedTarget): any {
@@ -384,6 +402,7 @@ async function* streamOpenAIStyle(req: ModelRequest, signal: AbortSignal, fetchI
     // OpenAI replaced max_tokens with max_completion_tokens; other servers still use max_tokens.
     [COMPLETION_TOKENS_PARAM.has(target.kind) ? 'max_completion_tokens' : 'max_tokens']: req.maxTokens ?? AUTOMATIC_MAX_TOKENS,
     ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+    ...reasoningParams(target.kind, req.reasoning),
     ...(req.tools?.length ? { tools: openAITools(req.tools) } : {}),
   };
   const url = `${target.baseURL}/chat/completions`;

@@ -4,8 +4,8 @@ import { withWebResults } from './autoSearch.js';
 import { enqueueLocal } from '../queue/localQueue.js';
 import type { RunContext, RunExecutor } from './runs.js';
 import {
-  AttemptContext, BenchIndex, isMetaRouter, noneLeft, profileTask, rankCandidates, RankedCandidate, RouteCandidate, RoutedRun,
-  RouterDeps, RouterHealth, TASK_LABEL, TaskProfile, tryInOrder,
+  AttemptContext, AttemptHooks, BenchIndex, DoneEvent, isMetaRouter, noneLeft, profileTask, rankCandidates, RankedCandidate,
+  RouteCandidate, RoutedRun, RouterDeps, RouterHealth, TASK_LABEL, TaskProfile, tryInOrder,
 } from './router.js';
 
 // The Free Agent: for each message it chooses a strategy, asks the free models that are best at
@@ -253,10 +253,17 @@ export interface StepRunner {
   step: (value: AgentStep) => void;
   /**
    * Run one step on a ranked list of models, reported as it starts, switches model, streams, and
-   * ends. `finish` can replace what the finished step reports (its text, its reason). Returns the
+   * ends. `finish` can replace what the finished step reports (its text, its reason), and is given
+   * how the model stopped, so a step can say when a reply was cut off at the output limit.
+   * `unusable` judges a finished reply: a reason means the next model is tried instead. Returns the
    * answer, or undefined when the step failed; only a cancel throws.
    */
-  run: (id: string, role: AgentStep['role'], list: RankedCandidate[], overrides: Partial<AttemptContext>, extra?: Partial<AgentStep>, finish?: (text: string) => Partial<AgentStep>) => Promise<Draft | undefined>;
+  run: (
+    id: string, role: AgentStep['role'], list: RankedCandidate[], overrides: Partial<AttemptContext>,
+    extra?: Partial<AgentStep>,
+    finish?: (text: string, done: DoneEvent) => Partial<AgentStep>,
+    unusable?: AttemptHooks['unusable'],
+  ) => Promise<Draft | undefined>;
   /** Model requests sent so far, failed attempts included. */
   readonly calls: number;
   addCalls: (n: number) => void;
@@ -268,7 +275,7 @@ export function stepRunner(emit: RunContext['emit'], signal: AbortSignal, contex
   let calls = 0;
   const usages: (Usage | undefined)[] = [];
   const step = (value: AgentStep) => emit({ type: 'agent', ...value });
-  const run: StepRunner['run'] = async (id, role, list, overrides, extra = {}, finish) => {
+  const run: StepRunner['run'] = async (id, role, list, overrides, extra = {}, finish, unusable) => {
     const started = Date.now();
     // The model's output and reasoning stream to the user as it writes, in pieces, not per token.
     let reasoning = '';
@@ -294,6 +301,7 @@ export function stepRunner(emit: RunContext['emit'], signal: AbortSignal, contex
           else if (event.type === 'delta') live('text', event.text);
           else if (event.type === 'reasoning') { reasoning += event.text; live('reasoning', event.text); }
         },
+        ...(unusable ? { unusable } : {}),
       });
       flush();
       calls += result.attempts;
@@ -305,7 +313,7 @@ export function stepRunner(emit: RunContext['emit'], signal: AbortSignal, contex
       const { candidate } = result.ranked;
       step({
         id, role, status: 'done', connectionId: candidate.connectionId, model: candidate.model, reason: describe(result.ranked), text: clip(result.text),
-        ...(reasoning ? { reasoning: clip(reasoning) } : {}), durationMs: Date.now() - started, ...extra, ...(finish ? finish(result.text) : {}),
+        ...(reasoning ? { reasoning: clip(reasoning) } : {}), durationMs: Date.now() - started, ...extra, ...(finish ? finish(result.text, result.done) : {}),
       });
       return { entry: result.ranked, text: result.text, ...(extra.task ? { task: extra.task } : {}) };
     } catch (error) {

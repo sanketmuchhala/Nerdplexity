@@ -464,6 +464,13 @@ export interface AttemptHooks {
   failed?: (candidate: RankedCandidate, attempt: number, error: ProviderError) => void;
   /** Every stream event except the final one. Quota events carry the connection ID. */
   event?: (event: ProgressPayload, candidate: RouteCandidate) => void;
+  /**
+   * Judge a reply the model did finish. Returning a reason means it cannot be used, and the next
+   * model is tried as if the request had failed; returning nothing accepts it. Only a caller that
+   * asks for a shape back (JSON for a later step to read) sets this: an answer meant for the user
+   * is whatever the model said, and is never second-guessed here.
+   */
+  unusable?: (text: string, done: DoneEvent) => string | undefined;
 }
 
 export type AttemptResult =
@@ -541,10 +548,17 @@ export async function tryInOrder(list: RankedCandidate[], ctx: AttemptContext, h
     };
     try {
       const done = candidate.target.execution === 'local' ? await ctx.enqueue(attempt) : await attempt();
+      // The account answered, so its key and rate limits are known good whatever the reply said.
       ctx.health.success(account, candidate.model, answeredAt !== undefined ? answeredAt - sentAt : undefined);
       ctx.successfulAccounts?.add(account);
       ctx.blockedAccounts.delete(account);
-      return { ok: true, ranked: entry, done, text, attempts };
+      const rejected = hooks.unusable?.(text, done);
+      if (!rejected) return { ok: true, ranked: entry, done, text, attempts };
+      // It replied with nothing the caller can read. That is this model's failure, not the
+      // account's, so the next model is tried without holding the account against it.
+      last = { category: 'unavailable', message: rejected, retryable: true };
+      previous = candidate.displayName || candidate.model;
+      hooks.failed?.(entry, attempts, last);
     } catch (error) {
       if (ctx.signal.aborted) throw error;
       if (!(error instanceof ProviderFailure)) throw error;

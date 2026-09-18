@@ -94,6 +94,14 @@ const zeroPriced = model => {
   return Number(price.prompt ?? 0) === 0 && Number(price.completion ?? 0) === 0;
 };
 
+/**
+ * Text has to be the whole output. A music or image model that also emits a text wrapper lists $0
+ * per token, because it charges per second or per picture instead: it reads as free and then
+ * rejects every chat request, wasting a step in the run.
+ */
+const writesText = model => !Array.isArray(model.architecture?.output_modalities)
+  || (model.architecture.output_modalities.length === 1 && model.architecture.output_modalities[0] === 'text');
+
 /** The free models one provider offers, as route models the server can rank. */
 async function catalog(provider, key) {
   const response = await fetch(provider.url, { headers: provider.auth ? { authorization: `Bearer ${key}` } : {} });
@@ -101,7 +109,7 @@ async function catalog(provider, key) {
   const body = await response.json();
   const list = Array.isArray(body.data) ? body.data : [];
   // Only OpenRouter publishes prices here; the other free tiers are free by account, not per model.
-  const free = provider.kind === 'openrouter' ? list.filter(zeroPriced) : list;
+  const free = provider.kind === 'openrouter' ? list.filter(m => zeroPriced(m) && writesText(m)) : list;
   return free.filter(m => typeof m.id === 'string').map(m => ({
     connectionId: provider.kind,
     model: m.id,

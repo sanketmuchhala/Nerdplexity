@@ -2,7 +2,7 @@ import type { ResearchDepth, ResearchSource, RunMessage } from '@app/types';
 import { enqueueLocal } from '../queue/localQueue.js';
 import { clip, describe, lastUserText, ranked, specialists, stepRunner, sumUsage, withChoice, withNote } from './agent.js';
 import type { RunContext, RunExecutor } from './runs.js';
-import { AttemptContext, noneLeft, profileTask, rankCandidates, RankedCandidate, RoutedRun, RouterDeps, sleepUntil, tryInOrder } from './router.js';
+import { AttemptContext, DoneEvent, noneLeft, profileTask, rankCandidates, RankedCandidate, RoutedRun, RouterDeps, sleepUntil, tryInOrder } from './router.js';
 import { exaPages, WebPage } from './webSearch.js';
 
 // Deep Research: plan the research from several perspectives, search the web, have several free
@@ -28,9 +28,14 @@ export const RESEARCH_LIMITS = {
   readersAtOnce: 4,
   searchesAtOnce: 3,
   attempts: { planner: 2, reader: 2, outliner: 2, writer: 4 },
-  plannerTokens: 800,
-  readerTokens: 1000,
-  outlineTokens: 800,
+  /**
+   * Output budgets for the steps that must return JSON. A reasoning model spends this budget on its
+   * chain of thought before it writes anything, so these are large enough to survive one that
+   * ignores the request to think less: a truncated reply parses to nothing and wastes the call.
+   */
+  plannerTokens: 2500,
+  readerTokens: 2500,
+  outlineTokens: 2000,
   /** Output reserved for the report, when the user's own limit is lower. */
   reportTokens: 8000,
   /** Times the report may be continued after hitting the model's output limit. */
@@ -134,11 +139,54 @@ export function recencySince(question: string, now = new Date()): string | undef
   return since.toISOString().slice(0, 10);
 }
 
-const jsonIn = (reply: string): any => {
-  const found = /\{[\s\S]*\}/.exec(reply)?.[0];
-  if (!found) return undefined;
-  try { return JSON.parse(found); } catch { return undefined; }
+/**
+ * The JSON object in a model's reply, closed off first if the model was cut off mid-write. A reply
+ * that stops at the output limit parses to nothing at all, throwing away the entries it had already
+ * finished: for a planner that is the difference between six searches and none. Only structure is
+ * added back, never content, so a repaired object holds exactly what the model actually wrote.
+ */
+export const jsonIn = (reply: string): any => {
+  const start = reply.indexOf('{');
+  if (start < 0) return undefined;
+  const text = reply.slice(start);
+  const whole = /\{[\s\S]*\}/.exec(text)?.[0];
+  if (whole) {
+    try { return JSON.parse(whole); } catch { /* cut off, or trailing prose: try closing it */ }
+  }
+  return closeTruncated(text);
 };
+
+/**
+ * Re-read the text, remembering every point where a nested value had just ended, and take the last
+ * such point that parses once the brackets still open there are closed. Cutting at the end of a
+ * finished element is what keeps a half-written final entry out of the result.
+ */
+function closeTruncated(text: string): any {
+  const cuts: { at: number; close: string }[] = [];
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') { inString = true; continue; }
+    else if (char === '{') stack.push('}');
+    else if (char === '[') stack.push(']');
+    else if (char === '}' || char === ']') {
+      stack.pop();
+      if (stack.length) cuts.push({ at: i + 1, close: [...stack].reverse().join('') });
+    }
+  }
+  for (const cut of cuts.reverse()) {
+    try { return JSON.parse(text.slice(0, cut.at) + cut.close); } catch { /* try an earlier cut */ }
+  }
+  return undefined;
+}
 const texts = (value: unknown, max: number, chars: number): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && !!v.trim()).map(v => v.trim().slice(0, chars)).slice(0, max) : [];
 
@@ -392,13 +440,59 @@ export function extractNotes(page: WebPage, about = ''): Omit<Note, 'id' | 'sour
 export const readable = (page: WebPage) => page.text.trim() ? page.text : page.highlights.join('\n\n');
 
 // ---------------------------------------------------------------------------
+// Whether a step's reply can be used at all
+//
+// A step that asks for JSON and gets back half an object has learned nothing, but it used to count
+// as a success: the reply was quietly replaced by a fallback and the run carried on looking healthy.
+// These decide when to hand the work to the next model instead.
+//
+// How strict to be depends on what the fallback costs. There is one planner and one outliner in a
+// run, and a run with no plan searches for the user's question verbatim, so any reply without one
+// is worth another model. Readers are judged more narrowly: see brokeOff.
+
+/** Whether the planner's reply held a plan, rather than the question itself that parseResearchPlan falls back to. */
+export const hasPlan = (reply: string): boolean => (jsonIn(reply)?.questions ?? []).some((entry: any) =>
+  typeof entry?.question === 'string' && entry.question.trim()
+  && Array.isArray(entry.queries) && entry.queries.some((query: any) => typeof query === 'string' && query.trim().length >= 8));
+
+/** Whether a reader replied in a readable shape: some notes, or an explicit "there is nothing here". */
+export const hasNotes = (reply: string): boolean => Array.isArray(jsonIn(reply)?.notes) || notesFromLines(reply).length > 0;
+
+/** Why a reply is being passed over, saying plainly when the model simply ran out of room. */
+const unreadable = (wanted: string, done: DoneEvent): string =>
+  `The model did not return ${wanted}${done.finishReason === 'length' ? ', having reached its output limit' : ''}. Trying another model.`;
+
+/**
+ * A reply that broke off rather than one that disappointed: cut short at the output limit, or empty.
+ * Readers are judged on this alone. There are a dozen of them in a run and a page they genuinely
+ * cannot use still leaves the search engine's extract to quote, so a model that read a page, said
+ * so in its own words and stopped has answered, and asking a second model to read the same page
+ * again would spend a call to be told the same thing. A reply that stops mid-sentence tells us
+ * nothing about the page, and is worth another model.
+ */
+const brokeOff = (text: string, done: DoneEvent): boolean => done.finishReason === 'length' || !text.trim();
+
+// ---------------------------------------------------------------------------
 // Outline, report, and the citation check
 
-const OUTLINE_PROMPT = [
-  "You outline a research report that answers the user's question from the numbered notes below.",
-  'Use 2 to 6 sections, in the order a reader needs them. List the note numbers each section will use; a note may be used in more than one section. Leave out notes that do not help.',
-  'Reply with JSON only, no other text: {"sections":[{"heading":"...","notes":[1,4,7]}]}',
-].join('\n');
+/** Sections to ask for, given how many notes there are. Never more than parseOutline will keep. */
+export const outlineSections = (notes: number) => ({ least: Math.min(4, Math.max(2, Math.ceil(notes / 20))), most: 6 });
+
+/**
+ * A deep run gathers three times the notes a quick one does, and asking both for "2 to 6 sections"
+ * got the same two back: seventy-five notes filed under two headings, and a report shorter than the
+ * one written from half as many. So the floor rises with the notes, while the ceiling stays where
+ * parseOutline's own limit is.
+ */
+const OUTLINE_PROMPT = (notes: number) => {
+  const { least, most } = outlineSections(notes);
+  return [
+    "You outline a research report that answers the user's question from the numbered notes below.",
+    `There are ${notes} notes. Use ${least} to ${most} sections, in the order a reader needs them. List the note numbers each section will use; a note may be used in more than one section. Leave out notes that do not help.`,
+    'Give each section its own subject. A section holding most of the notes is too broad: split it.',
+    'Reply with JSON only, no other text: {"sections":[{"heading":"...","notes":[1,4,7]}]}',
+  ].join('\n');
+};
 
 export function parseOutline(reply: string | undefined, noteIds: Set<number>): { heading: string; notes: number[] }[] | undefined {
   const data = reply ? jsonIn(reply) : undefined;
@@ -501,14 +595,17 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
     let planText = '';
     const planned = await steps.run('planner', 'planner', planners.list, {
       messages: [{ role: 'system', content: PLANNER_PROMPT(budget.queries) }, { role: 'user', content: before ? `Earlier in the conversation:\n${before}\n\nQuestion: ${question}` : question }],
-      request: { ...run.request, maxTokens: RESEARCH_LIMITS.plannerTokens, temperature: 0 },
+      request: { ...run.request, maxTokens: RESEARCH_LIMITS.plannerTokens, temperature: 0, reasoning: 'off' },
       maxAttempts: RESEARCH_LIMITS.attempts.planner,
     }, {}, text => {
       const plan = parseResearchPlan(text, question, budget.queries);
       planText = [plan.perspectives.length ? `Perspectives: ${plan.perspectives.join('; ')}` : '', ...plan.questions.map((q, i) => `${i + 1}. ${q.question}\n   Search: ${q.queries.join(' | ')}`)].filter(Boolean).join('\n');
       return { text: planText, reason: `${plan.questions.length} sub-question${plan.questions.length === 1 ? '' : 's'}, ${plan.questions.reduce((n, q) => n + q.queries.length, 0)} searches` };
-    });
+    }, (text, done) => hasPlan(text) ? undefined : unreadable('a research plan', done));
     const plan = parseResearchPlan(planned?.text, question, budget.queries);
+    // A plan nobody wrote: every model was asked and none returned one, so the run is searching for
+    // the question itself. Worth saying, because the run continues either way.
+    const plannedByModel = !!planned?.text && hasPlan(planned.text);
 
     // Search: every query, a few at a time.
     const queries = plan.questions.flatMap(q => q.queries.map(query => ({ query, question: q.question })));
@@ -547,7 +644,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
           { role: 'system', content: READER_PROMPT(question, plan, { query, question: about }) },
           { role: 'user', content: `Page: ${page.title}\nURL: ${page.url}${page.published ? `\nPublished: ${page.published}` : ''}\n\n${slice}` },
         ],
-        request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0 },
+        request: { ...run.request, maxTokens: RESEARCH_LIMITS.readerTokens, temperature: 0, reasoning: 'off' },
         maxAttempts: RESEARCH_LIMITS.attempts.reader,
       }, { task: page.title, url: page.url }, text => {
         found = readNotes(text, { ...page, text: slice }, query);
@@ -561,7 +658,7 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
             found.dropped ? `; dropped ${found.dropped} the page does not say` : '',
           ].join(''),
         };
-      });
+      }, (text, done) => hasNotes(text) || !brokeOff(text, done) ? undefined : unreadable('anything it had read', done));
       // A reader that failed outright still leaves the search extract to fall back on.
       const extracts = extractNotes(page, query);
       return done ? found : { ...empty, kept: extracts, fromExtract: extracts.length > 0 };
@@ -593,17 +690,17 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
       const outliners = ranked(table.reasoning).length ? ranked(table.reasoning) : readers;
       const drafted = await steps.run('outline', 'outliner', outliners, {
         messages: [
-          { role: 'system', content: OUTLINE_PROMPT },
+          { role: 'system', content: OUTLINE_PROMPT(allNotes.length) },
           { role: 'user', content: `Question: ${question}\n\nNotes:\n${allNotes.map(note => `${note.id}. [source ${note.source}] ${note.fact}`).join('\n')}` },
         ],
-        request: { ...run.request, maxTokens: RESEARCH_LIMITS.outlineTokens, temperature: 0 },
+        request: { ...run.request, maxTokens: RESEARCH_LIMITS.outlineTokens, temperature: 0, reasoning: 'off' },
         maxAttempts: RESEARCH_LIMITS.attempts.outliner,
       }, {}, text => {
         const sections = parseOutline(text, new Set(allNotes.map(note => note.id)));
         return sections
           ? { text: sections.map((s, i) => `${i + 1}. ${s.heading} (notes ${s.notes.join(', ') || 'none'})`).join('\n'), reason: `${sections.length} sections` }
           : { reason: 'No usable outline; the writer organizes the report itself' };
-      });
+      }, (text, done) => parseOutline(text, new Set(allNotes.map(note => note.id))) ? undefined : unreadable('an outline', done));
       outline = parseOutline(drafted?.text, new Set(allNotes.map(note => note.id)));
     }
 
@@ -713,6 +810,19 @@ export function researchExecutor(run: RoutedRun, deps: RouterDeps): RunExecutor 
             check.uncited.length ? `. Not cited: ${check.uncited.map(n => `[${n}]`).join(', ')}` : ''].join(''),
       });
       if (check.invalid.length) emit({ type: 'status', message: `Some citations name no source: ${check.invalid.map(n => `[${n}]`).join(', ')}.` });
+    }
+
+    // A run that searched once and quoted the search engine instead of the pages still finishes and
+    // still reads as a report. Say what it actually did, so a degraded run cannot pass for a good one.
+    const fromExtracts = read.filter(result => result.fromExtract).length;
+    const shortfall = [
+      plannedByModel ? '' : 'no model returned a research plan, so the question itself was searched for',
+      queries.length < budget.queries ? `${queries.length} of ${budget.queries} searches ran` : '',
+      fromExtracts ? `${fromExtracts} of ${read.length} pages were quoted from the search engine's extract rather than read` : '',
+    ].filter(Boolean);
+    if (shortfall.length) {
+      emit({ type: 'status', message: `This report is thinner than the depth allows: ${shortfall.join('; ')}.` });
+      strategy(`This run fell short: ${shortfall.join('; ')}.`);
     }
 
     const usage = sumUsage(steps.usages);
